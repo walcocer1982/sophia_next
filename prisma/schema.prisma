@@ -1,0 +1,168 @@
+// Instructoria Database Schema
+// Versión: 1.7.0
+// PostgreSQL (Neon) + NextAuth v5 (JWT strategy)
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 1. AUTENTICACIÓN Y USUARIOS
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  googleId      String?   @unique
+  avatar        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relaciones
+  lessonSessions LessonSession[]
+  accounts       Account[]
+
+  @@index([email])
+  @@index([googleId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  // Relaciones
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// ============================================
+// 2. CONTENIDO EDUCATIVO
+// ============================================
+
+model Lesson {
+  id                     String    @id @default(cuid())
+  title                  String
+  description            String?   @db.Text
+  slug                   String    @unique
+  courseTitle            String?
+  category               String?
+  order                  Int       @default(0)
+  estimatedMinutes       Int?
+  difficulty             String?
+  contentJson            Json
+  images                 Json?
+  imagesLoadedAt         DateTime?
+  prerequisiteLessonIds  Json?
+  isPublished            Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  // Relaciones
+  sessions LessonSession[]
+
+  @@index([slug])
+  @@index([category])
+}
+
+// ============================================
+// 3. APRENDIZAJE
+// ============================================
+
+model LessonSession {
+  id             String    @id @default(cuid())
+  userId         String
+  lessonId       String
+  enrolledAt     DateTime  @default(now())
+  sessionAttempt Int       @default(1)
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+  lastActivityAt DateTime  @default(now())
+  classId        String?
+  momentId       String?
+  activityId     String?
+  summaryText    String?   @db.Text
+  lastSummaryAt  DateTime?
+  progress       Float     @default(0)
+  grade          Float?
+  completedAt    DateTime?
+  passed         Boolean   @default(false)
+
+  // Relaciones
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson     Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  messages   Message[]
+  activities ActivityProgress[]
+
+  @@unique([userId, lessonId, sessionAttempt])
+  @@index([userId])
+  @@index([lessonId])
+}
+
+enum ActivityStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  NEEDS_REVIEW
+}
+
+model ActivityProgress {
+  id              String         @id @default(cuid())
+  lessonSessionId String
+  classId         String
+  momentId        String
+  activityId      String
+  status          ActivityStatus @default(NOT_STARTED)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  evidenceData    Json?
+  verifiedBy      String?
+  passedCriteria  Boolean        @default(false)
+  aiFeedback      String?        @db.Text
+  attempts        Int            @default(0)
+
+  // Relaciones
+  lessonSession LessonSession @relation(fields: [lessonSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonSessionId, activityId])
+  @@index([lessonSessionId])
+  @@index([status])
+}
+
+model Message {
+  id           String   @id @default(cuid())
+  sessionId    String
+  role         String
+  content      String   @db.Text
+  timestamp    DateTime @default(now())
+  classId      String?
+  momentId     String?
+  activityId   String?
+  inputTokens  Int?
+  outputTokens Int?
+
+  // Relaciones
+  session LessonSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, timestamp])
+}
