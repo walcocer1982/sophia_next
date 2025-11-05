@@ -3,14 +3,6 @@ import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from './lib/prisma'
 
-console.log('Google Config:', {
-  clientId: process.env.GOOGLE_CLIENT_ID ? '✓ configurado' : '❌ FALTA',
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET
-    ? '✓ configurado'
-    : '❌ FALTA',
-  nextAuthUrl: process.env.NEXTAUTH_URL,
-})
-
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     GoogleProvider({
