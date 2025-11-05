@@ -1,6 +1,17 @@
 import { prisma } from '@/lib/prisma'
 import { LessonCard } from '@/components/lessons/lesson-card'
 
+// Tipo explícito para las lecciones (debe coincidir con LessonCardProps)
+type LessonWithDetails = {
+  id: string
+  title: string
+  description: string | null
+  slug: string
+  category: string | null
+  estimatedMinutes: number | null
+  difficulty: string | null
+}
+
 export default async function LessonsPage() {
   const lessons = await prisma.lesson.findMany({
     where: {
@@ -18,7 +29,7 @@ export default async function LessonsPage() {
       estimatedMinutes: true,
       difficulty: true,
     },
-  })
+  }) as LessonWithDetails[]
 
   return (
     <div className="container mx-auto px-4 py-12">
