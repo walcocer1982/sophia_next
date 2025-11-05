@@ -47,12 +47,10 @@ export default async function ChatPage({
   }))
 
   return (
-    <div className="h-[calc(100vh-4rem)]">
-      <ChatInterface
-        sessionId={lessonSession.id}
-        initialMessages={transformedMessages}
-        lessonTitle={lessonSession.lesson.title}
-      />
-    </div>
+    <ChatInterface
+      sessionId={lessonSession.id}
+      initialMessages={transformedMessages}
+      lessonTitle={lessonSession.lesson.title}
+    />
   )
 }

@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { AvatarInstructor } from './avatar-instructor'
 import type { MessageRole } from '@/types/chat'
 
 interface ChatMessageProps {
@@ -27,22 +28,19 @@ export function ChatMessage({ role, content, timestamp }: ChatMessageProps) {
       )}
     >
       {/* Avatar */}
-      <div
-        className={cn(
-          'h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0',
-          isUser ? 'bg-blue-500' : 'bg-purple-500'
-        )}
-      >
-        <span className="text-white font-semibold">
-          {isUser ? 'U' : 'IA'}
-        </span>
-      </div>
+      {isUser ? (
+        <div className="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-500">
+          <span className="text-white font-semibold">U</span>
+        </div>
+      ) : (
+        <AvatarInstructor name="Sophia" state="idle" />
+      )}
 
-      {/* Message bubble */}
+      {/* Message content - bubble solo para usuario */}
       <div
         className={cn(
-          'rounded-lg px-4 py-3 max-w-[70%]',
-          isUser ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-900'
+          'px-4 py-3 max-w-[70%]',
+          isUser && 'rounded-lg bg-blue-500 text-white'
         )}
       >
         <p className="whitespace-pre-wrap">{content}</p>
