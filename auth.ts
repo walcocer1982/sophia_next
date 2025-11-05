@@ -14,6 +14,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       name: 'Test User',
       credentials: {},
       async authorize() {
+        // 🔒 Security: Only allow test-user in development environment
+        if (process.env.NODE_ENV !== 'development') {
+          console.warn('⚠️  Test user login attempt blocked in production')
+          return null
+        }
+
         // Buscar el user-test en la base de datos
         const user = await prisma.user.findUnique({
           where: { id: '1000' },
@@ -90,8 +96,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         })
 
         token.sub = dbUser.id
+        return token // Early return to prevent overwriting with Google's OAuth ID
       }
 
+      // This only executes for CredentialsProvider (test-user)
       if (user) {
         token.sub = user.id
       }

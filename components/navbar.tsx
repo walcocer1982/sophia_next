@@ -24,8 +24,8 @@ export function Navbar() {
 
   const handleLogout = async () => {
     try {
-      await signOut({ redirect: false })
-      router.push('/login')
+      // Force redirect to login after signout (with callbackUrl)
+      await signOut({ callbackUrl: '/login' })
     } catch (error) {
       console.error('Error al cerrar sesión:', error)
     }

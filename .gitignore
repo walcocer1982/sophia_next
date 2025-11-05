@@ -38,7 +38,7 @@ yarn-error.log*
 !.env.example
 
 # Claude development files
-CLAUDE.md
+# CLAUDE.md
 TODOS.md
 
 # vercel
