@@ -18,6 +18,7 @@ interface AITextLoadingProps {
     texts?: string[];
     className?: string;
     interval?: number;
+    color?: "black" | "blue" | "green" | "orange";
 }
 
 export default function AITextLoading({
@@ -30,8 +31,31 @@ export default function AITextLoading({
     ],
     className,
     interval = 2000,
+    color = "orange",
 }: AITextLoadingProps) {
     const [currentTextIndex, setCurrentTextIndex] = useState(0);
+
+    // Configuración de colores (matching Rings component)
+    const colorConfig = {
+        black: {
+            light: "from-gray-900 via-gray-600 to-black",
+            dark: "dark:from-white dark:via-neutral-600 dark:to-white"
+        },
+        blue: {
+            light: "from-blue-700 via-blue-400 to-blue-900",
+            dark: "dark:from-blue-400 dark:via-blue-300 dark:to-blue-500"
+        },
+        green: {
+            light: "from-green-700 via-green-400 to-green-900",
+            dark: "dark:from-green-400 dark:via-green-300 dark:to-green-500"
+        },
+        orange: {
+            light: "from-orange-700 via-orange-400 to-orange-950",
+            dark: "dark:from-orange-400 dark:via-orange-300 dark:to-orange-500"
+        }
+    };
+
+    const gradientClasses = `${colorConfig[color].light} ${colorConfig[color].dark}`;
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -69,7 +93,8 @@ export default function AITextLoading({
                             },
                         }}
                         className={cn(
-                            "flex justify-center text-md font-medium bg-gradient-to-r from-orange-700 via-orange-400 to-orange-950 dark:from-white dark:via-neutral-600 dark:to-white bg-[length:200%_100%] bg-clip-text text-transparent whitespace-nowrap min-w-max",
+                            "flex justify-center text-md font-medium bg-linear-to-r bg-[length:200%_100%] bg-clip-text text-transparent whitespace-nowrap min-w-max",
+                            gradientClasses,
                             className
                         )}
                     >

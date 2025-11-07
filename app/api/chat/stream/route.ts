@@ -1,6 +1,11 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { anthropic } from '@/lib/anthropic'
+import { parseContentJson, getCurrentActivity, getFirstActivity } from '@/lib/lesson-parser'
+import { buildSystemPrompt } from '@/lib/prompt-builder'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { logger, logChatMessage, logError } from '@/lib/logger'
+import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -11,9 +16,35 @@ export async function POST(request: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
 
+  // Rate limiting: 10 mensajes por minuto
+  const rateLimit = checkRateLimit(session.user.id, 10, 60)
+  if (!rateLimit.allowed) {
+    const resetIn = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
+    logger.warn('rate_limit.exceeded', {
+      userId: session.user.id,
+      resetIn,
+    })
+    return new Response(
+      JSON.stringify({
+        error: 'Too many requests',
+        message: `Has alcanzado el límite de mensajes. Intenta de nuevo en ${resetIn} segundos.`,
+        resetIn,
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RateLimit-Limit': '10',
+          'X-RateLimit-Remaining': rateLimit.remaining.toString(),
+          'X-RateLimit-Reset': rateLimit.resetAt.toString(),
+        },
+      }
+    )
+  }
+
   const { sessionId, message } = await request.json()
 
-  // 1. Validate session
+  // 1. Validate session and fetch full contentJson
   const lessonSession = await prisma.lessonSession.findFirst({
     where: {
       id: sessionId,
@@ -25,11 +56,17 @@ export async function POST(request: Request) {
         select: {
           title: true,
           description: true,
+          contentJson: true, // ⭐ Fetch contentJson
         },
       },
       messages: {
         orderBy: { timestamp: 'desc' },
         take: 10,
+      },
+      activities: {
+        where: { status: 'COMPLETED' },
+        orderBy: { completedAt: 'desc' },
+        take: 1, // Última actividad completada
       },
     },
   })
@@ -38,25 +75,44 @@ export async function POST(request: Request) {
     return new Response('Session not found', { status: 404 })
   }
 
-  // 2. Build system prompt
-  const systemPrompt = `Eres un instructor especializado en "${lessonSession.lesson.title}".
+  // 2. Parse contentJson and determine current activity
+  const contentJson = parseContentJson(lessonSession.lesson.contentJson) as LessonContent
 
-Tu rol es:
-- Responder preguntas del estudiante de forma clara y didáctica
-- Usar ejemplos prácticos cuando sea posible
-- Ser paciente y motivador
-- Si el estudiante está confundido, replantear de otra forma
+  // Obtener actividad actual basada en progreso
+  let currentActivityContext
+  const lastCompletedActivity = lessonSession.activities[0]
 
-Descripción de la lección: ${lessonSession.lesson.description}
+  if (lastCompletedActivity) {
+    // Si hay actividad completada, obtener la siguiente
+    const nextActivity = getCurrentActivity(contentJson, lastCompletedActivity.activityId)
+    if (nextActivity) {
+      currentActivityContext = nextActivity
+    } else {
+      // Si no hay siguiente, usar la primera (fallback)
+      currentActivityContext = getFirstActivity(contentJson)
+    }
+  } else {
+    // Si no hay progreso, empezar con la primera actividad
+    currentActivityContext = getFirstActivity(contentJson)
+  }
 
-Responde de forma conversacional y amigable.`
+  if (!currentActivityContext) {
+    return new Response('No activities found in lesson', { status: 500 })
+  }
+
+  // 3. Build dynamic system prompt
+  const systemPrompt = buildSystemPrompt({
+    activityContext: currentActivityContext,
+    recentMessages: lessonSession.messages,
+    tangentCount: 0, // TODO: Calcular tangent count dinámicamente
+  })
 
   const conversationHistory = lessonSession.messages.reverse().map((m) => ({
     role: m.role as 'user' | 'assistant',
     content: m.content,
   }))
 
-  // 3. Create streaming response
+  // 4. Create streaming response
   const encoder = new TextEncoder()
   let fullResponse = ''
   let inputTokens = 0
@@ -124,13 +180,23 @@ Responde de forma conversacional y amigable.`
           }),
         ])
 
+        // Log chat message
+        logChatMessage(sessionId, 'assistant', fullResponse.length, {
+          input: inputTokens,
+          output: outputTokens,
+        })
+
         // 5. Send done event
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
         )
         controller.close()
       } catch (error) {
-        console.error('❌ Streaming error:', error)
+        logError(
+          error as Error,
+          'chat.stream.error',
+          { sessionId, userId: session.user?.id }
+        )
         const errorData = JSON.stringify({
           type: 'error',
           message: 'Error al procesar respuesta',

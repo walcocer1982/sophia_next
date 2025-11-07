@@ -7,9 +7,10 @@ interface ChatInputProps {
   onSend: (message: string) => void
   disabled?: boolean
   placeholder?: string
+  isGeneratingWelcome?: boolean
 }
 
-export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, placeholder, isGeneratingWelcome }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -55,6 +56,11 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
     console.log('[SECURITY] Intento de pegar bloqueado - usa tus propias palabras')
   }
 
+  // Determinar placeholder según estado
+  const effectivePlaceholder = isGeneratingWelcome
+    ? 'Esperando mensaje de bienvenida...'
+    : placeholder || 'Escribe aquí...'
+
   return (
     <div className="bg-slate-100 p-4">
       <div className="max-w-4xl mx-auto">
@@ -65,7 +71,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={placeholder || 'Escribe aquí...'}
+            placeholder={effectivePlaceholder}
             className="w-full px-4 py-4 font-sans pr-16 border bg-white border-slate-300 rounded-3xl focus:outline-none focus:ring-2 focus:ring-slate-700 focus:border-transparent resize-none text-base transition-all"
             style={{
               minHeight: '60px',

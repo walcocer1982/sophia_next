@@ -1,6 +1,5 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { anthropic } from '@/lib/anthropic'
 import { NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
@@ -50,12 +49,6 @@ export async function POST(request: Request) {
       lessonId: lessonId,
       endedAt: null, // Active session
     },
-    include: {
-      messages: {
-        orderBy: { timestamp: 'asc' },
-        take: 1, // Solo el welcome message
-      },
-    },
   })
 
   // 5. If no active session, create one
@@ -68,69 +61,12 @@ export async function POST(request: Request) {
         startedAt: new Date(),
         lastActivityAt: new Date(),
       },
-      include: {
-        messages: true,
-      },
     })
-
-    // 6. Generate welcome message with Claude
-    const welcomePrompt = `Eres un instructor especializado en ${lesson.title}.
-
-Genera un mensaje de bienvenida breve y motivador para el estudiante. El mensaje debe:
-- Ser breve (2-3 oraciones)
-- Mencionar el título de la lección
-- Invitar al estudiante a hacer preguntas
-- Ser amigable y profesional
-
-Responde solo con el mensaje de bienvenida, sin introducción adicional.`
-
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 200,
-      messages: [
-        {
-          role: 'user',
-          content: welcomePrompt,
-        },
-      ],
-    })
-
-    const welcomeMessage =
-      response.content[0].type === 'text'
-        ? response.content[0].text
-        : 'Hola, soy tu instructor. ¿En qué puedo ayudarte?'
-
-    // 7. Save welcome message
-    await prisma.message.create({
-      data: {
-        sessionId: lessonSession.id,
-        role: 'assistant',
-        content: welcomeMessage,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-      },
-    })
-
-    lessonSession.messages = [
-      {
-        id: 'temp',
-        sessionId: lessonSession.id,
-        role: 'assistant',
-        content: welcomeMessage,
-        timestamp: new Date(),
-        classId: null,
-        momentId: null,
-        activityId: null,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-      },
-    ]
   }
 
-  // 8. Return session info
+  // 6. Return session info (welcome message will be generated client-side)
   return NextResponse.json({
     sessionId: lessonSession.id,
-    welcomeMessage: lessonSession.messages[0]?.content || '',
     lesson: {
       title: lesson.title,
       estimatedMinutes: lesson.estimatedMinutes,
