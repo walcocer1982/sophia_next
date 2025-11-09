@@ -97,22 +97,12 @@ Ahora continúa la conversación natural con el estudiante. Recuerda: tu objetiv
  * Obtener número de actividad actual (1-indexed)
  */
 function getActivityNumber(context: CurrentActivityContext): number {
-  const { classIdx, momentIdx, activityIdx, activity } = context
-  let count = 0
+  const { activityIdx } = context
 
-  // Contar actividades anteriores
-  for (let c = 0; c < classIdx; c++) {
-    for (const moment of context.lessonMetadata as any) {
-      count += moment.activities.length
-    }
-  }
-
-  // Contar moments anteriores en class actual
-  // (Este cálculo asume que tenemos acceso al contentJson completo)
-  // Por simplicidad, usamos los índices
-  count += activityIdx + 1
-
-  return count
+  // Por ahora simplemente retornar el índice + 1 para display (1-indexed)
+  // En el futuro se puede mejorar para contar todas las actividades anteriores
+  // si se necesita un conteo más preciso a través de múltiples moments
+  return activityIdx + 1
 }
 
 /**

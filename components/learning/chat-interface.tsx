@@ -28,6 +28,14 @@ export function ChatInterface({
   const [isGeneratingWelcome, setIsGeneratingWelcome] = useState(
     initialMessages.length === 0
   )
+  const [activityProgress, setActivityProgress] = useState({
+    current: 1,
+    total: 3,
+    activityTitle: '',
+    percentage: 0,
+    lastCompletedId: null as string | null,
+    lastCompletedAt: null as string | null,
+  })
   const streamingContentRef = useRef<string>('')
   const hasGeneratedWelcome = useRef(false)
 
@@ -106,6 +114,53 @@ export function ChatInterface({
     }
   }
 
+  // Poll for activity progress
+  useEffect(() => {
+    const fetchProgress = async () => {
+      try {
+        const res = await fetch(`/api/activity/progress?sessionId=${sessionId}`)
+        if (!res.ok) return
+
+        const data = await res.json()
+
+        // Detectar nueva actividad completada
+        if (
+          data.lastCompleted?.activityId &&
+          data.lastCompleted.activityId !== activityProgress.lastCompletedId
+        ) {
+          toast.success('¡Completaste una actividad!', {
+            description: data.lastCompleted.passedCriteria
+              ? 'Avanzando a la siguiente...'
+              : 'Continúa practicando',
+          })
+        }
+
+        // Detectar lección completada (solo mostrar toast una vez)
+        if (data.completedAt && data.completedAt !== activityProgress.lastCompletedAt) {
+          toast.success('¡Felicitaciones!', {
+            description: '¡Completaste toda la lección!',
+          })
+        }
+
+        setActivityProgress({
+          current: data.currentPosition, // Fix: usar currentPosition directamente del backend
+          total: data.total,
+          activityTitle: data.currentActivity || lessonTitle,
+          percentage: data.percentage,
+          lastCompletedId: data.lastCompleted?.activityId || null,
+          lastCompletedAt: data.completedAt,
+        })
+      } catch (error) {
+        console.error('Error fetching progress:', error)
+      }
+    }
+
+    fetchProgress() // Initial fetch
+    const interval = setInterval(fetchProgress, 5000) // Poll cada 5s
+
+    return () => clearInterval(interval)
+  }, [sessionId, activityProgress.lastCompletedId, lessonTitle])
+
   const handleSendMessage = async (content: string) => {
     setIsLoading(true)
 
@@ -155,6 +210,29 @@ export function ChatInterface({
           setStreamingMessage('')
           streamingContentRef.current = ''
           setIsLoading(false)
+        },
+        // onActivityCompleted: update progress immediately
+        (progressData) => {
+          // Actualizar progreso inmediatamente (no esperar polling)
+          setActivityProgress({
+            current: progressData.currentPosition,
+            total: progressData.total,
+            activityTitle: progressData.nextActivityTitle || progressData.activityTitle,
+            percentage: progressData.percentage,
+            lastCompletedId: progressData.activityId,
+            lastCompletedAt: progressData.completedAt || null,
+          })
+
+          // Toast inmediato
+          if (progressData.isLastActivity) {
+            toast.success('¡Felicitaciones!', {
+              description: '¡Completaste toda la lección!',
+            })
+          } else {
+            toast.success('¡Completaste una actividad!', {
+              description: 'Avanzando a la siguiente...',
+            })
+          }
         }
       )
     } catch (error) {
@@ -168,24 +246,34 @@ export function ChatInterface({
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
       {/* Header - altura fija */}
-      <div className="h-20 border-b bg-white px-6 py-4 shrink-0 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">{lessonTitle}</h1>
-          <p className="text-sm text-gray-500">Sesión activa</p>
+      <div className="shrink-0 border-b bg-white">
+        <div className="h-16 px-6 py-3 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold">{lessonTitle}</h1>
+            <p className="text-sm text-gray-500">Sesión activa</p>
+          </div>
+
+          {/* Dev Tools Button - Solo en desarrollo */}
+          {isDevelopment && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowDevTools(true)}
+              className="text-gray-500 hover:text-gray-700"
+              title="Dev Tools"
+            >
+              <Settings className="h-5 w-5" />
+            </Button>
+          )}
         </div>
 
-        {/* Dev Tools Button - Solo en desarrollo */}
-        {isDevelopment && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowDevTools(true)}
-            className="text-gray-500 hover:text-gray-700"
-            title="Dev Tools"
-          >
-            <Settings className="h-5 w-5" />
-          </Button>
-        )}
+        {/* Activity Progress - Temporarily disabled */}
+        {/* <ActivityProgressHeader
+          current={activityProgress.current}
+          total={activityProgress.total}
+          activityTitle={activityProgress.activityTitle}
+          percentage={activityProgress.percentage}
+        /> */}
       </div>
 
       {/* Messages - ocupa espacio restante con scroll interno */}

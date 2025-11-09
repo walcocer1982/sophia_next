@@ -41,6 +41,7 @@ yarn-error.log*
 CLAUDE.md
 CLAUDE.md.backup
 TODOS.md
+FLOWS.md
 
 # vercel
 .vercel

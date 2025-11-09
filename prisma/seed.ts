@@ -40,11 +40,7 @@ async function main() {
         'Aprende los conceptos básicos de seguridad en aplicaciones web',
       duration_minutes: 45,
     },
-    classes: [
-      {
-        id: 'class_001',
-        title: 'Introducción a Seguridad Web',
-        moments: [
+    moments: [
           {
             id: 'moment_001',
             title: 'Conceptos Fundamentales',
@@ -153,8 +149,6 @@ async function main() {
             ],
           },
         ],
-      },
-    ],
   }
 
   // 3. Crear lección
@@ -177,7 +171,106 @@ async function main() {
   })
 
   console.log('✅ Lección creada:', lesson.title)
-  console.log('🎉 Seed completado!')
+
+  // 4. Contenido de la segunda lección (HTML Básico - MÁS SIMPLE para testing)
+  const htmlLessonContent = {
+    lesson: {
+      title: 'HTML Básico',
+      description: 'Aprende los fundamentos de HTML para crear páginas web',
+      duration_minutes: 20,
+    },
+    moments: [
+      {
+        id: 'html_moment_001',
+        title: 'Introducción a HTML',
+        activities: [
+          {
+            id: 'html_activity_001',
+            type: 'explanation',
+            teaching: {
+              main_topic: '¿Qué es HTML?',
+              key_points: [
+                'HTML significa HyperText Markup Language',
+                'Es el lenguaje de marcado para crear páginas web',
+                'Usa etiquetas para estructurar contenido',
+              ],
+              approach: 'conversational',
+            },
+            verification: {
+              question: '¿Qué significa HTML y para qué se usa?',
+              criteria: [
+                'Menciona que HTML significa HyperText Markup Language',
+                'Explica que se usa para crear páginas web',
+              ],
+              target_length: 'short',
+              hints: [
+                'HTML es un acrónimo de cuatro palabras en inglés',
+                'Piensa en qué necesitas para crear una página web',
+              ],
+            },
+            student_questions: {
+              approach: 'answer_then_redirect',
+              max_tangent_responses: 2,
+            },
+            guardrails: [],
+          },
+          {
+            id: 'html_activity_002',
+            type: 'practice',
+            teaching: {
+              main_topic: 'Etiquetas básicas de HTML',
+              key_points: [
+                '<h1> a <h6> para encabezados',
+                '<p> para párrafos',
+                '<a> para enlaces',
+              ],
+              approach: 'practical',
+            },
+            verification: {
+              question:
+                'Nombra 3 etiquetas HTML básicas y explica para qué sirve cada una',
+              criteria: [
+                'Menciona al menos 3 etiquetas HTML',
+                'Explica correctamente el uso de cada etiqueta',
+              ],
+              target_length: 'medium',
+              hints: [
+                'Piensa en etiquetas para títulos, texto y enlaces',
+                'Las etiquetas se escriben entre < y >',
+              ],
+            },
+            student_questions: {
+              approach: 'answer_then_redirect',
+              max_tangent_responses: 2,
+            },
+            guardrails: [],
+          },
+        ],
+      },
+    ],
+  }
+
+  // 5. Crear segunda lección
+  const htmlLesson = await prisma.lesson.upsert({
+    where: { slug: 'html-basico' },
+    update: {},
+    create: {
+      title: 'HTML Básico',
+      description:
+        'Aprende los fundamentos de HTML para crear páginas web desde cero',
+      slug: 'html-basico',
+      courseTitle: 'Desarrollo Web Frontend',
+      category: 'Desarrollo Web',
+      order: 2,
+      estimatedMinutes: 20,
+      difficulty: 'básico',
+      contentJson: htmlLessonContent,
+      isPublished: true,
+    },
+  })
+
+  console.log('✅ Lección HTML creada:', htmlLesson.title)
+  console.log('🎉 Seed completado con 2 lecciones!')
 }
 
 main()

@@ -72,7 +72,7 @@ export function DevToolsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             🔧 Dev Tools
@@ -85,6 +85,7 @@ export function DevToolsModal({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Actions */}
         <div className="py-4 space-y-4">
           <div className="space-y-2">
             <h3 className="font-medium text-sm">⚠️ Reiniciar Clase</h3>
@@ -96,16 +97,20 @@ export function DevToolsModal({
         </div>
 
         <DialogFooter>
-          <Button variant="destructive" onClick={handleResetLesson} disabled={isResetting}>
-              {isResetting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Reiniciando...
-                  </>
-                ) : (
-                  'Reiniciar Clase'
-                )}
-            </Button>
+          <Button
+            variant="destructive"
+            onClick={handleResetLesson}
+            disabled={isResetting}
+          >
+            {isResetting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Reiniciando...
+              </>
+            ) : (
+              'Reiniciar Clase'
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
