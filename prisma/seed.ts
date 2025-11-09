@@ -160,11 +160,7 @@ async function main() {
       description:
         'Aprende los conceptos básicos de seguridad en aplicaciones web y protege tus sistemas',
       slug: 'seguridad-web-fundamentos',
-      courseTitle: 'Ciberseguridad Práctica',
-      category: 'Ciberseguridad',
-      order: 1,
       estimatedMinutes: 45,
-      difficulty: 'básico',
       contentJson: lessonContent,
       isPublished: true,
     },
@@ -259,11 +255,7 @@ async function main() {
       description:
         'Aprende los fundamentos de HTML para crear páginas web desde cero',
       slug: 'html-basico',
-      courseTitle: 'Desarrollo Web Frontend',
-      category: 'Desarrollo Web',
-      order: 2,
       estimatedMinutes: 20,
-      difficulty: 'básico',
       contentJson: htmlLessonContent,
       isPublished: true,
     },

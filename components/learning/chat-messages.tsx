@@ -50,7 +50,7 @@ export function ChatMessages({
       ]
 
   return (
-    <ScrollArea className="h-full bg-slate-100">
+    <ScrollArea className="h-full bg-linear-to-b from-white to-slate-300">
       <div className="p-4 space-y-2 w-full sm:w-[80%] mx-auto">
         {messages.length === 0 && !isLoading && (
           <div className="flex items-center justify-center min-h-[200px] text-gray-500">

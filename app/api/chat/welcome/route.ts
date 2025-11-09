@@ -2,6 +2,9 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '@/lib/logger'
+import { getLessonContent } from '@/lib/lesson-loader'
+import { getFirstActivity } from '@/lib/lesson-parser'
+import type { LessonContent } from '@/types/lesson'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -35,6 +38,7 @@ export async function POST(request: Request) {
       include: {
         lesson: {
           select: {
+            id: true, // Necesario para getLessonContent
             title: true,
             description: true,
           },
@@ -46,11 +50,24 @@ export async function POST(request: Request) {
       return new Response('Session not found', { status: 404 })
     }
 
+    // Obtener contenido de la lección (desde archivo hardcodeado o DB)
+    const contentJson = await getLessonContent(lessonSession.lesson.id) as LessonContent
+
+    // Obtener primera actividad para personalizar la bienvenida
+    let firstActivityTopic = ''
+    if (contentJson) {
+      const firstActivity = getFirstActivity(contentJson)
+      if (firstActivity) {
+        firstActivityTopic = firstActivity.activity.teaching.main_topic
+      }
+    }
+
     const welcomePrompt = `Eres un instructor especializado en ${lessonSession.lesson.title}.
+${firstActivityTopic ? `\nVamos a comenzar explorando: ${firstActivityTopic}` : ''}
 
 Genera un mensaje de bienvenida breve y motivador para el estudiante. El mensaje debe:
 - Ser breve (2-3 oraciones)
-- Mencionar el título de la lección
+- Mencionar el título de la lección${firstActivityTopic ? ' y el primer tema a explorar' : ''}
 - Invitar al estudiante a hacer preguntas
 - Ser amigable y profesional
 

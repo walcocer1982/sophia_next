@@ -7,9 +7,7 @@ type LessonWithDetails = {
   title: string
   description: string | null
   slug: string
-  category: string | null
   estimatedMinutes: number | null
-  difficulty: string | null
 }
 
 export default async function LessonsPage() {
@@ -18,16 +16,14 @@ export default async function LessonsPage() {
       isPublished: true,
     },
     orderBy: {
-      order: 'asc',
+      createdAt: 'desc',
     },
     select: {
       id: true,
       title: true,
       description: true,
       slug: true,
-      category: true,
       estimatedMinutes: true,
-      difficulty: true,
     },
   }) as LessonWithDetails[]
 

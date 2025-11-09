@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { ChatMessages } from './chat-messages'
-import { ChatInput } from './chat-input'
+import { ChatInput, type ChatInputRef } from './chat-input'
 import { DevToolsModal } from './dev-tools-modal'
 import type { ChatMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
@@ -38,6 +38,7 @@ export function ChatInterface({
   })
   const streamingContentRef = useRef<string>('')
   const hasGeneratedWelcome = useRef(false)
+  const chatInputRef = useRef<ChatInputRef>(null)
 
   const isDevelopment = process.env.NODE_ENV === 'development'
 
@@ -111,6 +112,10 @@ export function ChatInterface({
       toast.error('Error al generar mensaje de bienvenida')
     } finally {
       setIsGeneratingWelcome(false)
+      // Auto-focus on input after welcome message
+      setTimeout(() => {
+        chatInputRef.current?.focus()
+      }, 100)
     }
   }
 
@@ -202,6 +207,10 @@ export function ChatInterface({
           setStreamingMessage('')
           streamingContentRef.current = ''
           setIsLoading(false)
+          // Auto-focus on input after AI finishes
+          setTimeout(() => {
+            chatInputRef.current?.focus()
+          }, 100)
         },
         // onError: handle errors
         (error) => {
@@ -289,9 +298,12 @@ export function ChatInterface({
       {/* Input - altura fija, siempre visible */}
       <div className="shrink-0">
         <ChatInput
+          ref={chatInputRef}
           onSend={handleSendMessage}
           disabled={isLoading || isGeneratingWelcome}
           isGeneratingWelcome={isGeneratingWelcome}
+          isThinking={isLoading && streamingMessage.length === 0}
+          isStreaming={streamingMessage.length > 0}
         />
       </div>
 

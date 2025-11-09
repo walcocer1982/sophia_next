@@ -48,6 +48,7 @@ export interface LessonMetadata {
 }
 
 export interface LessonContent {
+  id?: string // Optional para compatibilidad con DB y hardcoded
   lesson: LessonMetadata
   moments: Moment[]
 }

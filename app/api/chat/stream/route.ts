@@ -5,6 +5,7 @@ import { parseContentJson, getCurrentActivity, getFirstActivity } from '@/lib/le
 import { buildSystemPrompt } from '@/lib/prompt-builder'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { logger, logChatMessage, logError } from '@/lib/logger'
+import { getLessonContent } from '@/lib/lesson-loader'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -54,9 +55,10 @@ export async function POST(request: Request) {
     include: {
       lesson: {
         select: {
+          id: true, // Necesario para getLessonContent
           title: true,
           description: true,
-          contentJson: true, // ⭐ Fetch contentJson
+          // contentJson lo obtenemos de getLessonContent
         },
       },
       messages: {
@@ -75,8 +77,16 @@ export async function POST(request: Request) {
     return new Response('Session not found', { status: 404 })
   }
 
-  // 2. Parse contentJson and determine current activity
-  const contentJson = parseContentJson(lessonSession.lesson.contentJson) as LessonContent
+  // 2. Get lesson content (from hardcoded file or DB)
+  const contentJson = await getLessonContent(lessonSession.lesson.id) as LessonContent
+
+  if (!contentJson) {
+    logger.error('chat.stream.lesson_content_not_found', {
+      sessionId,
+      lessonId: lessonSession.lesson.id,
+    })
+    return new Response('Lesson content not found', { status: 404 })
+  }
 
   // Obtener actividad actual basada en progreso
   let currentActivityContext

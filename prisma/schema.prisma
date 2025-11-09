@@ -65,15 +65,8 @@ model Lesson {
   title                  String
   description            String?   @db.Text
   slug                   String    @unique
-  courseTitle            String?
-  category               String?
-  order                  Int       @default(0)
   estimatedMinutes       Int?
-  difficulty             String?
   contentJson            Json
-  images                 Json?
-  imagesLoadedAt         DateTime?
-  prerequisiteLessonIds  Json?
   isPublished            Boolean   @default(false)
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
@@ -82,7 +75,6 @@ model Lesson {
   sessions LessonSession[]
 
   @@index([slug])
-  @@index([category])
 }
 
 // ============================================
