@@ -17,6 +17,7 @@
 - [🚦 MVPs & Technical Debt](#-mvps--technical-debt) - Filosofía de desarrollo incremental
 - [🛠️ Workflow Modes](#️-workflow-modes) - Plan, Edit, Docs Update, FLOWS.md Protocol
 - [🔐 Authentication & Auth Flow](#-authentication--auth-flow) - NextAuth v5 + OAuth
+- [🤖 AI Prompts](#-ai-prompts) - AI Prompt Guides
 - [🎨 Styling & UI](#-styling--ui-components) - TailwindCSS + shadcn/ui
 - [🧭 Naming & Commits](#-naming--commit-conventions) - Convenciones de código y commits
 - [🚀 Deployment](#-deployment--environment) - Vercel + Neon setup
@@ -1341,6 +1342,17 @@ openssl rand -base64 32
 | `ClientFetchError` | Google credentials incorrectos |
 | `redirect_uri_mismatch` | URL callback mal configurada en Google Cloud Console |
 | Test User funciona en prod | Falta validación `process.env.NODE_ENV !== 'development'` |
+
+
+---
+
+## 🤖 AI Prompts
+
+**Reglas para escribir prompts**
+
+- Siempre debes escribir prompts agnósticos de tema/clase/especialidad.
+- NUNCA escribir en Prompt algo como "volvamos al tema de HTML"
+- SI deben ser dinámicos con información de la lesson en curso.
 
 ---
 

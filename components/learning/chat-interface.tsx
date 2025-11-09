@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { ChatMessages } from './chat-messages'
 import { ChatInput, type ChatInputRef } from './chat-input'
 import { DevToolsModal } from './dev-tools-modal'
+import { ActivityProgressHeader } from './activity-progress-header'
 import type { ChatMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { toast } from 'sonner'
@@ -276,13 +277,8 @@ export function ChatInterface({
           )}
         </div>
 
-        {/* Activity Progress - Temporarily disabled */}
-        {/* <ActivityProgressHeader
-          current={activityProgress.current}
-          total={activityProgress.total}
-          activityTitle={activityProgress.activityTitle}
-          percentage={activityProgress.percentage}
-        /> */}
+        {/* Activity Progress Header */}
+        <ActivityProgressHeader sessionId={sessionId} />
       </div>
 
       {/* Messages - ocupa espacio restante con scroll interno */}

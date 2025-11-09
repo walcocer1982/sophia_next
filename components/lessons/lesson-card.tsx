@@ -59,7 +59,7 @@ export function LessonCard({ lesson }: LessonCardProps) {
 
   return (
     <Card
-      className="h-full transition-all hover:shadow-lg hover:scale-[1.02] cursor-pointer"
+      className="h-full transition-all hover:scale-[1.02] cursor-pointer"
       onClick={handleStartLesson}
     >
       <CardContent className="p-6">

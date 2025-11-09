@@ -1,11 +1,12 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { anthropic } from '@/lib/anthropic'
-import { parseContentJson, getCurrentActivity, getFirstActivity } from '@/lib/lesson-parser'
+import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities } from '@/lib/lesson-parser'
 import { buildSystemPrompt } from '@/lib/prompt-builder'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { logger, logChatMessage, logError } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
+import { verifyActivityCompletion } from '@/lib/activity-verification'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -110,17 +111,49 @@ export async function POST(request: Request) {
     return new Response('No activities found in lesson', { status: 500 })
   }
 
-  // 3. Build dynamic system prompt
-  const systemPrompt = buildSystemPrompt({
-    activityContext: currentActivityContext,
-    recentMessages: lessonSession.messages,
-    tangentCount: 0, // TODO: Calcular tangent count dinámicamente
-  })
-
   const conversationHistory = lessonSession.messages.reverse().map((m) => ({
     role: m.role as 'user' | 'assistant',
     content: m.content,
   }))
+
+  // 3. 🔥 NUEVO: Verificación ANTICIPADA antes de generar respuesta
+  const currentActivity = currentActivityContext.activity
+
+  // Obtener intentos actuales
+  const attempts = await prisma.activityProgress
+    .findUnique({
+      where: {
+        lessonSessionId_activityId: {
+          lessonSessionId: lessonSession.id,
+          activityId: currentActivity.id,
+        },
+      },
+      select: { attempts: true },
+    })
+    .then((ap) => ap?.attempts || 0)
+
+  // Ejecutar verificación ANTES del streaming
+  const verification = await verifyActivityCompletion(
+    message,
+    currentActivity,
+    conversationHistory
+  )
+
+  logger.info('chat.stream.pre_verification', {
+    sessionId,
+    activityId: currentActivity.id,
+    completed: verification.completed,
+    confidence: verification.confidence,
+    attempts: attempts + 1,
+  })
+
+  // 4. Build dynamic system prompt con resultado de verificación
+  const systemPrompt = buildSystemPrompt({
+    activityContext: currentActivityContext,
+    recentMessages: lessonSession.messages,
+    tangentCount: 0, // TODO: Calcular tangent count dinámicamente
+    verificationResult: verification, // ← NUEVO: Pasar resultado de verificación
+  })
 
   // 4. Create streaming response
   const encoder = new TextEncoder()
@@ -196,7 +229,146 @@ export async function POST(request: Request) {
           output: outputTokens,
         })
 
-        // 5. Send done event
+        // 5. Guardar resultado de verificación en ActivityProgress
+        // (La verificación ya corrió ANTES del streaming, usamos ese resultado)
+        if (verification.completed) {
+          // Marcar actividad como completada
+          await prisma.activityProgress.upsert({
+            where: {
+              lessonSessionId_activityId: {
+                lessonSessionId: lessonSession.id,
+                activityId: currentActivity.id,
+              },
+            },
+            update: {
+              status: 'COMPLETED',
+              completedAt: new Date(),
+              passedCriteria: true,
+              aiFeedback: verification.feedback,
+              attempts: attempts + 1,
+            },
+            create: {
+              lessonSessionId: lessonSession.id,
+              classId: '',
+              momentId: '',
+              activityId: currentActivity.id,
+              status: 'COMPLETED',
+              completedAt: new Date(),
+              passedCriteria: true,
+              aiFeedback: verification.feedback,
+              attempts: attempts + 1,
+            },
+          })
+
+          logger.info('chat.stream.activity_completed', {
+            sessionId,
+            activityId: currentActivity.id,
+            attempts: attempts + 1,
+            criteriaMatched: verification.criteriaMatched.length,
+          })
+
+          // 🔥 NUEVO: Notificar al frontend inmediatamente vía SSE
+          const nextActivityContext = getNextActivity(contentJson, currentActivity.id)
+          const totalActivities = getTotalActivities(contentJson)
+          const completedCount = await prisma.activityProgress.count({
+            where: {
+              lessonSessionId: lessonSession.id,
+              status: 'COMPLETED',
+            },
+          })
+
+          const activityCompletedData = JSON.stringify({
+            type: 'activity_completed',
+            activityId: currentActivity.id,
+            activityTitle: currentActivity.teaching.main_topic,
+            nextActivityId: nextActivityContext?.activity.id || null,
+            nextActivityTitle: nextActivityContext?.activity.teaching.main_topic || null,
+            isLastActivity: !nextActivityContext,
+            currentPosition: nextActivityContext ? nextActivityContext.activityIdx + 1 : totalActivities,
+            completedCount: completedCount + 1, // +1 porque acabamos de completar
+            total: totalActivities,
+            percentage: Math.round(((completedCount + 1) / totalActivities) * 100),
+            completedAt: new Date().toISOString(),
+          })
+
+          // Enviar evento SSE al frontend para actualización instantánea
+          controller.enqueue(encoder.encode(`data: ${activityCompletedData}\n\n`))
+
+          logger.info('chat.stream.activity_completed_event_sent', {
+            sessionId,
+            activityId: currentActivity.id,
+            percentage: Math.round(((completedCount + 1) / totalActivities) * 100),
+          })
+
+          // Auto-progresión a siguiente actividad (ahora usa nextActivityContext ya calculado)
+
+          if (nextActivityContext) {
+            // Hay siguiente actividad → actualizar sesión
+            await prisma.lessonSession.update({
+              where: { id: lessonSession.id },
+              data: {
+                activityId: nextActivityContext.activity.id,
+                momentId: '',
+                lastActivityAt: new Date(),
+              },
+            })
+
+            logger.info('chat.stream.activity_progressed', {
+              sessionId,
+              fromActivityId: currentActivity.id,
+              toActivityId: nextActivityContext.activity.id,
+              progress: `${nextActivityContext.activityIdx + 1}/${nextActivityContext.totalActivities}`,
+            })
+          } else {
+            // Era la última actividad → marcar lección como completada
+            const totalActivities = getTotalActivities(contentJson)
+            const completedCount = await prisma.activityProgress.count({
+              where: {
+                lessonSessionId: lessonSession.id,
+                status: 'COMPLETED',
+              },
+            })
+
+            await prisma.lessonSession.update({
+              where: { id: lessonSession.id },
+              data: {
+                completedAt: new Date(),
+                passed: true,
+                progress: 100,
+              },
+            })
+
+            logger.info('chat.stream.lesson_completed', {
+              sessionId,
+              totalActivities,
+              completedActivities: completedCount + 1,
+              duration: new Date().getTime() - new Date(lessonSession.startedAt).getTime(),
+            })
+          }
+        } else {
+          // Incrementar attempts sin completar
+          await prisma.activityProgress.upsert({
+            where: {
+              lessonSessionId_activityId: {
+                lessonSessionId: lessonSession.id,
+                activityId: currentActivity.id,
+              },
+            },
+            update: {
+              attempts: attempts + 1,
+            },
+            create: {
+              lessonSessionId: lessonSession.id,
+              classId: '',
+              momentId: '',
+              activityId: currentActivity.id,
+              status: 'IN_PROGRESS',
+              attempts: attempts + 1,
+            },
+          })
+        }
+
+        // 6. Send done event
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
         )

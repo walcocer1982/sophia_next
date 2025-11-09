@@ -1,17 +1,18 @@
-import type { CurrentActivityContext } from '@/types/lesson'
+import type { CurrentActivityContext, ActivityCompletionResult } from '@/types/lesson'
 import type { Message } from '@prisma/client'
 
 interface PromptBuilderContext {
   activityContext: CurrentActivityContext
   recentMessages: Message[]
   tangentCount?: number
+  verificationResult?: ActivityCompletionResult
 }
 
 /**
  * Construir system prompt dinámico basado en actividad actual
  */
 export function buildSystemPrompt(context: PromptBuilderContext): string {
-  const { activityContext, recentMessages, tangentCount = 0 } = context
+  const { activityContext, recentMessages, tangentCount = 0, verificationResult } = context
   const { activity, lessonMetadata, totalActivities } = activityContext
   const position = getActivityNumber(activityContext)
 
@@ -43,6 +44,42 @@ El estudiante debe demostrar comprensión de estos criterios:`
   })
 
   prompt += `\n\nRespuesta esperada: ${getTargetLengthDescription(activity.verification.target_length)}`
+
+  // 🔥 NUEVO: Inyectar resultado de verificación si existe
+  if (verificationResult) {
+    prompt += `\n\n`
+
+    if (verificationResult.completed) {
+      prompt += `🎉 ESTADO DE VERIFICACIÓN: ACTIVIDAD COMPLETADA
+
+El estudiante acaba de completar CORRECTAMENTE esta actividad.
+- Criterios cumplidos: ${verificationResult.criteriaMatched.length}/${activity.verification.criteria.length}
+- Confianza: ${verificationResult.confidence === 'high' ? 'Alta' : verificationResult.confidence === 'medium' ? 'Media' : 'Baja'}
+
+ACCIÓN REQUERIDA:
+1. Felicita calurosamente al estudiante
+2. Resume brevemente lo que ha aprendido (menciona: ${verificationResult.criteriaMatched.join(', ')})
+3. Pregunta si está listo para avanzar a la siguiente actividad
+4. NO vuelvas a explicar conceptos ya dominados
+5. Usa un tono celebratorio y motivador`
+    } else {
+      prompt += `⚠️ ESTADO DE VERIFICACIÓN: AÚN NO COMPLETADA
+
+El estudiante está avanzando pero le faltan criterios por cumplir.
+- Criterios cumplidos: ${verificationResult.criteriaMatched.join(', ')}
+- Criterios faltantes: ${verificationResult.criteriaMissing.join(', ')}
+
+ACCIÓN REQUERIDA:
+1. Reconoce específicamente lo que ha hecho bien hasta ahora
+2. Identifica qué criterio concreto falta sin mencionarlo directamente
+3. Haz una pregunta guía que lleve al estudiante hacia el concepto faltante
+4. NO des la respuesta directa, usa el método socrático
+5. NO digas "completado", "felicitaciones", ni "has terminado" aún
+6. Mantén un tono alentador pero redirige al objetivo
+
+Ejemplo de feedback: "${verificationResult.feedback}"`
+    }
+  }
 
   // Política de preguntas del estudiante
   prompt += `\n\n💬 MANEJO DE PREGUNTAS DEL ESTUDIANTE

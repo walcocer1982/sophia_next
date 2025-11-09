@@ -1,6 +1,7 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { hardcodedLesson } from '@/data/lesson01'
 
 export const runtime = 'nodejs'
 
@@ -33,13 +34,34 @@ export async function POST(request: Request) {
   const { lessonId } = await request.json()
 
   // 4. Check if lesson exists and is published
-  const lesson = await prisma.lesson.findUnique({
-    where: { id: lessonId, isPublished: true },
-    select: { id: true, title: true, description: true, estimatedMinutes: true },
-  })
+  const useHardcodedLesson = process.env.ALLOW_HARDCODE_LESSON === '1'
+  let lesson: {
+    id: string
+    title: string
+    description: string | null
+    estimatedMinutes: number | null
+  }
 
-  if (!lesson) {
-    return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
+  if (useHardcodedLesson && lessonId === hardcodedLesson.id) {
+    // Usar lección hardcodeada
+    lesson = {
+      id: hardcodedLesson.id,
+      title: hardcodedLesson.lesson.title,
+      description: hardcodedLesson.lesson.description,
+      estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
+    }
+  } else {
+    // Buscar en base de datos
+    const dbLesson = await prisma.lesson.findUnique({
+      where: { id: lessonId, isPublished: true },
+      select: { id: true, title: true, description: true, estimatedMinutes: true },
+    })
+
+    if (!dbLesson) {
+      return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
+    }
+
+    lesson = dbLesson
   }
 
   // 4. Check for active session
