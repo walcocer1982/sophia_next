@@ -5,14 +5,16 @@ interface PromptBuilderContext {
   activityContext: CurrentActivityContext
   recentMessages: Message[]
   tangentCount?: number
+  attempts?: number
   verificationResult?: ActivityCompletionResult
+  completedActivities?: string[]  // 🔥 FIX 3: IDs de actividades ya completadas
 }
 
 /**
  * Construir system prompt dinámico basado en actividad actual
  */
 export function buildSystemPrompt(context: PromptBuilderContext): string {
-  const { activityContext, recentMessages, tangentCount = 0, verificationResult } = context
+  const { activityContext, recentMessages, tangentCount = 0, attempts = 0, verificationResult, completedActivities = [] } = context
   const { activity, lessonMetadata, totalActivities } = activityContext
   const position = getActivityNumber(activityContext)
 
@@ -27,6 +29,17 @@ export function buildSystemPrompt(context: PromptBuilderContext): string {
 🎯 ACTIVIDAD ACTUAL: ${activity.teaching.main_topic}
 Tipo: ${activity.type === 'explanation' ? 'Explicación' : 'Práctica'}
 Enfoque pedagógico: ${activity.teaching.approach === 'conversational' ? 'Conversacional (dialógico, paso a paso)' : 'Práctico (orientado a ejercicios)'}`
+
+  // 🔥 FIX 3: Memoria explícita de actividades completadas
+  if (completedActivities.length > 0) {
+    prompt += `\n\n✅ ACTIVIDADES YA COMPLETADAS (NO vuelvas a enseñar):
+${completedActivities.map((id, i) => `${i + 1}. ${id}`).join('\n')}
+
+🚨 IMPORTANTE: Estas actividades ya fueron dominadas por el estudiante.
+- NO vuelvas a enseñar estos temas
+- NO pidas al estudiante que responda preguntas de actividades completadas
+- Si el estudiante pregunta sobre ellas, menciona brevemente que ya las completó exitosamente`
+  }
 
   // Key points a cubrir
   prompt += `\n\n📝 CONTENIDO A ENSEÑAR:\n`
@@ -57,11 +70,13 @@ El estudiante acaba de completar CORRECTAMENTE esta actividad.
 - Confianza: ${verificationResult.confidence === 'high' ? 'Alta' : verificationResult.confidence === 'medium' ? 'Media' : 'Baja'}
 
 ACCIÓN REQUERIDA:
-1. Felicita calurosamente al estudiante
+1. Felicita calurosamente al estudiante por dominar este tema
 2. Resume brevemente lo que ha aprendido (menciona: ${verificationResult.criteriaMatched.join(', ')})
-3. Pregunta si está listo para avanzar a la siguiente actividad
+3. ${position === totalActivities
+    ? 'Felicita por completar TODA la lección. Ofrece responder preguntas finales o profundizar en algún tema específico'
+    : 'Haz una transición DIRECTA sin pedir permiso: "Ahora que dominas [tema actual], pasemos a [siguiente tema]. [Primera pregunta de engagement de la nueva actividad]"'}
 4. NO vuelvas a explicar conceptos ya dominados
-5. Usa un tono celebratorio y motivador`
+5. Usa un tono celebratorio pero dinámico, mantén el momentum de aprendizaje`
     } else {
       prompt += `⚠️ ESTADO DE VERIFICACIÓN: AÚN NO COMPLETADA
 
@@ -87,16 +102,27 @@ Ejemplo de feedback: "${verificationResult.feedback}"`
 - Límite de tangentes permitidas: ${activity.student_questions.max_tangent_responses}
 - Tangentes actuales: ${tangentCount}/${activity.student_questions.max_tangent_responses}`
 
+  // Fix: Anticipar el siguiente tangent para enforcement correcto
   if (tangentCount >= activity.student_questions.max_tangent_responses) {
-    prompt += `\n\n⚠️ LÍMITE DE TANGENTES ALCANZADO: Redirige amablemente al estudiante al tema principal.`
+    prompt += `\n\n🚫 LÍMITE DE TANGENTES ALCANZADO:
+- NO respondas esta pregunta off-topic
+- Redirige firmemente al tema principal sin dar información adicional
+- Ejemplo: "Entiendo tu curiosidad, pero debemos enfocarnos en ${activity.teaching.main_topic}. Por favor responde la pregunta de verificación."`
   }
 
-  // Hints disponibles
-  if (activity.verification.hints && activity.verification.hints.length > 0) {
-    prompt += `\n\n💡 PISTAS DISPONIBLES (usar si el estudiante está trabado):`
-    activity.verification.hints.forEach((hint, i) => {
-      prompt += `\n${i + 1}. ${hint}`
-    })
+  // Hints condicionales según intentos
+  const shouldShowHints = attempts >= 2 && activity.verification.hints && activity.verification.hints.length > 0
+
+  if (shouldShowHints) {
+    // Mostrar hints progresivamente: 1 hint cada 2 intentos
+    const hintIndex = Math.min(Math.floor(attempts / 2) - 1, activity.verification.hints!.length - 1)
+    const currentHint = activity.verification.hints![hintIndex]
+
+    prompt += `\n\n💡 PISTA DISPONIBLE (el estudiante ha intentado ${attempts} veces):
+Si el estudiante NO cumple los criterios en este intento:
+- Ofrece esta pista: "${currentHint}"
+- Explica brevemente qué le falta en su respuesta
+- NO des la respuesta completa, guíalo con preguntas socráticas`
   }
 
   // Guardrails

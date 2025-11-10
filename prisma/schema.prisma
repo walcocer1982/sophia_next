@@ -132,6 +132,7 @@ model ActivityProgress {
   passedCriteria  Boolean        @default(false)
   aiFeedback      String?        @db.Text
   attempts        Int            @default(0)
+  tangentCount    Int            @default(0) // Track off-topic question count
 
   // Relaciones
   lessonSession LessonSession @relation(fields: [lessonSessionId], references: [id], onDelete: Cascade)

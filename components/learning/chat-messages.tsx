@@ -2,52 +2,22 @@
 
 import { useEffect, useRef } from 'react'
 import { ChatMessage } from './chat-message'
-import { AvatarInstructor } from './avatar-instructor'
+import { ChatMessageSkeleton } from './chat-message-skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import AITextLoading from '@/components/ui/text-loading'
-import type { ChatMessage as ChatMessageType } from '@/types/chat'
+import type { OptimisticMessage } from '@/types/chat'
 
 interface ChatMessagesProps {
-  messages: ChatMessageType[]
-  streamingMessage?: string
+  messages: OptimisticMessage[]
   isLoading?: boolean
-  isWelcome?: boolean
 }
 
-export function ChatMessages({
-  messages,
-  streamingMessage,
-  isLoading,
-  isWelcome,
-}: ChatMessagesProps) {
+export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll when messages change or streaming updates
+  // Auto-scroll when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingMessage])
-
-  // Determinar estado del avatar
-  const getAvatarState = () => {
-    if (streamingMessage) return 'speaking' // IA está generando respuesta
-    if (isLoading) return 'thinking' // IA está pensando
-    return 'idle' // Sin actividad
-  }
-
-  // Textos específicos para welcome vs chat normal
-  const loadingTexts = isWelcome
-    ? [
-        'Iniciando la lección...',
-        'Cargando contenido...',
-        'Preparando la bienvenida...',
-        'Casi listo...',
-      ]
-    : [
-        'Pensando...',
-        'Analizando tu pregunta...',
-        'Preparando respuesta...',
-        'Casi listo...',
-      ]
+  }, [messages])
 
   return (
     <ScrollArea className="h-full bg-linear-to-b from-white to-slate-300">
@@ -58,49 +28,30 @@ export function ChatMessages({
           </div>
         )}
 
-        {messages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            role={message.role}
-            content={message.content}
-            timestamp={message.createdAt}
-            isLastMessage={message.id === messages[messages.length - 1].id}
-          />
-        ))}
+        {messages.map((message, index) => {
+          const isLastMessage = index === messages.length - 1
 
-        {/* Typing indicator when loading but not streaming yet */}
-        {isLoading && !streamingMessage && (
-          <div className="flex gap-3 items-center">
-            <AvatarInstructor name="Sophia" state={getAvatarState()} />
-            <div className="bg-transparent">
-              <AITextLoading
-                texts={loadingTexts}
-                interval={1500}
-                color="orange"
-              />
-            </div>
-          </div>
-        )}
+          // ⭐ Detectar si es skeleton (mensaje optimistic vacío)
+          if (
+            message.isOptimistic &&
+            message.status === 'streaming' &&
+            message.content === ''
+          ) {
+            return <ChatMessageSkeleton key={message.id} isWelcome={message.isWelcome} />
+          }
 
-        {/* Show streaming message with avatar and indicator */}
-        {streamingMessage && (
-          <div className="flex flex-col gap-2">
-            <div className="flex gap-3 items-center">
-              {/* Avatar */}
-              <AvatarInstructor name="Sophia" state={getAvatarState()} />
-              <div className="bg-transparent">
-                <AITextLoading
-                  texts={['Escribiendo...', 'Generando...', 'Redactando...']}
-                  interval={1200}
-                  color="green"
-                />
-              </div>
-            </div>
-
-            {/* Message content */}
-            <ChatMessage role="assistant" content={streamingMessage} />
-          </div>
-        )}
+          // Renderizar mensaje normal (user o assistant con contenido)
+          return (
+            <ChatMessage
+              key={message.id}
+              role={message.role}
+              content={message.content}
+              timestamp={message.createdAt}
+              isLastMessage={isLastMessage}
+              isStreaming={message.status === 'streaming' && message.content.length > 0}
+            />
+          )
+        })}
 
         <div ref={messagesEndRef} />
       </div>

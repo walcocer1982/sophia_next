@@ -8,6 +8,7 @@ import { logger, logChatMessage, logError } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { verifyActivityCompletion } from '@/lib/activity-verification'
 import type { LessonContent } from '@/types/lesson'
+import type { Message } from '@prisma/client'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -62,14 +63,10 @@ export async function POST(request: Request) {
           // contentJson lo obtenemos de getLessonContent
         },
       },
-      messages: {
-        orderBy: { timestamp: 'desc' },
-        take: 10,
-      },
       activities: {
         where: { status: 'COMPLETED' },
-        orderBy: { completedAt: 'desc' },
-        take: 1, // Última actividad completada
+        orderBy: { completedAt: 'asc' },  // Orden cronológico
+        // 🔥 FIX 3: Obtener TODAS las completadas para memoria del prompt
       },
     },
   })
@@ -77,6 +74,23 @@ export async function POST(request: Request) {
   if (!lessonSession) {
     return new Response('Session not found', { status: 404 })
   }
+
+  // 🔥 FIX 2: Query mensajes filtrados por actividad actual (prevenir contaminación de contexto)
+  const messages = await prisma.message.findMany({
+    where: {
+      sessionId: lessonSession.id,
+      OR: [
+        { activityId: lessonSession.activityId },  // Mensajes de actividad actual
+        { activityId: null },  // Mensajes globales (welcome)
+      ],
+    },
+    orderBy: { timestamp: 'desc' },
+    take: 10,
+  })
+
+  // Adjuntar mensajes a lessonSession para mantener compatibilidad (cast para TypeScript)
+  const sessionWithMessages = lessonSession as typeof lessonSession & { messages: Message[] }
+  sessionWithMessages.messages = messages
 
   // 2. Get lesson content (from hardcoded file or DB)
   const contentJson = await getLessonContent(lessonSession.lesson.id) as LessonContent
@@ -90,20 +104,14 @@ export async function POST(request: Request) {
   }
 
   // Obtener actividad actual basada en progreso
+  // 🔥 FIX: Usar lessonSession.activityId como source of truth (actualizado en auto-progresión)
   let currentActivityContext
-  const lastCompletedActivity = lessonSession.activities[0]
 
-  if (lastCompletedActivity) {
-    // Si hay actividad completada, obtener la siguiente
-    const nextActivity = getCurrentActivity(contentJson, lastCompletedActivity.activityId)
-    if (nextActivity) {
-      currentActivityContext = nextActivity
-    } else {
-      // Si no hay siguiente, usar la primera (fallback)
-      currentActivityContext = getFirstActivity(contentJson)
-    }
+  if (lessonSession.activityId) {
+    // DB tiene el activityId correcto después de auto-progresión
+    currentActivityContext = getCurrentActivity(contentJson, lessonSession.activityId)
   } else {
-    // Si no hay progreso, empezar con la primera actividad
+    // Fallback: Primera vez, no hay activityId aún
     currentActivityContext = getFirstActivity(contentJson)
   }
 
@@ -111,7 +119,7 @@ export async function POST(request: Request) {
     return new Response('No activities found in lesson', { status: 500 })
   }
 
-  const conversationHistory = lessonSession.messages.reverse().map((m) => ({
+  const conversationHistory = sessionWithMessages.messages.reverse().map((m: Message) => ({
     role: m.role as 'user' | 'assistant',
     content: m.content,
   }))
@@ -119,18 +127,19 @@ export async function POST(request: Request) {
   // 3. 🔥 NUEVO: Verificación ANTICIPADA antes de generar respuesta
   const currentActivity = currentActivityContext.activity
 
-  // Obtener intentos actuales
-  const attempts = await prisma.activityProgress
-    .findUnique({
-      where: {
-        lessonSessionId_activityId: {
-          lessonSessionId: lessonSession.id,
-          activityId: currentActivity.id,
-        },
+  // Obtener intentos y tangent count actuales
+  const activityProgress = await prisma.activityProgress.findUnique({
+    where: {
+      lessonSessionId_activityId: {
+        lessonSessionId: lessonSession.id,
+        activityId: currentActivity.id,
       },
-      select: { attempts: true },
-    })
-    .then((ap) => ap?.attempts || 0)
+    },
+    select: { attempts: true, tangentCount: true },
+  })
+
+  const attempts = activityProgress?.attempts || 0
+  const tangentCount = activityProgress?.tangentCount || 0
 
   // Ejecutar verificación ANTES del streaming
   const verification = await verifyActivityCompletion(
@@ -147,12 +156,19 @@ export async function POST(request: Request) {
     attempts: attempts + 1,
   })
 
+  // 🔥 FIX 3: Obtener lista de actividades completadas para contexto del prompt
+  const completedActivityIds = lessonSession.activities
+    .filter(a => a.status === 'COMPLETED')
+    .map(a => a.activityId)
+
   // 4. Build dynamic system prompt con resultado de verificación
   const systemPrompt = buildSystemPrompt({
     activityContext: currentActivityContext,
-    recentMessages: lessonSession.messages,
-    tangentCount: 0, // TODO: Calcular tangent count dinámicamente
+    recentMessages: sessionWithMessages.messages,
+    tangentCount, // Pasar tangent count real
+    attempts, // Pasar attempts para hints condicionales
     verificationResult: verification, // ← NUEVO: Pasar resultado de verificación
+    completedActivities: completedActivityIds, // 🔥 FIX 3: Memoria de actividades completadas
   })
 
   // 4. Create streaming response
@@ -365,6 +381,31 @@ export async function POST(request: Request) {
               status: 'IN_PROGRESS',
               attempts: attempts + 1,
             },
+          })
+        }
+
+        // 5. Detectar tangents e incrementar contador
+        // Un tangent es cuando el usuario NO cumple ningún criterio (pregunta off-topic)
+        const isTangent = !verification.completed && verification.criteriaMatched.length === 0
+
+        if (isTangent) {
+          await prisma.activityProgress.update({
+            where: {
+              lessonSessionId_activityId: {
+                lessonSessionId: lessonSession.id,
+                activityId: currentActivity.id,
+              },
+            },
+            data: {
+              tangentCount: tangentCount + 1,
+            },
+          })
+
+          logger.info('chat.stream.tangent_detected', {
+            sessionId,
+            activityId: currentActivity.id,
+            tangentCount: tangentCount + 1,
+            maxAllowed: currentActivity.student_questions.max_tangent_responses,
           })
         }
 

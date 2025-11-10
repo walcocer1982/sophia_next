@@ -177,7 +177,7 @@ async function main() {
       title: hardcodedLesson.lesson.title,
       description: hardcodedLesson.lesson.description,
       estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
-      contentJson: hardcodedLesson as Prisma.InputJsonValue,
+      contentJson: hardcodedLesson as unknown as Prisma.InputJsonValue,
       isPublished: true,
     },
     create: {
@@ -186,7 +186,7 @@ async function main() {
       description: hardcodedLesson.lesson.description,
       slug: 'html-basico',
       estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
-      contentJson: hardcodedLesson as Prisma.InputJsonValue,
+      contentJson: hardcodedLesson as unknown as Prisma.InputJsonValue,
       isPublished: true,
     },
   })

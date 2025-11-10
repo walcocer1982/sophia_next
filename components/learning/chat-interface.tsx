@@ -5,7 +5,7 @@ import { ChatMessages } from './chat-messages'
 import { ChatInput, type ChatInputRef } from './chat-input'
 import { DevToolsModal } from './dev-tools-modal'
 import { ActivityProgressHeader } from './activity-progress-header'
-import type { ChatMessage } from '@/types/chat'
+import type { ChatMessage, OptimisticMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { toast } from 'sonner'
 import { Settings } from 'lucide-react'
@@ -22,9 +22,14 @@ export function ChatInterface({
   initialMessages,
   lessonTitle,
 }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
+  const [messages, setMessages] = useState<OptimisticMessage[]>(
+    initialMessages.map((msg) => ({
+      ...msg,
+      status: 'completed',
+      isOptimistic: false,
+    }))
+  )
   const [isLoading, setIsLoading] = useState(false)
-  const [streamingMessage, setStreamingMessage] = useState<string>('')
   const [showDevTools, setShowDevTools] = useState(false)
   const [isGeneratingWelcome, setIsGeneratingWelcome] = useState(
     initialMessages.length === 0
@@ -38,6 +43,7 @@ export function ChatInterface({
     lastCompletedAt: null as string | null,
   })
   const streamingContentRef = useRef<string>('')
+  const assistantIdRef = useRef<string>('')
   const hasGeneratedWelcome = useRef(false)
   const chatInputRef = useRef<ChatInputRef>(null)
 
@@ -59,7 +65,24 @@ export function ChatInterface({
   const generateWelcomeMessage = async () => {
     setIsGeneratingWelcome(true)
     streamingContentRef.current = ''
-    setStreamingMessage('')
+
+    // Crear placeholder optimistic para welcome message
+    const welcomeId = 'welcome-' + Date.now()
+    assistantIdRef.current = welcomeId
+
+    const welcomePlaceholder: OptimisticMessage = {
+      id: welcomeId,
+      sessionId,
+      role: 'assistant',
+      content: '', // ⭐ Vacío inicialmente (mostrar skeleton)
+      createdAt: new Date(),
+      status: 'streaming',
+      isOptimistic: true,
+      isWelcome: true,
+    }
+
+    // Agregar placeholder inmediatamente
+    setMessages([welcomePlaceholder])
 
     try {
       const response = await fetch('/api/chat/welcome', {
@@ -79,38 +102,48 @@ export function ChatInterface({
         throw new Error('No reader available')
       }
 
-      // Read stream chunks
+      // Read stream chunks y actualizar mensaje existente
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
         const text = decoder.decode(value, { stream: true })
         streamingContentRef.current += text
-        setStreamingMessage(streamingContentRef.current)
+
+        // Actualizar mensaje por ID
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === welcomeId ? { ...m, content: streamingContentRef.current } : m
+          )
+        )
       }
 
-      // Finalize welcome message
-      const welcomeMessage: ChatMessage = {
-        id: 'welcome-' + Date.now(),
-        sessionId,
-        role: 'assistant',
-        content: streamingContentRef.current,
-        createdAt: new Date(),
-      }
-
-      // Solo agregar si no hay mensajes (prevenir duplicados)
-      setMessages((prev) => {
-        if (prev.length === 0) {
-          return [welcomeMessage]
-        }
-        console.warn('Welcome message already exists, skipping')
-        return prev
-      })
-      setStreamingMessage('')
+      // Marcar como completado
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === welcomeId
+            ? { ...m, status: 'completed', isOptimistic: false }
+            : m
+        )
+      )
       streamingContentRef.current = ''
     } catch (error) {
       console.error('Error generating welcome message:', error)
       toast.error('Error al generar mensaje de bienvenida')
+
+      // Marcar como error
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === welcomeId
+            ? {
+                ...m,
+                status: 'error',
+                content: 'Error al generar mensaje de bienvenida.',
+                isOptimistic: false,
+              }
+            : m
+        )
+      )
     } finally {
       setIsGeneratingWelcome(false)
       // Auto-focus on input after welcome message
@@ -168,44 +201,64 @@ export function ChatInterface({
   }, [sessionId, activityProgress.lastCompletedId, lessonTitle])
 
   const handleSendMessage = async (content: string) => {
+    if (!content.trim() || isLoading) return
+
     setIsLoading(true)
 
-    // Add user message immediately
-    const userMessage: ChatMessage = {
+    // 1. Crear mensaje del usuario
+    const userMessage: OptimisticMessage = {
       id: 'user-' + Date.now(),
       sessionId,
       role: 'user',
-      content,
+      content: content.trim(),
       createdAt: new Date(),
+      status: 'completed',
+      isOptimistic: false,
     }
-    setMessages((prev) => [...prev, userMessage])
 
-    // Reset streaming state
-    streamingContentRef.current = ''
-    setStreamingMessage('')
-
+    // 2. Crear placeholder optimistic para respuesta del instructor
     const assistantId = 'assistant-' + Date.now()
+    assistantIdRef.current = assistantId
+
+    const assistantPlaceholder: OptimisticMessage = {
+      id: assistantId,
+      sessionId,
+      role: 'assistant',
+      content: '', // ⭐ Vacío inicialmente (mostrar skeleton)
+      createdAt: new Date(),
+      status: 'streaming',
+      isOptimistic: true,
+    }
+
+    // 3. Agregar AMBOS mensajes inmediatamente
+    setMessages((prev) => [...prev, userMessage, assistantPlaceholder])
+
+    // 4. Resetear ref de contenido
+    streamingContentRef.current = ''
 
     try {
       await streamChatResponse(
         sessionId,
-        content,
-        // onChunk: accumulate text
+        content.trim(),
+        // onChunk: Acumular texto en el mensaje optimistic
         (text) => {
           streamingContentRef.current += text
-          setStreamingMessage(streamingContentRef.current)
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: streamingContentRef.current } : m
+            )
+          )
         },
-        // onDone: finalize message
+        // onDone: Marcar como completado
         () => {
-          const finalMessage: ChatMessage = {
-            id: assistantId,
-            sessionId,
-            role: 'assistant',
-            content: streamingContentRef.current,
-            createdAt: new Date(),
-          }
-          setMessages((prev) => [...prev, finalMessage])
-          setStreamingMessage('')
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, status: 'completed', isOptimistic: false }
+                : m
+            )
+          )
           streamingContentRef.current = ''
           setIsLoading(false)
           // Auto-focus on input after AI finishes
@@ -213,12 +266,23 @@ export function ChatInterface({
             chatInputRef.current?.focus()
           }, 100)
         },
-        // onError: handle errors
+        // onError: Marcar como error
         (error) => {
           console.error('Streaming error:', error)
           toast.error('Error al recibir respuesta. Intenta de nuevo.')
-          setStreamingMessage('')
-          streamingContentRef.current = ''
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    status: 'error',
+                    content: 'Error al recibir respuesta. Por favor, intenta de nuevo.',
+                    isOptimistic: false,
+                  }
+                : m
+            )
+          )
           setIsLoading(false)
         },
         // onActivityCompleted: update progress immediately
@@ -248,7 +312,8 @@ export function ChatInterface({
     } catch (error) {
       console.error('Error sending message:', error)
       toast.error('Error al enviar mensaje. Intenta de nuevo.')
-      setMessages((prev) => prev.filter((m) => m.id !== userMessage.id))
+      // Remover ambos mensajes en caso de error
+      setMessages((prev) => prev.filter((m) => m.id !== userMessage.id && m.id !== assistantId))
       setIsLoading(false)
     }
   }
@@ -283,12 +348,7 @@ export function ChatInterface({
 
       {/* Messages - ocupa espacio restante con scroll interno */}
       <div className="flex-1 overflow-hidden">
-        <ChatMessages
-          messages={messages}
-          streamingMessage={streamingMessage}
-          isLoading={isLoading || isGeneratingWelcome}
-          isWelcome={isGeneratingWelcome}
-        />
+        <ChatMessages messages={messages} isLoading={isLoading || isGeneratingWelcome} />
       </div>
 
       {/* Input - altura fija, siempre visible */}
@@ -298,8 +358,8 @@ export function ChatInterface({
           onSend={handleSendMessage}
           disabled={isLoading || isGeneratingWelcome}
           isGeneratingWelcome={isGeneratingWelcome}
-          isThinking={isLoading && streamingMessage.length === 0}
-          isStreaming={streamingMessage.length > 0}
+          isThinking={isLoading}
+          isStreaming={false}
         />
       </div>
 
