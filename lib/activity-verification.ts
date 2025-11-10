@@ -61,8 +61,17 @@ Responde SOLO con el JSON, sin texto adicional.`
       throw new Error('Unexpected response type from verification')
     }
 
+    // Extraer JSON de markdown code blocks si está presente
+    let jsonText = content.text.trim()
+
+    // Si el texto tiene markdown code blocks (```json ... ```), extraerlos
+    const jsonBlockMatch = jsonText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+    if (jsonBlockMatch) {
+      jsonText = jsonBlockMatch[1].trim()
+    }
+
     // Parsear JSON response
-    const result: ActivityCompletionResult = JSON.parse(content.text)
+    const result: ActivityCompletionResult = JSON.parse(jsonText)
 
     return result
   } catch (error) {

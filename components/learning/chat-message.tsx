@@ -1,17 +1,25 @@
 import { cn } from '@/lib/utils'
-import { AvatarInstructor } from './avatar-instructor'
+import { AvatarInstructor } from '@/components/learning/avatar-instructor'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { MessageRole } from '@/types/chat'
+import AITextLoading from '@/components/ui/text-loading'
 
 interface ChatMessageProps {
   role: MessageRole
   content: string
   timestamp?: Date
   isLastMessage?: boolean
+  isStreaming?: boolean
 }
 
-export function ChatMessage({ role, content, timestamp, isLastMessage }: ChatMessageProps) {
+export function ChatMessage({
+  role,
+  content,
+  timestamp,
+  isLastMessage,
+  isStreaming = false,
+}: ChatMessageProps) {
   const isUser = role === 'user'
 
   // Format timestamp consistently for SSR hydration
@@ -50,23 +58,35 @@ export function ChatMessage({ role, content, timestamp, isLastMessage }: ChatMes
   return (
     <div className='flex flex-col gap-2 group'>
       <div className='flex flex-col gap-2'>
-        {isLastMessage && <AvatarInstructor name="Sophia" state="idle" />}
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            p: ({ children }) => <p className="leading-7 mb-1.5 last:mb-0">{children}</p>,
-            strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
-            em: ({ children }) => <em className="italic">{children}</em>,
-            hr: () => <hr className="my-2 border-gray-300" />,
-            ul: ({ children }) => <ul className="list-disc list-inside my-1.5 space-y-0.5">{children}</ul>,
-            ol: ({ children }) => <ol className="list-decimal list-inside my-1.5 space-y-0.5">{children}</ol>,
-            li: ({ children }) => <li className="ml-2">{children}</li>,
-          }}
-        >
-          {content}
-        </ReactMarkdown>
+        {isLastMessage && isStreaming ? (
+          <div className="flex gap-3 items-center">
+            <AvatarInstructor name="Sophia" state="speaking" />
+            <div className="bg-transparent">
+              <AITextLoading texts={['Generando', 'Escrbiendo', 'Profundizando', 'Puliendo']} interval={1000} color='green' />
+            </div>
+          </div>
+        ) : (
+          <AvatarInstructor name="Sophia" state={'idle'} />
+        )
+        }
+        <div className="inline">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              p: ({ children }) => <p className="leading-7 mb-1.5 last:mb-0">{children}</p>,
+              strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+              em: ({ children }) => <em className="italic">{children}</em>,
+              hr: () => <hr className="my-2 border-gray-300" />,
+              ul: ({ children }) => <ul className="list-disc list-inside my-1.5 space-y-0.5">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal list-inside my-1.5 space-y-0.5">{children}</ol>,
+              li: ({ children }) => <li className="ml-2">{children}</li>,
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </div>
       </div>
-      <div className={cn('text-xs text-gray-400 text-left', !isLastMessage && 'scale-0 group-hover:scale-100')}>
+      <div className={cn('text-xs text-gray-500 text-left', !isLastMessage && 'scale-0 group-hover:scale-100')}>
         {formattedTime}
       </div>
     </div>

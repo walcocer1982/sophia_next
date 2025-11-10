@@ -1,7 +1,31 @@
 export interface StreamEvent {
-  type: 'content' | 'done' | 'error'
+  type: 'content' | 'done' | 'error' | 'activity_completed'
   text?: string
   message?: string
+  // Activity completion data
+  activityId?: string
+  activityTitle?: string
+  nextActivityId?: string | null
+  nextActivityTitle?: string | null
+  isLastActivity?: boolean
+  currentPosition?: number
+  completedCount?: number
+  total?: number
+  percentage?: number
+  completedAt?: string
+}
+
+export interface ActivityProgressEvent {
+  activityId: string
+  activityTitle: string
+  nextActivityId: string | null
+  nextActivityTitle: string | null
+  isLastActivity: boolean
+  currentPosition: number
+  completedCount: number
+  total: number
+  percentage: number
+  completedAt?: string
 }
 
 export async function streamChatResponse(
@@ -9,7 +33,8 @@ export async function streamChatResponse(
   message: string,
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (error: Error) => void
+  onError: (error: Error) => void,
+  onActivityCompleted?: (data: ActivityProgressEvent) => void
 ) {
   try {
     const response = await fetch('/api/chat/stream', {
@@ -49,6 +74,21 @@ export async function streamChatResponse(
 
             if (data.type === 'content' && data.text) {
               onChunk(data.text)
+            } else if (data.type === 'activity_completed' && onActivityCompleted) {
+              // Handle activity completion event
+              const progressData: ActivityProgressEvent = {
+                activityId: data.activityId!,
+                activityTitle: data.activityTitle!,
+                nextActivityId: data.nextActivityId!,
+                nextActivityTitle: data.nextActivityTitle!,
+                isLastActivity: data.isLastActivity!,
+                currentPosition: data.currentPosition!,
+                completedCount: data.completedCount!,
+                total: data.total!,
+                percentage: data.percentage!,
+                completedAt: data.completedAt,
+              }
+              onActivityCompleted(progressData)
             } else if (data.type === 'done') {
               onDone()
               return

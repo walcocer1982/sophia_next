@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
+import { hardcodedLesson } from '../data/lesson01'
 
 const prisma = new PrismaClient()
 
@@ -40,11 +41,7 @@ async function main() {
         'Aprende los conceptos básicos de seguridad en aplicaciones web',
       duration_minutes: 45,
     },
-    classes: [
-      {
-        id: 'class_001',
-        title: 'Introducción a Seguridad Web',
-        moments: [
+    moments: [
           {
             id: 'moment_001',
             title: 'Conceptos Fundamentales',
@@ -153,8 +150,6 @@ async function main() {
             ],
           },
         ],
-      },
-    ],
   }
 
   // 3. Crear lección
@@ -166,18 +161,38 @@ async function main() {
       description:
         'Aprende los conceptos básicos de seguridad en aplicaciones web y protege tus sistemas',
       slug: 'seguridad-web-fundamentos',
-      courseTitle: 'Ciberseguridad Práctica',
-      category: 'Ciberseguridad',
-      order: 1,
       estimatedMinutes: 45,
-      difficulty: 'básico',
       contentJson: lessonContent,
       isPublished: true,
     },
   })
 
   console.log('✅ Lección creada:', lesson.title)
-  console.log('🎉 Seed completado!')
+
+  // 4. Crear lección hardcodeada de HTML (con ID fijo para matching con LessonSession)
+  const htmlLesson = await prisma.lesson.upsert({
+    where: { slug: 'html-basico' },
+    update: {
+      id: hardcodedLesson.id, // Actualizar el ID a 'lesson-html-01'
+      title: hardcodedLesson.lesson.title,
+      description: hardcodedLesson.lesson.description,
+      estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
+      contentJson: hardcodedLesson as unknown as Prisma.InputJsonValue,
+      isPublished: true,
+    },
+    create: {
+      id: hardcodedLesson.id, // 'lesson-html-01'
+      title: hardcodedLesson.lesson.title,
+      description: hardcodedLesson.lesson.description,
+      slug: 'html-basico',
+      estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
+      contentJson: hardcodedLesson as unknown as Prisma.InputJsonValue,
+      isPublished: true,
+    },
+  })
+
+  console.log('✅ Lección HTML hardcodeada creada:', htmlLesson.title)
+  console.log('🎉 Seed completado con 2 lecciones!')
 }
 
 main()

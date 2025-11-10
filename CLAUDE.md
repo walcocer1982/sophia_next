@@ -12,9 +12,12 @@
 ### 🔗 Navegación Rápida
 
 - [🏗️ Architecture](#️-architecture) - Stack, estructura, rutas, modelos
+- [📊 FLOWS.md](./FLOWS.md) - Diagramas Mermaid de procesos clave
+- [🔌 API Endpoints](#-api-endpoints-reference) - Documentación completa de endpoints
 - [🚦 MVPs & Technical Debt](#-mvps--technical-debt) - Filosofía de desarrollo incremental
-- [🛠️ Workflow Modes](#️-workflow-modes) - Plan, Edit, Docs Update, Error Handling, Release
+- [🛠️ Workflow Modes](#️-workflow-modes) - Plan, Edit, Docs Update, FLOWS.md Protocol
 - [🔐 Authentication & Auth Flow](#-authentication--auth-flow) - NextAuth v5 + OAuth
+- [🤖 AI Prompts](#-ai-prompts) - AI Prompt Guides
 - [🎨 Styling & UI](#-styling--ui-components) - TailwindCSS + shadcn/ui
 - [🧭 Naming & Commits](#-naming--commit-conventions) - Convenciones de código y commits
 - [🚀 Deployment](#-deployment--environment) - Vercel + Neon setup
@@ -214,6 +217,388 @@ export async function proxy(request: NextRequest) {
 - Índices `@@index` para queries comunes
 
 **Ver schema completo:** `prisma/schema.prisma`
+
+---
+
+## 🔌 API Endpoints Reference
+
+**Total endpoints activos:** 8 (7 producción + 1 dev-only)
+
+### 📊 Quick Reference Table
+
+| Endpoint | Método | Auth | Descripción | Usado por |
+|----------|--------|------|-------------|-----------|
+| `/api/auth/[...nextauth]` | GET/POST | - | NextAuth v5 handlers | SessionProvider |
+| `/api/session/start` | POST | ✅ | Crear/obtener sesión de lección | lesson-card.tsx |
+| `/api/chat/welcome` | POST | ✅ | Mensaje bienvenida (streaming) | chat-interface.tsx |
+| `/api/chat/stream` | POST | ✅ | Chat con IA (streaming + auto-verification) | chat-interface.tsx |
+| `/api/session/[id]/messages` | GET | ✅ | Historial de mensajes | chat-interface.tsx |
+| `/api/activity/progress` | GET | ✅ | Progreso de actividad actual | activity-progress-header.tsx |
+| `/api/activity/complete` | POST | ✅ | Marcar actividad completada (utility) | Fallback |
+| `/api/dev/reset-lesson` | POST | ✅🔒 | Reiniciar sesión (DEV ONLY) | dev-tools-modal.tsx |
+
+**Convenciones:**
+- ✅ = Requiere autenticación
+- 🔒 = Bloqueado en producción
+- Streaming = Server-Sent Events (SSE)
+
+---
+
+### Endpoint Details
+
+#### 1. NextAuth Handlers
+**Ruta:** `/api/auth/[...nextauth]`
+**Archivo:** `app/api/auth/[...nextauth]/route.ts`
+
+- **Métodos:** GET, POST
+- **Response:** JWT tokens y session data (manejo interno NextAuth)
+- **Uso:** Maneja flujo completo de autenticación (Google OAuth + Test User)
+- **Config:** Importa desde `/auth.ts` raíz
+
+---
+
+#### 2. Start Lesson Session
+**Ruta:** `POST /api/session/start`
+**Archivo:** `app/api/session/start/route.ts`
+
+**Request:**
+```json
+{ "lessonId": "string" }
+```
+
+**Response:**
+```json
+{
+  "sessionId": "uuid",
+  "lesson": {
+    "title": "string",
+    "estimatedMinutes": number
+  }
+}
+```
+
+**Lógica:**
+1. Valida usuario existe en DB
+2. Verifica lección está publicada
+3. Busca sesión activa existente (reutiliza si hay)
+4. Crea nueva si no existe
+
+**Errores:** 401 Unauthorized, 403 User not found, 404 Lesson not found
+
+**Usado por:** `components/lessons/lesson-card.tsx:34` - Click en "Comenzar Lección"
+
+---
+
+#### 3. Chat Welcome Message
+**Ruta:** `POST /api/chat/welcome`
+**Archivo:** `app/api/chat/welcome/route.ts`
+
+**Request:**
+```json
+{ "sessionId": "string" }
+```
+
+**Response:** **Streaming text/plain** - Mensaje de bienvenida generado por Claude
+
+**Headers:**
+```
+Content-Type: text/plain; charset=utf-8
+Cache-Control: no-cache
+Connection: keep-alive
+```
+
+**Modelo IA:** `claude-sonnet-4-5-20250929` (max 200 tokens)
+
+**Lógica:**
+1. Valida sesión activa
+2. Obtiene datos de lección
+3. Genera prompt de bienvenida personalizado
+4. Streamea respuesta en tiempo real
+5. Guarda a DB con idempotencia (no duplica)
+
+**Usado por:** `components/learning/chat-interface.tsx:63` - Al cargar `/learn/[id]`
+
+---
+
+#### 4. Chat Streaming (Production)
+**Ruta:** `POST /api/chat/stream`
+**Archivo:** `app/api/chat/stream/route.ts`
+
+**Request:**
+```json
+{
+  "sessionId": "string",
+  "message": "string"
+}
+```
+
+**Response:** **Streaming SSE** con eventos:
+```json
+{ "type": "content", "text": "string" }
+{ "type": "done" }
+{ "type": "error", "message": "string" }
+```
+
+**Headers:**
+```
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+```
+
+**Modelo IA:** `claude-3-5-haiku-20241022` (max 768 tokens)
+
+**Features avanzadas (MVP-2+):**
+- ✅ Rate limiting (10 mensajes/minuto por usuario)
+- ✅ Prompt dinámico (lesson parser + activity context)
+- ✅ Verificación automática de actividad completada
+- ✅ Auto-progresión a siguiente actividad
+- ✅ Hints condicionales según intentos
+- ✅ Tracking granular en ActivityProgress
+
+**Lógica completa:**
+1. Rate limit check (429 si excede)
+2. Validación de sesión
+3. Parse `contentJson` de lección
+4. Determina actividad actual del estudiante
+5. Construye system prompt dinámico con contexto
+6. Streamea respuesta de Claude
+7. Guarda ambos mensajes en DB
+8. Verifica si estudiante completó actividad
+9. Auto-avanza a siguiente actividad si es necesario
+10. Marca lección como completada si es última actividad
+
+**Errores:** 401 Unauthorized, 404 Session not found, 429 Rate limit exceeded, 500 Internal error
+
+**Usado por:** `components/learning/chat-interface.tsx` - Envío de mensajes del usuario
+
+---
+
+#### 5. Get Session Messages
+**Ruta:** `GET /api/session/[id]/messages`
+**Archivo:** `app/api/session/[id]/messages/route.ts`
+
+**Params:** `[id]` - sessionId (dinámico)
+
+**Response:**
+```json
+{
+  "messages": [
+    {
+      "id": "uuid",
+      "sessionId": "uuid",
+      "role": "user|assistant",
+      "content": "string",
+      "timestamp": "ISO-8601",
+      "inputTokens": number,
+      "outputTokens": number
+    }
+  ],
+  "lesson": {
+    "title": "string",
+    "estimatedMinutes": number
+  }
+}
+```
+
+**Lógica:**
+1. Valida sesión pertenece al usuario autenticado
+2. Ordena mensajes por timestamp ascendente (más antiguos primero)
+
+**Usado por:** `components/learning/chat-interface.tsx` - Carga historial al entrar a chat
+
+---
+
+#### 6. Activity Progress
+**Ruta:** `GET /api/activity/progress?sessionId=xxx`
+**Archivo:** `app/api/activity/progress/route.ts`
+
+**Query params:** `sessionId` (requerido)
+
+**Response:**
+```json
+{
+  "sessionId": "uuid",
+  "lessonTitle": "string",
+  "currentActivity": "string",
+  "currentActivityId": "string",
+  "progress": number,
+  "total": number,
+  "percentage": number,
+  "lastCompleted": ActivityProgress|null,
+  "completedAt": "ISO-8601"|null,
+  "passed": boolean|null
+}
+```
+
+**Lógica:**
+1. Valida sesión
+2. Parse `contentJson` de lección
+3. Calcula total de actividades
+4. Cuenta completadas
+5. Obtiene actividad actual
+6. Calcula porcentaje
+7. Retorna con detalles de última completada
+
+**Usado por:** `components/learning/activity-progress-header.tsx` - Barra de progreso en tiempo real
+
+---
+
+#### 7. Complete Activity (Utility)
+**Ruta:** `POST /api/activity/complete`
+**Archivo:** `app/api/activity/complete/route.ts`
+
+**Request:**
+```json
+{
+  "sessionId": "string",
+  "activityId": "string"
+}
+```
+
+**Response:**
+```json
+{
+  "success": boolean,
+  "activityCompleted": "string",
+  "nextActivity": {
+    "id": "string",
+    "title": "string",
+    "type": "string",
+    "isLast": boolean
+  }|null,
+  "progress": {
+    "totalCompleted": number,
+    "totalActivities": number,
+    "percentage": number
+  }
+}
+```
+
+**Lógica:**
+1. Valida sesión activa
+2. Verifica actividad no está ya completada
+3. Parse `contentJson` para obtener siguiente actividad
+4. Crea registro en `ActivityProgress`
+5. Calcula progreso general
+
+**Nota:** Endpoint es **utility/fallback**. MVP-2+ usa verificación automática en `/api/chat/stream`.
+
+---
+
+#### 8. Dev Reset Lesson
+**Ruta:** `POST /api/dev/reset-lesson`
+**Archivo:** `app/api/dev/reset-lesson/route.ts`
+
+**🔒 Solo disponible en `NODE_ENV === 'development'`** (403 en producción)
+
+**Request:**
+```json
+{ "sessionId": "string" }
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Sesión reiniciada correctamente",
+  "redirect": "/lessons"
+}
+```
+
+**Lógica:**
+1. Bloquea si no es development
+2. Valida sesión pertenece al usuario
+3. **Elimina completamente la sesión**
+4. Cascade delete automático: mensajes + actividades
+
+**Usado por:** `components/learning/dev-tools-modal.tsx:36` - Testing y debugging
+
+---
+
+### 🔄 Flujo Típico de Usuario
+
+```
+1. Login
+   ↓
+   /api/auth/[...nextauth]
+   ↓
+2. Ver lecciones (Server Component - sin API)
+   ↓
+3. Click en lección
+   ↓
+   POST /api/session/start → Crea sesión
+   ↓
+4. Entrar a /learn/[sessionId]
+   ↓
+   POST /api/chat/welcome → Streaming bienvenida
+   ↓
+5. Usuario envía mensaje
+   ↓
+   POST /api/chat/stream → Streaming + auto-verification
+   ├─ Streamea respuesta
+   ├─ Guarda mensajes
+   ├─ Verifica completación
+   ├─ Auto-avanza actividad
+   └─ Marca lección completada (si última)
+   ↓
+6. Monitor progreso
+   ↓
+   GET /api/activity/progress → Estado actual
+```
+
+---
+
+### 📋 Checklist para Crear Nuevo Endpoint
+
+**Cuando agregues un nuevo endpoint, sigue estos pasos:**
+
+1. **Crear archivo:** `app/api/[ruta]/route.ts`
+2. **Agregar autenticación:**
+   ```typescript
+   const session = await auth()
+   if (!session?.user?.id) {
+     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+   }
+   ```
+3. **Definir runtime y timeout:**
+   ```typescript
+   export const runtime = 'nodejs'
+   export const maxDuration = 60 // 60s para operaciones largas, 10s por defecto
+   ```
+4. **Documentar en esta sección:**
+   - Agregar fila a Quick Reference Table
+   - Crear subsección con detalles completos
+   - Incluir request/response JSON examples
+   - Especificar lógica y errores posibles
+   - Agregar referencia a componente que lo usa
+5. **Actualizar flujo de usuario** si afecta experiencia principal
+
+**Ejemplo de nueva entrada:**
+
+```markdown
+#### X. Nombre del Endpoint
+**Ruta:** `METHOD /api/ruta`
+**Archivo:** `app/api/ruta/route.ts`
+
+**Request:**
+\```json
+{ "campo": "tipo" }
+\```
+
+**Response:**
+\```json
+{ "resultado": "tipo" }
+\```
+
+**Lógica:**
+1. Paso 1
+2. Paso 2
+
+**Errores:** 401, 404, etc.
+
+**Usado por:** `component.tsx:linea` - Descripción
+```
 
 ---
 
@@ -574,6 +959,66 @@ Claude: [Comienza implementación]
 
 ---
 
+### 📊 FLOWS.md Protocol
+
+**Archivo:** `/FLOWS.md` contiene diagramas Mermaid de procesos clave del sistema.
+
+**Cuándo Actualizar FLOWS.md:**
+
+**OBLIGATORIO actualizar cuando:**
+- ✅ Cambios en flujo de navegación de actividades
+- ✅ Modificaciones en proceso de verificación
+- ✅ Cambios en inicialización de sesiones
+- ✅ Alteraciones en estructura de datos (schema de Lesson o contentJson)
+- ✅ Nuevos procesos core agregados al sistema
+- ✅ Cambios en APIs que afecten flujos existentes
+
+**NO es necesario actualizar por:**
+- ❌ Cambios solo en UI/styling
+- ❌ Refactors que no cambian lógica de flujo
+- ❌ Agregado de logs o comentarios
+- ❌ Fixes de bugs menores sin cambio de flujo
+- ❌ Optimizaciones de performance que no cambien secuencia
+
+**Cómo Actualizar FLOWS.md:**
+
+1. **Identificar proceso afectado** (ej: Activity Progression Flow)
+2. **Actualizar diagrama Mermaid** con los cambios específicos
+3. **Agregar entrada al Changelog** del flujo con fecha y descripción
+4. **Commitear junto con código** en el mismo commit
+
+**Formato de Changelog por Flujo:**
+
+Cada diagrama en FLOWS.md debe tener un changelog al final:
+
+```markdown
+**Changelog:**
+- 2025-11-07: Fixed bug - usar getNextActivity en lugar de getCurrentActivity
+- 2025-11-05: Initial version
+```
+
+**5 Flujos Actuales en FLOWS.md:**
+1. **Lesson Structure** - Jerarquía de datos (Lesson → Classes → Moments → Activities)
+2. **Session Initialization** - Inicio de lección y welcome message
+3. **Activity Progression Flow** - Navegación entre actividades y verificación
+4. **Message Flow** - Chat + streaming + guardado
+5. **Progress Tracking** - Polling y actualización de UI
+
+**Responsabilidades:**
+- **Claude:** Detectar cuando un cambio afecta un flujo y proponer actualización
+- **Developer:** Revisar diagrama actualizado y aprobar antes de commit
+- **Ambos:** Mantener FLOWS.md sincronizado con implementación real
+
+**Ejemplo de actualización:**
+```
+Cambio: Fix bug en activity progression (getCurrentActivity → getNextActivity)
+Flujo afectado: #3 Activity Progression Flow
+Acción: Actualizar nodo "GetNext" en el diagrama + agregar a changelog
+Commit: "fix: corregir navegación de actividades + actualizar FLOWS.md"
+```
+
+---
+
 ### 🚨 Error Handling Protocol
 
 **Cuando encuentres errores:**
@@ -897,6 +1342,17 @@ openssl rand -base64 32
 | `ClientFetchError` | Google credentials incorrectos |
 | `redirect_uri_mismatch` | URL callback mal configurada en Google Cloud Console |
 | Test User funciona en prod | Falta validación `process.env.NODE_ENV !== 'development'` |
+
+
+---
+
+## 🤖 AI Prompts
+
+**Reglas para escribir prompts**
+
+- Siempre debes escribir prompts agnósticos de tema/clase/especialidad.
+- NUNCA escribir en Prompt algo como "volvamos al tema de HTML"
+- SI deben ser dinámicos con información de la lesson en curso.
 
 ---
 

@@ -41,12 +41,6 @@ export interface Moment {
   activities: Activity[]
 }
 
-export interface Class {
-  id: string
-  title: string
-  moments: Moment[]
-}
-
 export interface LessonMetadata {
   title: string
   description: string
@@ -54,8 +48,9 @@ export interface LessonMetadata {
 }
 
 export interface LessonContent {
+  id?: string // Optional para compatibilidad con DB y hardcoded
   lesson: LessonMetadata
-  classes: Class[]
+  moments: Moment[]
 }
 
 /**
@@ -63,7 +58,6 @@ export interface LessonContent {
  */
 export interface CurrentActivityContext {
   activity: Activity
-  classIdx: number
   momentIdx: number
   activityIdx: number
   totalActivities: number

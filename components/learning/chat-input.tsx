@@ -1,6 +1,14 @@
 'use client'
 
-import { useState, useRef, KeyboardEvent, ChangeEvent, ClipboardEvent } from 'react'
+import {
+  useState,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+  KeyboardEvent,
+  ChangeEvent,
+  ClipboardEvent
+} from 'react'
 import { ArrowUp } from 'lucide-react'
 
 interface ChatInputProps {
@@ -8,11 +16,25 @@ interface ChatInputProps {
   disabled?: boolean
   placeholder?: string
   isGeneratingWelcome?: boolean
+  isThinking?: boolean
+  isStreaming?: boolean
 }
 
-export function ChatInput({ onSend, disabled, placeholder, isGeneratingWelcome }: ChatInputProps) {
+export interface ChatInputRef {
+  focus: () => void
+}
+
+export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
+  ({ onSend, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming }, ref) => {
   const [message, setMessage] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Expose focus method via ref
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      textareaRef.current?.focus()
+    }
+  }), [])
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
@@ -56,13 +78,17 @@ export function ChatInput({ onSend, disabled, placeholder, isGeneratingWelcome }
     console.log('[SECURITY] Intento de pegar bloqueado - usa tus propias palabras')
   }
 
-  // Determinar placeholder según estado
+  // Determinar placeholder según estado con mejor feedback
   const effectivePlaceholder = isGeneratingWelcome
     ? 'Esperando mensaje de bienvenida...'
-    : placeholder || 'Escribe aquí...'
+    : isThinking
+    ? 'Sophia está pensando...'
+    : isStreaming
+    ? 'Sophia está escribiendo...'
+    : placeholder || 'Escribe tu mensaje...'
 
   return (
-    <div className="bg-slate-100 p-4">
+    <div className="bg-slate-300 p-4">
       <div className="max-w-4xl mx-auto">
         <div className="relative">
           <textarea
@@ -72,9 +98,9 @@ export function ChatInput({ onSend, disabled, placeholder, isGeneratingWelcome }
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={effectivePlaceholder}
-            className="w-full px-4 py-4 font-sans pr-16 border bg-white border-slate-300 rounded-3xl focus:outline-none focus:ring-2 focus:ring-slate-700 focus:border-transparent resize-none text-base transition-all"
+            className="w-full px-4 py-4 font-sans pr-16 border bg-white border-slate-300 rounded-3xl focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent resize-none text-base transition-all"
             style={{
-              minHeight: '60px',
+              minHeight: '80px',
               maxHeight: '120px',
               overflowY: 'auto',
               scrollbarWidth: 'thin'
@@ -102,11 +128,11 @@ export function ChatInput({ onSend, disabled, placeholder, isGeneratingWelcome }
 
         <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
           <span>
-            <kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-300 font-mono text-[10px]">
+            <kbd className="px-1.5 py-0.5 bg-slate-200 rounded border border-slate-400 font-mono text-[10px]">
               Shift + Enter
             </kbd>{' '}
             saltar línea •{' '}
-            <kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-300 font-mono text-[10px]">
+            <kbd className="px-1.5 py-0.5 bg-slate-200 rounded border border-slate-400 font-mono text-[10px]">
               Enter
             </kbd>{' '}
             para enviar
@@ -115,4 +141,6 @@ export function ChatInput({ onSend, disabled, placeholder, isGeneratingWelcome }
       </div>
     </div>
   )
-}
+})
+
+ChatInput.displayName = 'ChatInput'

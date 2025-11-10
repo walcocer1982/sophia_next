@@ -2,6 +2,10 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '@/lib/logger'
+import { getLessonContent } from '@/lib/lesson-loader'
+import { getFirstActivity } from '@/lib/lesson-parser'
+import { buildSystemPrompt } from '@/lib/prompt-builder'
+import type { LessonContent } from '@/types/lesson'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -35,6 +39,7 @@ export async function POST(request: Request) {
       include: {
         lesson: {
           select: {
+            id: true, // Necesario para getLessonContent
             title: true,
             description: true,
           },
@@ -46,21 +51,51 @@ export async function POST(request: Request) {
       return new Response('Session not found', { status: 404 })
     }
 
-    const welcomePrompt = `Eres un instructor especializado en ${lessonSession.lesson.title}.
+    // Obtener contenido de la lección (desde archivo hardcodeado o DB)
+    const contentJson = await getLessonContent(lessonSession.lesson.id) as LessonContent
 
-Genera un mensaje de bienvenida breve y motivador para el estudiante. El mensaje debe:
-- Ser breve (2-3 oraciones)
-- Mencionar el título de la lección
-- Invitar al estudiante a hacer preguntas
-- Ser amigable y profesional
+    if (!contentJson) {
+      return new Response('Lesson content not found', { status: 404 })
+    }
 
-Responde solo con el mensaje de bienvenida, sin introducción adicional.`
+    // Obtener primera actividad con contexto completo
+    const firstActivityContext = getFirstActivity(contentJson)
 
-    // Stream response from Claude
+    if (!firstActivityContext) {
+      return new Response('No activities found in lesson', { status: 500 })
+    }
+
+    // Usar el sistema de prompts completo para contexto pedagógico
+    const systemPrompt = buildSystemPrompt({
+      activityContext: firstActivityContext,
+      recentMessages: [], // No hay mensajes previos en welcome
+      tangentCount: 0,
+    })
+
+    // Instrucción especial para mensaje de bienvenida proactivo
+    const welcomeInstruction = `ESTE ES EL PRIMER MENSAJE DE LA LECCIÓN.
+
+Tu objetivo ahora es dar una bienvenida cálida y COMENZAR A ENSEÑAR INMEDIATAMENTE.
+
+Estructura tu mensaje así:
+1. Saludo amigable y presentación del tema principal (${firstActivityContext.activity.teaching.main_topic})
+2. Pregunta de engagement: "¿Tienes alguna experiencia previa con ${firstActivityContext.activity.teaching.main_topic.toLowerCase().replace('¿', '').replace('?', '')}?"
+3. Comienza a introducir los conceptos clave de forma conversacional
+
+Importante:
+- SÉ PROACTIVO, no esperes a que el estudiante pregunte
+- Usa un tono conversacional y cercano
+- Menciona 1-2 puntos clave del tema para despertar interés
+- Invita a responder la pregunta de engagement
+
+Genera el mensaje de bienvenida ahora.`
+
+    // Stream response from Claude con contexto pedagógico completo
     const stream = await anthropic.messages.stream({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 200,
-      messages: [{ role: 'user', content: welcomePrompt }],
+      max_tokens: 512,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: welcomeInstruction }],
     })
 
     let fullContent = ''
