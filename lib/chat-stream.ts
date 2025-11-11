@@ -1,5 +1,5 @@
 export interface StreamEvent {
-  type: 'content' | 'done' | 'error' | 'activity_completed'
+  type: 'content' | 'done' | 'error' | 'activity_completed' | 'prompt_debug'
   text?: string
   message?: string
   // Activity completion data
@@ -13,6 +13,35 @@ export interface StreamEvent {
   total?: number
   percentage?: number
   completedAt?: string
+  // Debug prompt data (development only)
+  verificationPrompt?: {
+    prompt: string
+    result: {
+      completed: boolean
+      criteriaMatched: string[]
+      criteriaMissing: string[]
+      feedback: string
+      confidence: 'high' | 'medium' | 'low'
+    }
+    model: string
+    maxTokens: number
+  }
+  systemPrompt?: string
+  metadata?: {
+    activityId: string
+    activityTitle: string
+    activityType: string
+    attempts: number
+    tangentCount: number
+    maxTangents: number
+    verification: {
+      completed: boolean
+      confidence: string
+      criteriaMatched: number
+      totalCriteria: number
+    }
+    completedActivitiesCount: number
+  }
 }
 
 export interface ActivityProgressEvent {
@@ -34,7 +63,12 @@ export async function streamChatResponse(
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (error: Error) => void,
-  onActivityCompleted?: (data: ActivityProgressEvent) => void
+  onActivityCompleted?: (data: ActivityProgressEvent) => void,
+  onPromptDebug?: (
+    systemPrompt: string,
+    metadata: StreamEvent['metadata'],
+    verificationPrompt?: StreamEvent['verificationPrompt']
+  ) => void
 ) {
   try {
     const response = await fetch('/api/chat/stream', {
@@ -89,6 +123,11 @@ export async function streamChatResponse(
                 completedAt: data.completedAt,
               }
               onActivityCompleted(progressData)
+            } else if (data.type === 'prompt_debug' && onPromptDebug) {
+              // Handle prompt debug event (development only)
+              if (data.systemPrompt && data.metadata) {
+                onPromptDebug(data.systemPrompt, data.metadata, data.verificationPrompt)
+              }
             } else if (data.type === 'done') {
               onDone()
               return

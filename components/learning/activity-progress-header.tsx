@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { AI_CONFIG } from '@/lib/ai-config'
 
 interface ActivityProgressData {
   sessionId: string
@@ -63,8 +64,8 @@ export function ActivityProgressHeader({
     // Initial fetch
     fetchProgress()
 
-    // Poll every 5 seconds
-    const interval = setInterval(fetchProgress, 5000)
+    // Poll periodically (configured in AI_CONFIG)
+    const interval = setInterval(fetchProgress, AI_CONFIG.polling.progressIntervalMs)
 
     return () => {
       isMounted = false

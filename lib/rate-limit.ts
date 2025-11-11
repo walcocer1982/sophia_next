@@ -1,3 +1,5 @@
+import { AI_CONFIG } from '@/lib/ai-config'
+
 /**
  * Simple in-memory rate limiter
  * TODO: Usar Redis (Upstash) en producción para rate limiting distribuido
@@ -13,14 +15,14 @@ const limiter = new Map<string, RateLimitEntry>()
 /**
  * Check rate limit for a user
  * @param userId - User ID to check
- * @param limit - Maximum requests allowed (default: 10)
- * @param windowSeconds - Time window in seconds (default: 60)
+ * @param limit - Maximum requests allowed (default from AI_CONFIG)
+ * @param windowSeconds - Time window in seconds (default from AI_CONFIG)
  * @returns {allowed: boolean, remaining: number, resetAt: number}
  */
 export function checkRateLimit(
   userId: string,
-  limit: number = 10,
-  windowSeconds: number = 60
+  limit: number = AI_CONFIG.rateLimit.messagesPerMinute,
+  windowSeconds: number = AI_CONFIG.rateLimit.windowSeconds
 ): {
   allowed: boolean
   remaining: number
@@ -80,7 +82,7 @@ export function cleanupExpiredEntries(): void {
   }
 }
 
-// Limpiar entries cada 5 minutos
+// Limpiar entries periódicamente (configurado en AI_CONFIG)
 if (typeof setInterval !== 'undefined') {
-  setInterval(cleanupExpiredEntries, 5 * 60 * 1000)
+  setInterval(cleanupExpiredEntries, AI_CONFIG.rateLimit.cleanupIntervalMs)
 }

@@ -602,6 +602,154 @@ Connection: keep-alive
 
 ---
 
+## 🤖 AI Config Protocol
+
+### Archivo Central: `lib/ai-config.ts`
+
+**REGLA OBLIGATORIA:** Todas las configuraciones relacionadas con AI/LLM DEBEN estar definidas en `lib/ai-config.ts`. NO hardcodear valores en otros archivos.
+
+Este archivo centraliza:
+- Modelos de Anthropic (chat, verification, welcome)
+- Límites de tokens (max_tokens por contexto)
+- Configuración de rate limiting
+- Tamaño de historial conversacional
+- Sistema de hints progresivos
+- Timeouts y polling intervals
+
+**Beneficios:**
+- ✅ Single source of truth
+- ✅ Fácil ajuste de costos (cambiar tokens/modelo en 1 lugar)
+- ✅ Testing más simple (mockear config completa)
+- ✅ Documentación viva (comentarios explican arquitectura)
+- ✅ Onboarding rápido (entender sistema leyendo 1 archivo)
+
+---
+
+### Workflow para Modificar Configuraciones
+
+**Cuándo actualizar `ai-config.ts`:**
+
+1. ✅ **Cambiar modelo de IA** (ej: Sonnet → Haiku para reducir costos)
+2. ✅ **Ajustar límites de tokens** (balancear calidad vs costo)
+3. ✅ **Modificar rate limiting** (mensajes/minuto, ventana de tiempo)
+4. ✅ **Cambiar tamaño de historial** (contexto conversacional)
+5. ✅ **Ajustar sistema de hints** (intentos antes de mostrar)
+6. ✅ **Modificar polling intervals** (frecuencia de actualización UI)
+
+**Proceso:**
+
+1. **Abrir** `lib/ai-config.ts`
+2. **Modificar** el valor deseado en `AI_CONFIG`
+3. **Leer comentarios** para entender impacto del cambio
+4. **Verificar** que el cambio se propague (todos los archivos usan AI_CONFIG)
+5. **Probar** en development antes de deploy
+
+**Ejemplo común - Reducir costos cambiando modelo de verificación:**
+
+```typescript
+// lib/ai-config.ts
+export const AI_CONFIG = {
+  models: {
+    chat: 'claude-sonnet-4-5-20250929', // Mantener calidad para chat
+    verification: 'claude-haiku-3-5-20250229', // ✅ Downgrade a Haiku (más barato)
+    welcome: 'claude-sonnet-4-5-20250929',
+  },
+  // ...
+}
+```
+
+Cambio de 1 línea → Afecta automáticamente:
+- `lib/activity-verification.ts` (usa AI_CONFIG.models.verification)
+- Debug viewer en development (muestra modelo correcto)
+
+---
+
+### Agregar Nuevos Endpoints con AI
+
+**Cuando crees un nuevo endpoint que usa AI:**
+
+1. ✅ **Importar** `AI_CONFIG` en tu archivo:
+   ```typescript
+   import { AI_CONFIG } from '@/lib/ai-config'
+   ```
+
+2. ✅ **Usar valores** de config (NO hardcodear):
+   ```typescript
+   // ❌ MAL
+   const response = await anthropic.messages.create({
+     model: 'claude-sonnet-4-5-20250929', // Hardcoded
+     max_tokens: 1024, // Hardcoded
+   })
+
+   // ✅ BIEN
+   const response = await anthropic.messages.create({
+     model: AI_CONFIG.models.chat,
+     max_tokens: AI_CONFIG.tokens.chat,
+   })
+   ```
+
+3. ✅ **Agregar nuevas configs** si necesario:
+   - Si tu endpoint necesita un valor nuevo (ej: timeout especial)
+   - Agrégalo a `AI_CONFIG` con comentarios explicativos
+   - Actualizar esta sección de CLAUDE.md
+
+4. ✅ **Documentar en CLAUDE.md**:
+   - Agregar endpoint a tabla de Quick Reference
+   - Explicar qué configuraciones usa
+
+---
+
+### Arquitectura de Memoria del Sistema
+
+**IMPORTANTE:** Entender cómo funciona la memoria es crítico para optimizar prompts.
+
+```
+┌─────────────────────────────────────────────────┐
+│  VERIFICATION PROMPT (ejecutado PRIMERO)        │
+│  - Evalúa si estudiante completó criterios     │
+│  - SIN historial (optimización tokens)         │
+│  - Output: JSON con completed/feedback         │
+└─────────────────────────────────────────────────┘
+                      ↓
+┌─────────────────────────────────────────────────┐
+│  SYSTEM PROMPT (ejecutado DESPUÉS)              │
+│  - Usa resultado de verificación               │
+│  - SIN historial (instrucciones estáticas)     │
+│  - Contexto pedagógico de actividad            │
+└─────────────────────────────────────────────────┘
+                      ↓
+┌─────────────────────────────────────────────────┐
+│  MESSAGES ARRAY (memoria real del sistema)      │
+│  - Claude recibe últimos N mensajes            │
+│  - Configurado: AI_CONFIG.history.chatContext  │
+│  - Mantiene coherencia conversacional          │
+└─────────────────────────────────────────────────┘
+```
+
+**Key insight:** Los prompts NO tienen historial, pero Claude SÍ lo tiene vía `messages` array. Esto permite:
+- ✅ Optimizar tokens en prompts (menos input tokens)
+- ✅ Mantener coherencia conversacional (Claude tiene contexto completo)
+- ✅ Separación clara de responsabilidades (evaluación vs instrucción vs memoria)
+
+Ver comentarios en `lib/ai-config.ts` para detalles completos.
+
+---
+
+### Changelog de Configuraciones
+
+**2025-01-11: Centralización + Optimización de Verificación**
+- Creación de `lib/ai-config.ts` con todas las configs
+- Eliminación de historial en verification prompt (ahorro ~200-500 tokens)
+- 21 configuraciones centralizadas desde 8 archivos diferentes
+- Arquitectura de memoria documentada
+
+**Próximas optimizaciones consideradas:**
+- Downgrade de verification model a Haiku (menor costo, similar precisión)
+- Ajuste de historial según análisis de uso real
+- A/B testing de max_tokens para balance calidad/costo
+
+---
+
 ## 🚦 MVPs & Technical Debt
 
 ### Principio: Deploy Early, Deploy Often
@@ -1353,6 +1501,7 @@ openssl rand -base64 32
 - Siempre debes escribir prompts agnósticos de tema/clase/especialidad.
 - NUNCA escribir en Prompt algo como "volvamos al tema de HTML"
 - SI deben ser dinámicos con información de la lesson en curso.
+- Los prompts NUNCA deben tener Emojis.
 
 ---
 

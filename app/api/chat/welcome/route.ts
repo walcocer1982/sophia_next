@@ -1,6 +1,7 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import Anthropic from '@anthropic-ai/sdk'
+import { AI_CONFIG } from '@/lib/ai-config'
 import { logger } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { getFirstActivity } from '@/lib/lesson-parser'
@@ -68,7 +69,6 @@ export async function POST(request: Request) {
     // Usar el sistema de prompts completo para contexto pedagógico
     const systemPrompt = buildSystemPrompt({
       activityContext: firstActivityContext,
-      recentMessages: [], // No hay mensajes previos en welcome
       tangentCount: 0,
     })
 
@@ -92,8 +92,8 @@ Genera el mensaje de bienvenida ahora.`
 
     // Stream response from Claude con contexto pedagógico completo
     const stream = await anthropic.messages.stream({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 512,
+      model: AI_CONFIG.models.welcome,
+      max_tokens: AI_CONFIG.tokens.welcome,
       system: systemPrompt,
       messages: [{ role: 'user', content: welcomeInstruction }],
     })
