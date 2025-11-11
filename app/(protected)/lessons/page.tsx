@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { LessonCard } from '@/components/lessons/lesson-card'
 import { hardcodedLesson } from '@/data/lesson01'
+import { hardcodedLesson as hardcodedLesson2 } from '@/data/lesson02'
 import { InteractiveGridPattern } from '@/components/ui/interactive-grid-pattern'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +29,13 @@ export default async function LessonsPage() {
         description: hardcodedLesson.lesson.description,
         slug: 'html-basico', // Slug estático para la lección hardcodeada
         estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
+      },
+      {
+        id: hardcodedLesson2.id,
+        title: hardcodedLesson2.lesson.title,
+        description: hardcodedLesson2.lesson.description,
+        slug: 'prompt-basico', // Slug estático para la lección hardcodeada
+        estimatedMinutes: hardcodedLesson2.lesson.duration_minutes,
       },
     ]
   } else {

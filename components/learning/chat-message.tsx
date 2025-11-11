@@ -40,8 +40,8 @@ export function ChatMessage({
           </div>
 
           <div className='flex flex-col gap-1 max-w-[70%] group'>
-            <div className='px-4 py-3 rounded-2xl border border-slate-500 text-slate-800 bg-white rounded-br-none'>
-              <p className="whitespace-pre-wrap">{content}</p>
+            <div className='px-4 py-3 rounded-2xl border border-slate-400/80 text-slate-800 bg-white rounded-br-none'>
+              <p className="whitespace-pre-wrap font-medium font-sans">{content}</p>
             </div>
           </div>
         </div>
@@ -58,7 +58,7 @@ export function ChatMessage({
   return (
     <div className='flex flex-col gap-2 group'>
       <div className='flex flex-col gap-2'>
-        {isLastMessage && isStreaming ? (
+        {isLastMessage && (isStreaming ? (
           <div className="flex gap-3 items-center">
             <AvatarInstructor name="Sophia" state="speaking" />
             <div className="bg-transparent">
@@ -67,9 +67,9 @@ export function ChatMessage({
           </div>
         ) : (
           <AvatarInstructor name="Sophia" state={'idle'} />
-        )
+        ))
         }
-        <div className="inline">
+        <div className="inline font-sans">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -80,6 +80,26 @@ export function ChatMessage({
               ul: ({ children }) => <ul className="list-disc list-inside my-1.5 space-y-0.5">{children}</ul>,
               ol: ({ children }) => <ol className="list-decimal list-inside my-1.5 space-y-0.5">{children}</ol>,
               li: ({ children }) => <li className="ml-2">{children}</li>,
+              table: ({ children }) => (
+                <div className="my-4 overflow-x-auto">
+                  <table className="min-w-full border-collapse border border-gray-300">
+                    {children}
+                  </table>
+                </div>
+              ),
+              thead: ({ children }) => <thead className="bg-gray-100">{children}</thead>,
+              tbody: ({ children }) => <tbody>{children}</tbody>,
+              tr: ({ children }) => <tr className="border-b border-gray-300">{children}</tr>,
+              th: ({ children }) => (
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border-r border-gray-300 last:border-r-0">
+                  {children}
+                </th>
+              ),
+              td: ({ children }) => (
+                <td className="px-4 py-2 text-gray-800 border-r border-gray-300 last:border-r-0">
+                  {children}
+                </td>
+              ),
             }}
           >
             {content}

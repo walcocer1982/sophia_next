@@ -395,7 +395,7 @@ export function ChatInterface({
       </div>
 
       {/* Debug Prompt Viewer - Solo en desarrollo */}
-      {isDevelopment && debugPrompt && (
+      {/* {isDevelopment && debugPrompt && (
         <div className="shrink-0 border-t bg-gray-50">
           <details className="px-6 py-4" open>
             <summary className="cursor-pointer font-bold text-base text-gray-900 hover:text-gray-700 mb-4">
@@ -403,7 +403,6 @@ export function ChatInterface({
             </summary>
 
             <div className="space-y-6">
-              {/* 1. Verification Prompt */}
               {debugPrompt.verificationPrompt && (
                 <div className="border-b pb-6">
                   <div className="flex items-center gap-2 mb-3">
@@ -415,13 +414,11 @@ export function ChatInterface({
                     </span>
                   </div>
 
-                  {/* Model info */}
                   <div className="bg-white p-2 rounded border border-gray-200 mb-3 text-xs font-mono flex gap-4 text-gray-600">
                     <span>Modelo: {debugPrompt.verificationPrompt.model}</span>
                     <span>Max Tokens: {debugPrompt.verificationPrompt.maxTokens}</span>
                   </div>
 
-                  {/* Verification Result */}
                   <div className={`p-3 rounded mb-3 ${
                     debugPrompt.verificationPrompt.result.completed
                       ? 'bg-green-50 border border-green-300'
@@ -472,7 +469,6 @@ export function ChatInterface({
                     </div>
                   </div>
 
-                  {/* Verification Prompt */}
                   <details className="bg-gray-900 rounded overflow-hidden">
                     <summary className="cursor-pointer px-4 py-2 text-xs font-semibold text-gray-300 hover:bg-gray-800">
                       Ver Verification Prompt Completo
@@ -484,7 +480,6 @@ export function ChatInterface({
                 </div>
               )}
 
-              {/* 2. System Prompt */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="bg-purple-600 text-white px-3 py-1 rounded-md text-sm font-semibold">
@@ -495,7 +490,6 @@ export function ChatInterface({
                   </span>
                 </div>
 
-                {/* Metadata */}
                 <details className="bg-white p-3 rounded border border-gray-200 mb-3">
                   <summary className="cursor-pointer text-xs font-semibold text-gray-700 hover:text-gray-900">
                     Metadata de Actividad
@@ -505,7 +499,6 @@ export function ChatInterface({
                   </pre>
                 </details>
 
-                {/* System Prompt */}
                 <div className="bg-gray-900 text-gray-100 p-4 rounded">
                   <pre className="whitespace-pre-wrap text-xs font-mono max-h-96 overflow-y-auto">
                     {debugPrompt.systemPrompt}
@@ -516,6 +509,7 @@ export function ChatInterface({
           </details>
         </div>
       )}
+       */}
 
       {/* Input - altura fija, siempre visible */}
       <div className="shrink-0">

@@ -72,21 +72,37 @@ export async function POST(request: Request) {
       tangentCount: 0,
     })
 
+    // Construir tabla de objetivos desde TODAS las actividades de la lección
+    const objectives = contentJson.moments.flatMap(moment =>
+      moment.activities.map(act => act.teaching.main_topic)
+    )
+
+    const objectivesTable = [
+      '| # | Objetivo |',
+      '|---|---|',
+      ...objectives.map((obj, idx) => `| ${idx + 1} | ${obj} |`)
+    ].join('\n')
+
     // Instrucción especial para mensaje de bienvenida proactivo
     const welcomeInstruction = `ESTE ES EL PRIMER MENSAJE DE LA LECCIÓN.
 
 Tu objetivo ahora es dar una bienvenida cálida y COMENZAR A ENSEÑAR INMEDIATAMENTE.
 
-Estructura tu mensaje así:
-1. Saludo amigable y presentación del tema principal (${firstActivityContext.activity.teaching.main_topic})
-2. Pregunta de engagement: "¿Tienes alguna experiencia previa con ${firstActivityContext.activity.teaching.main_topic.toLowerCase().replace('¿', '').replace('?', '')}?"
-3. Comienza a introducir los conceptos clave de forma conversacional
+Estructura tu mensaje OBLIGATORIAMENTE así:
+
+1. Saludo amigable y enlace directo a los objetivos de la la clase.
+
+2. TABLA DE OBJETIVOS DE LA CLASE (copiar exactamente como está):
+${objectivesTable}
+
+3. Explicar porqué es importante iniciar esta clase con ${firstActivityContext.activity.teaching.key_points[0]}
+
+4. Pregunta de engagement incial. DEBE SER CONCISA Y DIRECTA.
 
 Importante:
+- La tabla debe aparecer SIEMPRE.
+- Tono conversacional y cercano
 - SÉ PROACTIVO, no esperes a que el estudiante pregunte
-- Usa un tono conversacional y cercano
-- Menciona 1-2 puntos clave del tema para despertar interés
-- Invita a responder la pregunta de engagement
 
 Genera el mensaje de bienvenida ahora.`
 

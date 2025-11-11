@@ -13,7 +13,7 @@ import type { LessonContent } from '@/types/lesson'
  * Carga el contenido de una lección desde archivo hardcodeado o DB
  *
  * En desarrollo con ALLOW_HARDCODE_LESSON=1:
- * - Intenta cargar desde @/data/lesson01.ts
+ * - Intenta cargar desde @/data/lesson02.ts (Prompt Engineering - Básico)
  * - Si falla, cae a DB como fallback
  *
  * En producción o sin el flag:
@@ -29,13 +29,14 @@ export async function getLessonContent(
   if (devFeatures.allowHardcodedLesson) {
     try {
       // Importación dinámica del archivo de lección hardcodeada
-      const lessonModule = await import('@/data/lesson01')
+      // 🧪 TESTING: Usando lesson02 (Prompt Engineering - 5 actividades)
+      const lessonModule = await import('@/data/lesson02')
       const hardcodedLesson = lessonModule.hardcodedLesson || lessonModule.default
 
       logger.info('lesson.loader.hardcoded', {
-        source: 'data/lesson01.ts',
+        source: 'data/lesson02.ts',
         lessonId, // Log el ID solicitado para debugging
-        message: '📚 Using hardcoded lesson from data/lesson01.ts'
+        message: '📚 Using hardcoded lesson from data/lesson02.ts (Prompt Engineering)'
       })
 
       return hardcodedLesson as LessonContent
