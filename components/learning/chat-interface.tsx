@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { AI_CONFIG } from '@/lib/ai-config'
 import { ChatMessages } from './chat-messages'
 import { ChatInput, type ChatInputRef } from './chat-input'
 import { DevToolsModal } from './dev-tools-modal'
@@ -42,6 +43,37 @@ export function ChatInterface({
     lastCompletedId: null as string | null,
     lastCompletedAt: null as string | null,
   })
+  const [debugPrompt, setDebugPrompt] = useState<{
+    systemPrompt: string
+    verificationPrompt?: {
+      prompt: string
+      result: {
+        completed: boolean
+        criteriaMatched: string[]
+        criteriaMissing: string[]
+        feedback: string
+        confidence: 'high' | 'medium' | 'low'
+      }
+      model: string
+      maxTokens: number
+    }
+    metadata: {
+      activityId: string
+      activityTitle: string
+      activityType: string
+      attempts: number
+      tangentCount: number
+      maxTangents: number
+      verification: {
+        completed: boolean
+        confidence: string
+        criteriaMatched: number
+        totalCriteria: number
+      }
+      completedActivitiesCount: number
+    }
+    messageId: string
+  } | null>(null)
   const streamingContentRef = useRef<string>('')
   const assistantIdRef = useRef<string>('')
   const hasGeneratedWelcome = useRef(false)
@@ -195,7 +227,7 @@ export function ChatInterface({
     }
 
     fetchProgress() // Initial fetch
-    const interval = setInterval(fetchProgress, 5000) // Poll cada 5s
+    const interval = setInterval(fetchProgress, AI_CONFIG.polling.progressIntervalMs)
 
     return () => clearInterval(interval)
   }, [sessionId, activityProgress.lastCompletedId, lessonTitle])
@@ -307,6 +339,17 @@ export function ChatInterface({
               description: 'Avanzando a la siguiente...',
             })
           }
+        },
+        // onPromptDebug: Guardar prompts para debug (solo desarrollo)
+        (systemPrompt, metadata, verificationPrompt) => {
+          if (isDevelopment && metadata) {
+            setDebugPrompt({
+              systemPrompt,
+              verificationPrompt,
+              metadata,
+              messageId: assistantId,
+            })
+          }
         }
       )
     } catch (error) {
@@ -350,6 +393,123 @@ export function ChatInterface({
       <div className="flex-1 overflow-hidden">
         <ChatMessages messages={messages} isLoading={isLoading || isGeneratingWelcome} />
       </div>
+
+      {/* Debug Prompt Viewer - Solo en desarrollo */}
+      {/* {isDevelopment && debugPrompt && (
+        <div className="shrink-0 border-t bg-gray-50">
+          <details className="px-6 py-4" open>
+            <summary className="cursor-pointer font-bold text-base text-gray-900 hover:text-gray-700 mb-4">
+              🔍 Debug: Prompts del Sistema
+            </summary>
+
+            <div className="space-y-6">
+              {debugPrompt.verificationPrompt && (
+                <div className="border-b pb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm font-semibold">
+                      1. Verification Prompt
+                    </span>
+                    <span className="text-xs text-gray-600">
+                      (ejecutado PRIMERO para evaluar)
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2 rounded border border-gray-200 mb-3 text-xs font-mono flex gap-4 text-gray-600">
+                    <span>Modelo: {debugPrompt.verificationPrompt.model}</span>
+                    <span>Max Tokens: {debugPrompt.verificationPrompt.maxTokens}</span>
+                  </div>
+
+                  <div className={`p-3 rounded mb-3 ${
+                    debugPrompt.verificationPrompt.result.completed
+                      ? 'bg-green-50 border border-green-300'
+                      : 'bg-yellow-50 border border-yellow-300'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`font-bold text-sm ${
+                        debugPrompt.verificationPrompt.result.completed
+                          ? 'text-green-800'
+                          : 'text-yellow-800'
+                      }`}>
+                        {debugPrompt.verificationPrompt.result.completed ? '✅ COMPLETADA' : '⏳ EN PROGRESO'}
+                      </span>
+                      <span className="text-xs text-gray-600">
+                        Confianza: {debugPrompt.verificationPrompt.result.confidence}
+                      </span>
+                    </div>
+
+                    {debugPrompt.verificationPrompt.result.criteriaMatched.length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-xs font-semibold text-green-700 mb-1">
+                          Criterios cumplidos ({debugPrompt.verificationPrompt.result.criteriaMatched.length}):
+                        </p>
+                        <ul className="text-xs text-green-700 list-disc list-inside">
+                          {debugPrompt.verificationPrompt.result.criteriaMatched.map((c, i) => (
+                            <li key={i}>{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {debugPrompt.verificationPrompt.result.criteriaMissing.length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-xs font-semibold text-yellow-700 mb-1">
+                          Criterios faltantes ({debugPrompt.verificationPrompt.result.criteriaMissing.length}):
+                        </p>
+                        <ul className="text-xs text-yellow-700 list-disc list-inside">
+                          {debugPrompt.verificationPrompt.result.criteriaMissing.map((c, i) => (
+                            <li key={i}>{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div className="mt-2 p-2 bg-white rounded border">
+                      <p className="text-xs font-semibold mb-1 text-gray-700">Feedback generado:</p>
+                      <p className="text-xs italic text-gray-800">"{debugPrompt.verificationPrompt.result.feedback}"</p>
+                    </div>
+                  </div>
+
+                  <details className="bg-gray-900 rounded overflow-hidden">
+                    <summary className="cursor-pointer px-4 py-2 text-xs font-semibold text-gray-300 hover:bg-gray-800">
+                      Ver Verification Prompt Completo
+                    </summary>
+                    <pre className="whitespace-pre-wrap text-xs text-gray-100 p-4 max-h-96 overflow-y-auto">
+                      {debugPrompt.verificationPrompt.prompt}
+                    </pre>
+                  </details>
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="bg-purple-600 text-white px-3 py-1 rounded-md text-sm font-semibold">
+                    2. System Prompt
+                  </span>
+                  <span className="text-xs text-gray-600">
+                    (usa resultado de verificación para dar feedback)
+                  </span>
+                </div>
+
+                <details className="bg-white p-3 rounded border border-gray-200 mb-3">
+                  <summary className="cursor-pointer text-xs font-semibold text-gray-700 hover:text-gray-900">
+                    Metadata de Actividad
+                  </summary>
+                  <pre className="whitespace-pre-wrap text-xs text-gray-600 font-mono mt-2 max-h-32 overflow-y-auto">
+                    {JSON.stringify(debugPrompt.metadata, null, 2)}
+                  </pre>
+                </details>
+
+                <div className="bg-gray-900 text-gray-100 p-4 rounded">
+                  <pre className="whitespace-pre-wrap text-xs font-mono max-h-96 overflow-y-auto">
+                    {debugPrompt.systemPrompt}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      )}
+       */}
 
       {/* Input - altura fija, siempre visible */}
       <div className="shrink-0">

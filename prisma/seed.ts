@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client'
-import { hardcodedLesson } from '../data/lesson01'
+import { hardcodedLesson as htmlLesson } from '../data/lesson01'
+import { hardcodedLesson as promptEngLesson } from '../data/lesson02'
 
 const prisma = new PrismaClient()
 
@@ -170,29 +171,53 @@ async function main() {
   console.log('✅ Lección creada:', lesson.title)
 
   // 4. Crear lección hardcodeada de HTML (con ID fijo para matching con LessonSession)
-  const htmlLesson = await prisma.lesson.upsert({
+  const htmlLessonDb = await prisma.lesson.upsert({
     where: { slug: 'html-basico' },
     update: {
-      id: hardcodedLesson.id, // Actualizar el ID a 'lesson-html-01'
-      title: hardcodedLesson.lesson.title,
-      description: hardcodedLesson.lesson.description,
-      estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
-      contentJson: hardcodedLesson as unknown as Prisma.InputJsonValue,
+      id: htmlLesson.id, // Actualizar el ID a 'lesson-html-01'
+      title: htmlLesson.lesson.title,
+      description: htmlLesson.lesson.description,
+      estimatedMinutes: htmlLesson.lesson.duration_minutes,
+      contentJson: htmlLesson as unknown as Prisma.InputJsonValue,
       isPublished: true,
     },
     create: {
-      id: hardcodedLesson.id, // 'lesson-html-01'
-      title: hardcodedLesson.lesson.title,
-      description: hardcodedLesson.lesson.description,
+      id: htmlLesson.id, // 'lesson-html-01'
+      title: htmlLesson.lesson.title,
+      description: htmlLesson.lesson.description,
       slug: 'html-basico',
-      estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
-      contentJson: hardcodedLesson as unknown as Prisma.InputJsonValue,
+      estimatedMinutes: htmlLesson.lesson.duration_minutes,
+      contentJson: htmlLesson as unknown as Prisma.InputJsonValue,
       isPublished: true,
     },
   })
 
-  console.log('✅ Lección HTML hardcodeada creada:', htmlLesson.title)
-  console.log('🎉 Seed completado con 2 lecciones!')
+  console.log('✅ Lección HTML hardcodeada creada:', htmlLessonDb.title)
+
+  // 5. Crear lección hardcodeada de Prompt Engineering (con ID fijo para matching con LessonSession)
+  const promptEngLessonDb = await prisma.lesson.upsert({
+    where: { slug: 'prompt-engineering-basico' },
+    update: {
+      id: promptEngLesson.id, // Actualizar el ID a 'lesson-prompt-eng-01'
+      title: promptEngLesson.lesson.title,
+      description: promptEngLesson.lesson.description,
+      estimatedMinutes: promptEngLesson.lesson.duration_minutes,
+      contentJson: promptEngLesson as unknown as Prisma.InputJsonValue,
+      isPublished: true,
+    },
+    create: {
+      id: promptEngLesson.id, // 'lesson-prompt-eng-01'
+      title: promptEngLesson.lesson.title,
+      description: promptEngLesson.lesson.description,
+      slug: 'prompt-engineering-basico',
+      estimatedMinutes: promptEngLesson.lesson.duration_minutes,
+      contentJson: promptEngLesson as unknown as Prisma.InputJsonValue,
+      isPublished: true,
+    },
+  })
+
+  console.log('✅ Lección Prompt Engineering hardcodeada creada:', promptEngLessonDb.title)
+  console.log('🎉 Seed completado con 3 lecciones!')
 }
 
 main()

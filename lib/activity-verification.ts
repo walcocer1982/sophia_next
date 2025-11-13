@@ -1,53 +1,64 @@
 import { anthropic } from '@/lib/anthropic'
+import { AI_CONFIG } from '@/lib/ai-config'
 import type { Activity, ActivityCompletionResult } from '@/types/lesson'
 
 /**
- * Verificar si el estudiante completó la actividad usando IA
+ * Construir prompt de verificación (exportado para debug)
+ *
+ * OPTIMIZACIÓN (2025-01-11): Historial conversacional eliminado
+ * - Ahorro: ~200-500 tokens por verificación
+ * - Claude mantiene memoria vía messages array (sin impacto en coherencia)
  */
-export async function verifyActivityCompletion(
+export function buildVerificationPrompt(
   userMessage: string,
-  activity: Activity,
-  conversationHistory?: { role: 'user' | 'assistant'; content: string }[]
-): Promise<ActivityCompletionResult> {
-  // Construir contexto para verificación
-  const verificationPrompt = `Eres un evaluador pedagógico experto. Tu tarea es evaluar si un estudiante ha comprendido correctamente un tema.
+  activity: Activity
+): string {
+  return `Eres un evaluador pedagogico experto. Tu tarea es evaluar si un estudiante ha comprendido correctamente un tema.
 
 TEMA: ${activity.teaching.main_topic}
 
-PREGUNTA DE VERIFICACIÓN: ${activity.verification.question}
+PREGUNTA DE VERIFICACION: ${activity.verification.question}
 
-CRITERIOS DE ACEPTACIÓN (el estudiante debe demostrar comprensión de TODOS):
+CRITERIOS DE ACEPTACION (el estudiante debe demostrar comprension de TODOS):
 ${activity.verification.criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
 RESPUESTA DEL ESTUDIANTE:
 "${userMessage}"
 
-${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO DE LA CONVERSACIÓN PREVIA:\n${conversationHistory.slice(-5).map((m) => `${m.role === 'user' ? 'Estudiante' : 'Instructor'}: ${m.content}`).join('\n\n')}` : ''}
-
 TAREA:
-Evalúa si la respuesta del estudiante cumple con TODOS los criterios de aceptación.
+Evalua si la respuesta del estudiante cumple con TODOS los criterios de aceptacion.
 
 Responde en formato JSON con esta estructura EXACTA:
 {
   "completed": boolean,
   "criteriaMatched": [lista de criterios cumplidos],
   "criteriaMissing": [lista de criterios NO cumplidos],
-  "feedback": "feedback conciso para el estudiante (máximo 2 oraciones)",
+  "feedback": "feedback conciso para el estudiante (maximo 2 oraciones)",
   "confidence": "high" | "medium" | "low"
 }
 
 REGLAS:
-- "completed" es true SOLO si TODOS los criterios están cumplidos
-- Sé estricto pero justo: el estudiante debe demostrar comprensión real
+- "completed" es true SOLO si TODOS los criterios estan cumplidos
+- Se estricto pero justo: el estudiante debe demostrar comprension real
 - El feedback debe ser constructivo, no repetir los criterios
 - confidence: "high" si es muy claro, "medium" si hay dudas, "low" si es ambiguo
 
 Responde SOLO con el JSON, sin texto adicional.`
+}
+
+/**
+ * Verificar si el estudiante completó la actividad usando IA
+ */
+export async function verifyActivityCompletion(
+  userMessage: string,
+  activity: Activity
+): Promise<ActivityCompletionResult> {
+  const verificationPrompt = buildVerificationPrompt(userMessage, activity)
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 500,
+      model: AI_CONFIG.models.verification,
+      max_tokens: AI_CONFIG.tokens.verification,
       messages: [
         {
           role: 'user',
@@ -98,7 +109,7 @@ function fallbackVerification(
     const criterionKeywords = criterion
       .toLowerCase()
       .split(' ')
-      .filter((w) => w.length > 4) // Solo palabras >4 chars
+      .filter((w) => w.length > AI_CONFIG.fallback.keywordMinLength)
 
     const hasKeywords = criterionKeywords.some((keyword) =>
       messageLower.includes(keyword)

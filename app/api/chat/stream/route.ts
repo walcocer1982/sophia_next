@@ -1,17 +1,21 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { anthropic } from '@/lib/anthropic'
+import { AI_CONFIG } from '@/lib/ai-config'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities } from '@/lib/lesson-parser'
 import { buildSystemPrompt } from '@/lib/prompt-builder'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { logger, logChatMessage, logError } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
-import { verifyActivityCompletion } from '@/lib/activity-verification'
+import { verifyActivityCompletion, buildVerificationPrompt } from '@/lib/activity-verification'
 import type { LessonContent } from '@/types/lesson'
 import type { Message } from '@prisma/client'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+// Note: Next.js route configs require literal values, not runtime expressions
+// If you need to change maxDuration, update AI_CONFIG.timeouts.vercelMaxDuration
+// and then update this literal value to match
+export const maxDuration = 60 // AI_CONFIG.timeouts.vercelMaxDuration
 
 export async function POST(request: Request) {
   const session = await auth()
@@ -19,8 +23,12 @@ export async function POST(request: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  // Rate limiting: 10 mensajes por minuto
-  const rateLimit = checkRateLimit(session.user.id, 10, 60)
+  // Rate limiting
+  const rateLimit = checkRateLimit(
+    session.user.id,
+    AI_CONFIG.rateLimit.messagesPerMinute,
+    AI_CONFIG.rateLimit.windowSeconds
+  )
   if (!rateLimit.allowed) {
     const resetIn = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
     logger.warn('rate_limit.exceeded', {
@@ -37,7 +45,7 @@ export async function POST(request: Request) {
         status: 429,
         headers: {
           'Content-Type': 'application/json',
-          'X-RateLimit-Limit': '10',
+          'X-RateLimit-Limit': AI_CONFIG.rateLimit.messagesPerMinute.toString(),
           'X-RateLimit-Remaining': rateLimit.remaining.toString(),
           'X-RateLimit-Reset': rateLimit.resetAt.toString(),
         },
@@ -75,7 +83,7 @@ export async function POST(request: Request) {
     return new Response('Session not found', { status: 404 })
   }
 
-  // 🔥 FIX 2: Query mensajes filtrados por actividad actual (prevenir contaminación de contexto)
+  // Query mensajes filtrados por actividad actual
   const messages = await prisma.message.findMany({
     where: {
       sessionId: lessonSession.id,
@@ -85,7 +93,7 @@ export async function POST(request: Request) {
       ],
     },
     orderBy: { timestamp: 'desc' },
-    take: 10,
+    take: AI_CONFIG.history.chatContext,
   })
 
   // Adjuntar mensajes a lessonSession para mantener compatibilidad (cast para TypeScript)
@@ -144,8 +152,7 @@ export async function POST(request: Request) {
   // Ejecutar verificación ANTES del streaming
   const verification = await verifyActivityCompletion(
     message,
-    currentActivity,
-    conversationHistory
+    currentActivity
   )
 
   logger.info('chat.stream.pre_verification', {
@@ -164,11 +171,10 @@ export async function POST(request: Request) {
   // 4. Build dynamic system prompt con resultado de verificación
   const systemPrompt = buildSystemPrompt({
     activityContext: currentActivityContext,
-    recentMessages: sessionWithMessages.messages,
-    tangentCount, // Pasar tangent count real
-    attempts, // Pasar attempts para hints condicionales
-    verificationResult: verification, // ← NUEVO: Pasar resultado de verificación
-    completedActivities: completedActivityIds, // 🔥 FIX 3: Memoria de actividades completadas
+    tangentCount,
+    attempts,
+    verificationResult: verification,
+    completedActivities: completedActivityIds,
   })
 
   // 4. Create streaming response
@@ -180,10 +186,42 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        // 🔍 DEBUG: Enviar prompts completos al frontend (solo en development)
+        if (process.env.NODE_ENV === 'development') {
+          const promptDebugData = JSON.stringify({
+            type: 'prompt_debug',
+            // Verification prompt (ejecutado PRIMERO)
+            verificationPrompt: {
+              prompt: buildVerificationPrompt(message, currentActivity),
+              result: verification,
+              model: AI_CONFIG.models.verification,
+              maxTokens: AI_CONFIG.tokens.verification,
+            },
+            // System prompt (ejecutado DESPUÉS, usa resultado de verificación)
+            systemPrompt,
+            metadata: {
+              activityId: currentActivity.id,
+              activityTitle: currentActivity.teaching.main_topic,
+              activityType: currentActivity.type,
+              attempts: attempts + 1, // +1 porque estamos en el intento actual
+              tangentCount,
+              maxTangents: currentActivity.student_questions.max_tangent_responses,
+              verification: {
+                completed: verification.completed,
+                confidence: verification.confidence,
+                criteriaMatched: verification.criteriaMatched.length,
+                totalCriteria: currentActivity.verification.criteria.length,
+              },
+              completedActivitiesCount: completedActivityIds.length,
+            },
+          })
+          controller.enqueue(encoder.encode(`data: ${promptDebugData}\n\n`))
+        }
+
         // Stream from Claude
         const claudeStream = await anthropic.messages.stream({
-          model: 'claude-sonnet-4-5-20250929',
-          max_tokens: 1024,
+          model: AI_CONFIG.models.chat,
+          max_tokens: AI_CONFIG.tokens.chat,
           system: systemPrompt,
           messages: [
             ...conversationHistory,
