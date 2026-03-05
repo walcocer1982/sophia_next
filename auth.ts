@@ -6,8 +6,8 @@ import { prisma } from './lib/prisma'
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || 'dummy',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'dummy',
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
     CredentialsProvider({
       id: 'test-user',
@@ -20,12 +20,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null
         }
 
-        // Buscar el user-test por email (más confiable que ID fijo)
-        console.log('🔍 Buscando usuario por email: user-test@sophia.dev')
         const user = await prisma.user.findUnique({
           where: { email: 'user-test@sophia.dev' },
         })
-        console.log('📋 Resultado:', user ? `Encontrado: ${user.email} (ID: ${user.id})` : 'No encontrado')
 
         if (user) {
           return {
