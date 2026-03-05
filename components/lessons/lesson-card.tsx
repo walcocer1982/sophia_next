@@ -8,16 +8,20 @@ import {
   CardDescription,
   CardTitle,
 } from '@/components/ui/card'
-import { Clock, Loader2 } from 'lucide-react'
+import { BookOpen, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface LessonCardProps {
   lesson: {
     id: string
     title: string
-    description: string | null
     slug: string
-    estimatedMinutes: number | null
+    keyPoints: string[]
+    order: number
+    course: {
+      title: string
+      slug: string
+    }
   }
 }
 
@@ -32,13 +36,12 @@ export function LessonCard({ lesson }: LessonCardProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lessonId: lesson.id }),
-        credentials: 'include', // Include cookies for authentication
+        credentials: 'include',
       })
 
       if (!response.ok) {
         const errorData = await response.json()
         if (response.status === 403 && errorData.message) {
-          // Invalid session - user needs to re-authenticate
           toast.error(errorData.message)
           setTimeout(() => {
             router.push('/api/auth/signout')
@@ -63,17 +66,23 @@ export function LessonCard({ lesson }: LessonCardProps) {
       onClick={handleStartLesson}
     >
       <CardContent className="p-6">
-        <CardTitle className="mb-2">{lesson.title}</CardTitle>
-        <CardDescription className="mb-4 line-clamp-2">
-          {lesson.description}
-        </CardDescription>
-        <div className="flex items-center justify-between">
-          {lesson.estimatedMinutes && (
-            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>{lesson.estimatedMinutes} minutos</span>
-            </div>
-          )}
+        <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+          <BookOpen className="h-4 w-4" />
+          <span>Lección {lesson.order}</span>
+        </div>
+        <CardTitle className="mb-3">{lesson.title}</CardTitle>
+        {lesson.keyPoints.length > 0 && (
+          <CardDescription className="mb-4">
+            <ul className="list-disc list-inside space-y-1">
+              {lesson.keyPoints.slice(0, 3).map((point, index) => (
+                <li key={index} className="text-sm line-clamp-1">
+                  {point}
+                </li>
+              ))}
+            </ul>
+          </CardDescription>
+        )}
+        <div className="flex items-center justify-end">
           {isLoading && (
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
           )}

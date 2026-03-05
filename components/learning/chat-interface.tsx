@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react'
 import { ChatMessages } from './chat-messages'
 import { ChatInput, type ChatInputRef } from './chat-input'
 import { DevToolsModal } from './dev-tools-modal'
-import { ActivityProgressHeader } from './activity-progress-header'
 import type { ChatMessage, OptimisticMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { toast } from 'sonner'
@@ -319,13 +318,12 @@ export function ChatInterface({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)]">
-      {/* Header - altura fija */}
-      <div className="shrink-0 border-b bg-white">
-        <div className="h-16 px-6 py-3 flex items-center justify-between">
+    <div className="flex flex-col h-full bg-white">
+      {/* Header compacto */}
+      <div className="shrink-0 border-b border-gray-200 bg-white">
+        <div className="h-14 px-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold">{lessonTitle}</h1>
-            <p className="text-sm text-gray-500">Sesión activa</p>
+            <h1 className="text-lg font-semibold text-gray-900">{lessonTitle}</h1>
           </div>
 
           {/* Dev Tools Button - Solo en desarrollo */}
@@ -341,9 +339,6 @@ export function ChatInterface({
             </Button>
           )}
         </div>
-
-        {/* Activity Progress Header */}
-        <ActivityProgressHeader sessionId={sessionId} />
       </div>
 
       {/* Messages - ocupa espacio restante con scroll interno */}
@@ -352,7 +347,7 @@ export function ChatInterface({
       </div>
 
       {/* Input - altura fija, siempre visible */}
-      <div className="shrink-0">
+      <div className="shrink-0 border-t border-gray-200">
         <ChatInput
           ref={chatInputRef}
           onSend={handleSendMessage}

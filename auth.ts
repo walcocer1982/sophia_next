@@ -20,10 +20,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null
         }
 
-        // Buscar el user-test en la base de datos
+        // Buscar el user-test por email (más confiable que ID fijo)
+        console.log('🔍 Buscando usuario por email: user-test@sophia.dev')
         const user = await prisma.user.findUnique({
-          where: { id: '1000' },
+          where: { email: 'user-test@sophia.dev' },
         })
+        console.log('📋 Resultado:', user ? `Encontrado: ${user.email} (ID: ${user.id})` : 'No encontrado')
+
         if (user) {
           return {
             id: user.id,

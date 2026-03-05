@@ -1,6 +1,6 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { parseContentJson, getNextActivity } from '@/lib/lesson-parser'
+import { parseContentJson, getNextActivity, getTotalActivities } from '@/lib/lesson-parser'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -57,15 +57,14 @@ export async function POST(request: Request) {
     const contentJson = parseContentJson(
       lessonSession.lesson.contentJson
     ) as LessonContent
-    const nextActivityContext = getNextActivity(contentJson, activityId)
+    const nextActivityResult = getNextActivity(contentJson, activityId)
+    const totalActivities = getTotalActivities(contentJson)
 
     // 4. Marcar actividad como completada
     await prisma.$transaction([
       prisma.activityProgress.create({
         data: {
           lessonSessionId: sessionId,
-          classId: '', // TODO: Obtener del contentJson
-          momentId: '', // TODO: Obtener del contentJson
           activityId,
           status: 'COMPLETED',
           completedAt: new Date(),
@@ -89,27 +88,20 @@ export async function POST(request: Request) {
     return Response.json({
       success: true,
       activityCompleted: activityId,
-      nextActivity: nextActivityContext
+      nextActivity: nextActivityResult
         ? {
-            id: nextActivityContext.activity.id,
-            title: nextActivityContext.activity.teaching.main_topic,
-            type: nextActivityContext.activity.type,
-            isLast: nextActivityContext.isLastActivity,
+            id: nextActivityResult.activityId,
           }
         : null,
+      isLastActivity: !nextActivityResult,
       progress: {
         totalCompleted: totalActivitiesCompleted,
-        totalActivities: nextActivityContext?.totalActivities || 0,
-        percentage: nextActivityContext
-          ? Math.round(
-              (totalActivitiesCompleted / nextActivityContext.totalActivities) *
-                100
-            )
-          : 100,
+        totalActivities,
+        percentage: Math.round((totalActivitiesCompleted / totalActivities) * 100),
       },
     })
   } catch (error) {
-    console.error('❌ Error completing activity:', error)
+    console.error('Error completing activity:', error)
     return new Response('Internal server error', { status: 500 })
   }
 }

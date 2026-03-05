@@ -9,10 +9,11 @@ import {
   ChangeEvent,
   ClipboardEvent
 } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, Square } from 'lucide-react'
 
 interface ChatInputProps {
   onSend: (message: string) => void
+  onStop?: () => void
   disabled?: boolean
   placeholder?: string
   isGeneratingWelcome?: boolean
@@ -25,7 +26,7 @@ export interface ChatInputRef {
 }
 
 export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
-  ({ onSend, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming }, ref) => {
+  ({ onSend, onStop, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming }, ref) => {
   const [message, setMessage] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -110,19 +111,30 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
           />
 
           <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-transparent">
-            <button
-              onClick={handleSend}
-              disabled={disabled || !message.trim()}
-              className={`p-2 rounded-full transition-all ${
-                message.trim() && !disabled
-                  ? 'bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md'
-                  : 'bg-slate-300 text-white cursor-not-allowed opacity-60'
-              }`}
-              title="Enviar mensaje"
-              type="button"
-            >
-              <ArrowUp className="h-5 w-5" />
-            </button>
+            {isStreaming && onStop ? (
+              <button
+                onClick={onStop}
+                className="p-2 rounded-full transition-all bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md"
+                title="Detener generación"
+                type="button"
+              >
+                <Square className="h-4 w-4 fill-current" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={disabled || !message.trim()}
+                className={`p-2 rounded-full transition-all ${
+                  message.trim() && !disabled
+                    ? 'bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md'
+                    : 'bg-slate-300 text-white cursor-not-allowed opacity-60'
+                }`}
+                title="Enviar mensaje"
+                type="button"
+              >
+                <ArrowUp className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
 

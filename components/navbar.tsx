@@ -54,13 +54,24 @@ export function Navbar() {
         <Link
           href="/lessons"
           className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-            pathname === '/topics'
+            pathname === '/lessons'
               ? 'text-instructor-600'
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
           <BookOpen className="h-4 w-4" />
           Clases
+        </Link>
+        <Link
+          href="/planner"
+          className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+            pathname.startsWith('/planner')
+              ? 'text-instructor-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Sparkles className="h-4 w-4" />
+          Planificador
         </Link>
       </nav>
 

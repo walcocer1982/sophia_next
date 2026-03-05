@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
-import { getFirstActivity } from '@/lib/lesson-parser'
+import { getFirstActivity, getCurrentActivity, getLessonContext } from '@/lib/lesson-parser'
 import { buildSystemPrompt } from '@/lib/prompt-builder'
 import type { LessonContent } from '@/types/lesson'
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       return new Response('Missing sessionId', { status: 400 })
     }
 
-    // Get lesson info
+    // Get lesson info with course data
     const lessonSession = await prisma.lessonSession.findFirst({
       where: {
         id: sessionId,
@@ -39,9 +39,15 @@ export async function POST(request: Request) {
       include: {
         lesson: {
           select: {
-            id: true, // Necesario para getLessonContent
+            id: true,
             title: true,
-            description: true,
+            objective: true,
+            keyPoints: true,
+            course: {
+              select: {
+                instructor: true,
+              },
+            },
           },
         },
       },
@@ -51,50 +57,79 @@ export async function POST(request: Request) {
       return new Response('Session not found', { status: 404 })
     }
 
-    // Obtener contenido de la lección (desde archivo hardcodeado o DB)
+    // Obtener contenido de la lección
     const contentJson = await getLessonContent(lessonSession.lesson.id) as LessonContent
 
     if (!contentJson) {
       return new Response('Lesson content not found', { status: 404 })
     }
 
-    // Obtener primera actividad con contexto completo
-    const firstActivityContext = getFirstActivity(contentJson)
+    // Datos del curso para el prompt
+    const courseInstructor = lessonSession.lesson.course?.instructor || 'Eres un instructor experto y amable.'
+    const lessonTitle = lessonSession.lesson.title
+    const lessonObjective = lessonSession.lesson.objective || ''
+    const lessonKeyPoints = lessonSession.lesson.keyPoints || []
 
-    if (!firstActivityContext) {
+    // Obtener primera actividad
+    const firstActivity = getFirstActivity(contentJson)
+
+    if (!firstActivity) {
       return new Response('No activities found in lesson', { status: 500 })
     }
 
-    // Usar el sistema de prompts completo para contexto pedagógico
-    const systemPrompt = buildSystemPrompt({
+    // Obtener contexto completo de la actividad
+    const firstActivityContext = getCurrentActivity(
+      contentJson,
+      firstActivity.activityId,
+      lessonTitle,
+      lessonObjective,
+      lessonKeyPoints,
+      courseInstructor
+    )
+
+    if (!firstActivityContext) {
+      return new Response('Activity context not found', { status: 500 })
+    }
+
+    // Obtener contexto de lección (normativo/técnico) si existe
+    const lessonContext = getLessonContext(contentJson)
+
+    // Usar el sistema de prompts completo con cache
+    const { staticBlocks, dynamicPrompt } = buildSystemPrompt({
       activityContext: firstActivityContext,
-      recentMessages: [], // No hay mensajes previos en welcome
+      recentMessages: [],
       tangentCount: 0,
+      lessonContext,
     })
 
-    // Instrucción especial para mensaje de bienvenida proactivo
-    const welcomeInstruction = `ESTE ES EL PRIMER MENSAJE DE LA LECCIÓN.
+    // Instrucción para mensaje de bienvenida - Estructura clara con objetivo y pregunta directa
+    const welcomeInstruction = `PRIMER MENSAJE DE LA LECCIÓN.
 
-Tu objetivo ahora es dar una bienvenida cálida y COMENZAR A ENSEÑAR INMEDIATAMENTE.
+TAREA: Genera el mensaje de bienvenida para la lección "${lessonTitle}".
 
-Estructura tu mensaje así:
-1. Saludo amigable y presentación del tema principal (${firstActivityContext.activity.teaching.main_topic})
-2. Pregunta de engagement: "¿Tienes alguna experiencia previa con ${firstActivityContext.activity.teaching.main_topic.toLowerCase().replace('¿', '').replace('?', '')}?"
-3. Comienza a introducir los conceptos clave de forma conversacional
+ESTRUCTURA OBLIGATORIA (en este orden):
+1. Saludo breve y presentación (1 oración)
+2. Menciona el OBJETIVO de aprendizaje de la lección
+3. Lista los PUNTOS CLAVE que van a cubrir (usa los del sistema)
+4. Termina con la PREGUNTA DE VERIFICACIÓN de la primera actividad
 
-Importante:
-- SÉ PROACTIVO, no esperes a que el estudiante pregunte
-- Usa un tono conversacional y cercano
-- Menciona 1-2 puntos clave del tema para despertar interés
-- Invita a responder la pregunta de engagement
+ESTILO:
+- Tono conversacional pero estructurado
+- Sin emojis
+- Sin "Bienvenido" formal
+- Sin exclamaciones exageradas
+- La pregunta final debe ser la pregunta de verificación de la actividad actual
 
-Genera el mensaje de bienvenida ahora.`
+Genera el mensaje ahora.`
 
-    // Stream response from Claude con contexto pedagógico completo
+    // Stream response from Claude con bloques cacheables
     const stream = await anthropic.messages.stream({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 512,
-      system: systemPrompt,
+      max_tokens: 600,
+      system: [
+        ...staticBlocks,
+        { type: 'text', text: dynamicPrompt }
+      ],
       messages: [{ role: 'user', content: welcomeInstruction }],
     })
 
@@ -122,7 +157,7 @@ Genera el mensaje de bienvenida ahora.`
           inputTokens = finalMessage.usage.input_tokens
           outputTokens = finalMessage.usage.output_tokens
 
-          // Check if welcome message already exists (idempotency)
+          // Check if welcome message already exists
           const existingWelcome = await prisma.message.findFirst({
             where: {
               sessionId,
@@ -140,7 +175,7 @@ Genera el mensaje de bienvenida ahora.`
             return
           }
 
-          // Save to DB after streaming completes (only if doesn't exist)
+          // Save to DB
           await prisma.message.create({
             data: {
               sessionId,

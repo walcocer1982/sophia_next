@@ -1,5 +1,5 @@
-// Instructoria Database Schema
-// Versión: 1.7.0
+// Sophia Database Schema
+// Versión: 2.0.0
 // PostgreSQL (Neon) + NextAuth v5 (JWT strategy)
 
 generator client {
@@ -30,6 +30,7 @@ model User {
   // Relaciones
   lessonSessions LessonSession[]
   accounts       Account[]
+  courses        Course[]
 
   @@index([email])
   @@index([googleId])
@@ -60,21 +61,44 @@ model Account {
 // 2. CONTENIDO EDUCATIVO
 // ============================================
 
-model Lesson {
-  id                     String    @id @default(cuid())
-  title                  String
-  description            String?   @db.Text
-  slug                   String    @unique
-  estimatedMinutes       Int?
-  contentJson            Json
-  isPublished            Boolean   @default(false)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  capacidad   String?  @db.Text  // Competencia general del curso
+  instructor  String   @db.Text  // Personalidad del AI instructor
+  userId      String?            // Instructor que creó el curso
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relaciones
+  user    User?    @relation(fields: [userId], references: [id])
+  lessons Lesson[]
+
+  @@index([slug])
+  @@index([userId])
+}
+
+model Lesson {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  objective   String   // Objetivo de la lección
+  keyPoints   String[] // Puntos clave de la lección
+  contentJson Json     // { moments: [...] }
+  order       Int      @default(0)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  courseId String
+  course   Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
   sessions LessonSession[]
 
   @@index([slug])
+  @@index([courseId])
 }
 
 // ============================================
@@ -90,9 +114,7 @@ model LessonSession {
   startedAt      DateTime  @default(now())
   endedAt        DateTime?
   lastActivityAt DateTime  @default(now())
-  classId        String?
-  momentId       String?
-  activityId     String?
+  activityId     String?   // Referencia a contentJson.activities[].id
   summaryText    String?   @db.Text
   lastSummaryAt  DateTime?
   progress       Float     @default(0)
@@ -121,9 +143,7 @@ enum ActivityStatus {
 model ActivityProgress {
   id              String         @id @default(cuid())
   lessonSessionId String
-  classId         String
-  momentId        String
-  activityId      String
+  activityId      String         // Referencia a contentJson.activities[].id
   status          ActivityStatus @default(NOT_STARTED)
   startedAt       DateTime?
   completedAt     DateTime?
@@ -148,9 +168,7 @@ model Message {
   role         String
   content      String   @db.Text
   timestamp    DateTime @default(now())
-  classId      String?
-  momentId     String?
-  activityId   String?
+  activityId   String?  // Referencia a contentJson.activities[].id
   inputTokens  Int?
   outputTokens Int?
 

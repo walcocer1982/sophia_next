@@ -1,7 +1,10 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { hardcodedLesson } from '@/data/lesson01'
+import { getLessonContent } from '@/lib/lesson-loader'
+import { getFirstActivity } from '@/lib/lesson-parser'
+import { logger } from '@/lib/logger'
+import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
 
@@ -19,7 +22,6 @@ export async function POST(request: Request) {
   })
 
   if (!userExists) {
-    console.error('❌ User not found in database:', session.user.id)
     return NextResponse.json(
       {
         error: 'User not found',
@@ -34,64 +36,89 @@ export async function POST(request: Request) {
   const { lessonId } = await request.json()
 
   // 4. Check if lesson exists and is published
-  const useHardcodedLesson = process.env.ALLOW_HARDCODE_LESSON === '1'
-  let lesson: {
-    id: string
-    title: string
-    description: string | null
-    estimatedMinutes: number | null
+  const lesson = await prisma.lesson.findUnique({
+    where: { id: lessonId, isPublished: true },
+    select: {
+      id: true,
+      title: true,
+      keyPoints: true,
+      contentJson: true,
+      course: {
+        select: {
+          title: true,
+        },
+      },
+    },
+  })
+
+  if (!lesson) {
+    return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
-  if (useHardcodedLesson && lessonId === hardcodedLesson.id) {
-    // Usar lección hardcodeada
-    lesson = {
-      id: hardcodedLesson.id,
-      title: hardcodedLesson.lesson.title,
-      description: hardcodedLesson.lesson.description,
-      estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
-    }
-  } else {
-    // Buscar en base de datos
-    const dbLesson = await prisma.lesson.findUnique({
-      where: { id: lessonId, isPublished: true },
-      select: { id: true, title: true, description: true, estimatedMinutes: true },
+  // 5. Get first activity from lesson content
+  const contentJson = await getLessonContent(lessonId) as LessonContent
+  const firstActivity = contentJson ? getFirstActivity(contentJson) : null
+
+  if (!firstActivity) {
+    logger.error('session.start.no_activities', {
+      lessonId,
+      userId: session.user.id,
     })
-
-    if (!dbLesson) {
-      return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
-    }
-
-    lesson = dbLesson
+    return NextResponse.json(
+      { error: 'Lesson has no activities' },
+      { status: 500 }
+    )
   }
 
-  // 4. Check for active session
+  // 6. Check for active session
   let lessonSession = await prisma.lessonSession.findFirst({
     where: {
       userId: session.user.id,
       lessonId: lessonId,
-      endedAt: null, // Active session
+      endedAt: null,
     },
   })
 
-  // 5. If no active session, create one
+  // 7. If no active session, create one with first activity
   if (!lessonSession) {
     lessonSession = await prisma.lessonSession.create({
       data: {
         userId: session.user.id,
         lessonId: lessonId,
-        sessionAttempt: 1, // TODO: Calculate properly in MVP-3
+        sessionAttempt: 1,
         startedAt: new Date(),
         lastActivityAt: new Date(),
+        activityId: firstActivity.activityId, // 🔥 FIX: Inicializar con primera actividad
       },
     })
+
+    logger.info('session.start.created', {
+      sessionId: lessonSession.id,
+      userId: session.user.id,
+      lessonId,
+      activityId: firstActivity.activityId,
+    })
+  } else {
+    // Si existe pero no tiene activityId, actualizarlo
+    if (!lessonSession.activityId) {
+      lessonSession = await prisma.lessonSession.update({
+        where: { id: lessonSession.id },
+        data: { activityId: firstActivity.activityId },
+      })
+
+      logger.info('session.start.activity_initialized', {
+        sessionId: lessonSession.id,
+        activityId: firstActivity.activityId,
+      })
+    }
   }
 
-  // 6. Return session info (welcome message will be generated client-side)
+  // 8. Return session info
   return NextResponse.json({
     sessionId: lessonSession.id,
     lesson: {
       title: lesson.title,
-      estimatedMinutes: lesson.estimatedMinutes,
+      courseTitle: lesson.course.title,
     },
   })
 }

@@ -1,6 +1,6 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { parseContentJson, getCurrentActivity, getTotalActivities, getActivityPosition, getNextActivity } from '@/lib/lesson-parser'
+import { parseContentJson, getTotalActivities, getActivityPosition, getNextActivity } from '@/lib/lesson-parser'
 import { logger } from '@/lib/logger'
 import type { LessonContent } from '@/types/lesson'
 
@@ -51,29 +51,22 @@ export async function GET(request: Request) {
     const totalActivities = getTotalActivities(contentJson)
     const completedCount = lessonSession.activities.length
 
-    const currentActivity = lessonSession.activityId
-      ? getCurrentActivity(contentJson, lessonSession.activityId)
-      : null
-
     const percentage = totalActivities > 0
       ? Math.round((completedCount / totalActivities) * 100)
       : 0
 
-    // Calcular posición actual (1-indexed) correctamente
-    let currentPosition = 1 // Default: primera actividad
+    // Calcular posición actual
+    let currentPosition = 1
 
     if (lessonSession.activityId) {
-      // Si hay activityId en sesión, obtener su posición
       currentPosition = getActivityPosition(contentJson, lessonSession.activityId)
     } else if (completedCount > 0) {
-      // Si no hay activityId pero hay actividades completadas, calcular siguiente
       const lastCompleted = lessonSession.activities[0]
       const nextActivity = getNextActivity(contentJson, lastCompleted.activityId)
 
       if (nextActivity) {
-        currentPosition = getActivityPosition(contentJson, nextActivity.activity.id)
+        currentPosition = getActivityPosition(contentJson, nextActivity.activityId)
       } else {
-        // Si no hay siguiente, es porque completó todas
         currentPosition = totalActivities
       }
     }
@@ -90,11 +83,10 @@ export async function GET(request: Request) {
     return Response.json({
       sessionId: lessonSession.id,
       lessonTitle: lessonSession.lesson.title,
-      currentActivity: currentActivity?.activity.teaching.main_topic || null,
       currentActivityId: lessonSession.activityId,
       currentPosition,
       completedCount,
-      progress: completedCount, // Mantener por compatibilidad
+      progress: completedCount,
       total: totalActivities,
       percentage,
       lastCompleted: lessonSession.activities[0] || null,

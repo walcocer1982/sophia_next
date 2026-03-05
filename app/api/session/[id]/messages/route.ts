@@ -27,7 +27,7 @@ export async function GET(
       lesson: {
         select: {
           title: true,
-          estimatedMinutes: true,
+          keyPoints: true,
         },
       },
     },

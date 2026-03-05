@@ -1,61 +1,27 @@
 /**
- * Sistema para cargar lecciones desde diferentes fuentes
- * Permite usar archivos hardcodeados en desarrollo o DB en producción
+ * Sistema para cargar lecciones desde la base de datos
  */
 
-import { devFeatures } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 import { parseContentJson } from '@/lib/lesson-parser'
 import { logger } from '@/lib/logger'
 import type { LessonContent } from '@/types/lesson'
 
 /**
- * Carga el contenido de una lección desde archivo hardcodeado o DB
+ * Carga el contenido de una lección desde DB
  *
- * En desarrollo con ALLOW_HARDCODE_LESSON=1:
- * - Intenta cargar desde @/data/lesson01.ts
- * - Si falla, cae a DB como fallback
- *
- * En producción o sin el flag:
- * - Siempre carga desde DB
- *
- * @param lessonId - ID de la lección (usado para DB, ignorado en hardcoded)
+ * @param lessonId - ID de la lección
  * @returns LessonContent parseado o null si no existe
  */
 export async function getLessonContent(
   lessonId: string
 ): Promise<LessonContent | null> {
-  // Si está activado el hardcoding, intentar cargar desde archivo
-  if (devFeatures.allowHardcodedLesson) {
-    try {
-      // Importación dinámica del archivo de lección hardcodeada
-      const lessonModule = await import('@/data/lesson01')
-      const hardcodedLesson = lessonModule.hardcodedLesson || lessonModule.default
-
-      logger.info('lesson.loader.hardcoded', {
-        source: 'data/lesson01.ts',
-        lessonId, // Log el ID solicitado para debugging
-        message: '📚 Using hardcoded lesson from data/lesson01.ts'
-      })
-
-      return hardcodedLesson as LessonContent
-    } catch (error) {
-      logger.warn('lesson.loader.hardcoded.error', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        message: '⚠️ Failed to load hardcoded lesson, falling back to DB'
-      })
-      // Continuar con carga desde DB
-    }
-  }
-
-  // Cargar desde DB normalmente
   try {
     const lesson = await prisma.lesson.findUnique({
       where: { id: lessonId },
       select: {
         contentJson: true,
         title: true,
-        description: true
       }
     })
 
@@ -71,7 +37,6 @@ export async function getLessonContent(
       lessonId,
       title: lesson.title,
       source: 'database',
-      message: '💾 Using lesson from database'
     })
 
     return parseContentJson(lesson.contentJson) as LessonContent
@@ -85,16 +50,7 @@ export async function getLessonContent(
 }
 
 /**
- * Helper para verificar si una lección está usando contenido hardcodeado
- * Útil para mostrar indicadores en UI durante desarrollo
- */
-export function isUsingHardcodedLesson(): boolean {
-  return devFeatures.allowHardcodedLesson
-}
-
-/**
- * Obtiene metadata básica de la lección (para cuando no necesitas el contentJson completo)
- * Siempre usa DB ya que el hardcoded es solo para contentJson
+ * Obtiene metadata básica de la lección con datos del curso
  */
 export async function getLessonMetadata(lessonId: string) {
   return prisma.lesson.findUnique({
@@ -102,8 +58,32 @@ export async function getLessonMetadata(lessonId: string) {
     select: {
       id: true,
       title: true,
-      description: true,
-      estimatedMinutes: true,
+      keyPoints: true,
+      isPublished: true,
+      course: {
+        select: {
+          id: true,
+          title: true,
+          instructor: true,
+        }
+      }
+    }
+  })
+}
+
+/**
+ * Obtiene todas las lecciones de un curso
+ */
+export async function getCourseLessons(courseId: string) {
+  return prisma.lesson.findMany({
+    where: { courseId },
+    orderBy: { order: 'asc' },
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      keyPoints: true,
+      order: true,
       isPublished: true,
     }
   })

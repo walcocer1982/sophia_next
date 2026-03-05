@@ -1,12 +1,15 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { anthropic } from '@/lib/anthropic'
-import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities } from '@/lib/lesson-parser'
-import { buildSystemPrompt } from '@/lib/prompt-builder'
+import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
+import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
+import { buildSystemPrompt, getMaxTokensForActivity } from '@/lib/prompt-builder'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { logger, logChatMessage, logError } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { verifyActivityCompletion } from '@/lib/activity-verification'
+import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
+import { classifyIntent } from '@/lib/services/intent-classification'
+import { compressMessagesForAPI } from '@/lib/message-summarizer'
 import type { LessonContent } from '@/types/lesson'
 import type { Message } from '@prisma/client'
 
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
 
   const { sessionId, message } = await request.json()
 
-  // 1. Validate session and fetch full contentJson
+  // 1. Validate session and fetch full contentJson with course data
   const lessonSession = await prisma.lessonSession.findFirst({
     where: {
       id: sessionId,
@@ -57,16 +60,20 @@ export async function POST(request: Request) {
     include: {
       lesson: {
         select: {
-          id: true, // Necesario para getLessonContent
+          id: true,
           title: true,
-          description: true,
-          // contentJson lo obtenemos de getLessonContent
+          objective: true,
+          keyPoints: true,
+          course: {
+            select: {
+              instructor: true,
+            },
+          },
         },
       },
       activities: {
         where: { status: 'COMPLETED' },
-        orderBy: { completedAt: 'asc' },  // Orden cronológico
-        // 🔥 FIX 3: Obtener TODAS las completadas para memoria del prompt
+        orderBy: { completedAt: 'asc' },
       },
     },
   })
@@ -75,17 +82,15 @@ export async function POST(request: Request) {
     return new Response('Session not found', { status: 404 })
   }
 
-  // 🔥 FIX 2: Query mensajes filtrados por actividad actual (prevenir contaminación de contexto)
+  // Cargar últimos 20 mensajes SIN filtrar por activityId
+  // (El filtro por activityId causaba que el mensaje de transición se perdiera,
+  // dejando a Claude sin contexto del escenario cuando el estudiante decía "no sé")
   const messages = await prisma.message.findMany({
     where: {
       sessionId: lessonSession.id,
-      OR: [
-        { activityId: lessonSession.activityId },  // Mensajes de actividad actual
-        { activityId: null },  // Mensajes globales (welcome)
-      ],
     },
     orderBy: { timestamp: 'desc' },
-    take: 10,
+    take: 20,
   })
 
   // Adjuntar mensajes a lessonSession para mantener compatibilidad (cast para TypeScript)
@@ -103,26 +108,64 @@ export async function POST(request: Request) {
     return new Response('Lesson content not found', { status: 404 })
   }
 
+  // Obtener datos del curso para el prompt
+  const courseInstructor = lessonSession.lesson.course?.instructor || 'Eres un instructor experto y amable.'
+  const lessonTitle = lessonSession.lesson.title
+  const lessonObjective = lessonSession.lesson.objective || ''
+  const lessonKeyPoints = lessonSession.lesson.keyPoints || []
+
   // Obtener actividad actual basada en progreso
-  // 🔥 FIX: Usar lessonSession.activityId como source of truth (actualizado en auto-progresión)
   let currentActivityContext
 
   if (lessonSession.activityId) {
-    // DB tiene el activityId correcto después de auto-progresión
-    currentActivityContext = getCurrentActivity(contentJson, lessonSession.activityId)
+    currentActivityContext = getCurrentActivity(
+      contentJson,
+      lessonSession.activityId,
+      lessonTitle,
+      lessonObjective,
+      lessonKeyPoints,
+      courseInstructor
+    )
   } else {
-    // Fallback: Primera vez, no hay activityId aún
-    currentActivityContext = getFirstActivity(contentJson)
+    // Fallback: Primera vez, obtener primera actividad
+    const firstActivity = getFirstActivity(contentJson)
+    if (firstActivity) {
+      currentActivityContext = getCurrentActivity(
+        contentJson,
+        firstActivity.activityId,
+        lessonTitle,
+        lessonObjective,
+        lessonKeyPoints,
+        courseInstructor
+      )
+    }
   }
 
   if (!currentActivityContext) {
     return new Response('No activities found in lesson', { status: 500 })
   }
 
+  // Historial completo para verificación (necesita contexto completo)
   const conversationHistory = sessionWithMessages.messages.reverse().map((m: Message) => ({
     role: m.role as 'user' | 'assistant',
     content: m.content,
   }))
+
+  // Historial comprimido para enviar a Claude (optimizado)
+  // - Mensajes del estudiante: completos
+  // - Mensajes del instructor: resumidos con ESCENARIO + PREGUNTA preservados
+  const compressedHistory = compressMessagesForAPI(conversationHistory, 6)
+
+  // DEBUG: Log mensajes comprimidos para verificar preservación de escenario
+  logger.info('chat.stream.compressed_history', {
+    sessionId,
+    originalCount: conversationHistory.length,
+    compressedCount: compressedHistory.length,
+    compressedMessages: compressedHistory.map(m => ({
+      role: m.role,
+      contentPreview: m.content.slice(0, 200) + (m.content.length > 200 ? '...' : '')
+    }))
+  })
 
   // 3. 🔥 NUEVO: Verificación ANTICIPADA antes de generar respuesta
   const currentActivity = currentActivityContext.activity
@@ -135,43 +178,134 @@ export async function POST(request: Request) {
         activityId: currentActivity.id,
       },
     },
-    select: { attempts: true, tangentCount: true },
+    select: { attempts: true, tangentCount: true, evidenceData: true },
   })
 
   const attempts = activityProgress?.attempts || 0
   const tangentCount = activityProgress?.tangentCount || 0
+  const existingEvidence = (activityProgress?.evidenceData as { attempts?: Array<unknown> } | null) || { attempts: [] }
 
-  // Ejecutar verificación ANTES del streaming
-  const verification = await verifyActivityCompletion(
-    message,
-    currentActivity,
-    conversationHistory
-  )
+  // ═══════════════════════════════════════════════════════════════
+  // 3. MODERACIÓN + CLASIFICACIÓN + VERIFICACIÓN EN PARALELO
+  // ═══════════════════════════════════════════════════════════════
+  // Backwards compatibility: support both old and new structure
+  const currentActivityInstruction = currentActivity.teaching?.agent_instruction ||
+    (currentActivity as { agent_instruction?: string }).agent_instruction || ''
+
+  // 🔥 FIX: Buscar el último mensaje del INSTRUCTOR (no cualquier mensaje)
+  const lastInstructorMessage = sessionWithMessages.messages.find(m => m.role === 'assistant')
+
+  const [moderation, intent, verification] = await Promise.all([
+    moderateContent(message, { lessonTitle }),
+    classifyIntent(message, currentActivity, {
+      currentLesson: lessonTitle,
+      currentActivity: currentActivityInstruction,
+      lastInstructorQuestion: lastInstructorMessage?.content || undefined
+    }),
+    verifyActivityCompletion(message, currentActivity, conversationHistory)
+  ])
+
+  // Logging de clasificación
+  logger.info('chat.stream.classification', {
+    sessionId,
+    intent: intent.intent,
+    is_on_topic: intent.is_on_topic,
+    relevance_score: intent.relevance_score,
+    moderation_safe: moderation.is_safe,
+  })
+
+  // ═══════════════════════════════════════════════════════════════
+  // 4. VERIFICAR MODERACIÓN - Intervenir sin guardar en BD
+  // ═══════════════════════════════════════════════════════════════
+  if (!moderation.is_safe) {
+    logger.warn('chat.stream.moderation_blocked', {
+      sessionId,
+      userId: session.user.id,
+      severity: moderation.severity,
+      violations: moderation.violations,
+    })
+
+    const interventionMessage = getInterventionMessage(moderation, courseInstructor)
+
+    // Retornar mensaje de intervención sin streaming completo
+    const encoder = new TextEncoder()
+    const interventionStream = new ReadableStream({
+      start(controller) {
+        const data = JSON.stringify({ type: 'content', text: interventionMessage })
+        controller.enqueue(encoder.encode(`data: ${data}\n\n`))
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`))
+        controller.close()
+      }
+    })
+
+    return new Response(interventionStream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    })
+  }
 
   logger.info('chat.stream.pre_verification', {
     sessionId,
     activityId: currentActivity.id,
     completed: verification.completed,
+    ready_to_advance: verification.ready_to_advance,
+    completeness_percentage: verification.completeness_percentage,
     confidence: verification.confidence,
     attempts: attempts + 1,
   })
 
-  // 🔥 FIX 3: Obtener lista de actividades completadas para contexto del prompt
+  // Obtener lista de actividades completadas para contexto del prompt
   const completedActivityIds = lessonSession.activities
     .filter(a => a.status === 'COMPLETED')
     .map(a => a.activityId)
 
-  // 4. Build dynamic system prompt con resultado de verificación
-  const systemPrompt = buildSystemPrompt({
-    activityContext: currentActivityContext,
-    recentMessages: sessionWithMessages.messages,
-    tangentCount, // Pasar tangent count real
-    attempts, // Pasar attempts para hints condicionales
-    verificationResult: verification, // ← NUEVO: Pasar resultado de verificación
-    completedActivities: completedActivityIds, // 🔥 FIX 3: Memoria de actividades completadas
+  // ═══════════════════════════════════════════════════════════════
+  // 5. BUILD SYSTEM PROMPT CON PROMPT CACHING
+  // ═══════════════════════════════════════════════════════════════
+  // Obtener contexto de lección (normativo/técnico) si existe
+  const lessonContext = getLessonContext(contentJson)
+
+  // 🔥 NUEVO: Obtener siguiente actividad cuando ready_to_advance para transición fluida
+  let nextActivityData = undefined
+  if (verification.ready_to_advance && !currentActivityContext.isLastActivity) {
+    const nextActivityRef = getNextActivity(contentJson, currentActivity.id)
+    if (nextActivityRef) {
+      nextActivityData = getActivityById(contentJson, nextActivityRef.activityId)
+    }
+  }
+
+  // 🔍 DEBUG: Log información crítica para diagnosticar regresión a actividades anteriores
+  logger.info('chat.stream.prompt_context', {
+    sessionId,
+    currentActivityId: currentActivity.id,
+    currentActivityQuestion: currentActivity.verification.question.slice(0, 100),
+    verificationReady: verification.ready_to_advance,
+    verificationResponseType: verification.response_type,
+    attempts: attempts + 1,
+    studentMessage: message.slice(0, 50),
+    messagesCount: sessionWithMessages.messages.length,
+    completedActivitiesCount: completedActivityIds.length,
   })
 
-  // 4. Create streaming response
+  const { staticBlocks, dynamicPrompt } = buildSystemPrompt({
+    activityContext: currentActivityContext,
+    recentMessages: sessionWithMessages.messages,
+    tangentCount,
+    attempts,
+    verificationResult: verification,
+    completedActivities: completedActivityIds,
+    intentClassification: intent,
+    lessonContext,
+    nextActivity: nextActivityData || undefined,
+    lastUserMessage: message,  // Para detectar "no sé" y extraer escenario
+  })
+
+  // ═══════════════════════════════════════════════════════════════
+  // 6. CREATE STREAMING RESPONSE CON PROMPT CACHING
+  // ═══════════════════════════════════════════════════════════════
   const encoder = new TextEncoder()
   let fullResponse = ''
   let inputTokens = 0
@@ -180,13 +314,19 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // Stream from Claude
+        // Stream from Claude con bloques cacheables
+        // maxTokens dinámico basado en complexity de la actividad
+        const maxTokens = getMaxTokensForActivity(currentActivity.complexity)
+
         const claudeStream = await anthropic.messages.stream({
-          model: 'claude-sonnet-4-5-20250929',
-          max_tokens: 1024,
-          system: systemPrompt,
+          model: DEFAULT_MODEL,
+          max_tokens: maxTokens,
+          system: [
+            ...staticBlocks,
+            { type: 'text', text: dynamicPrompt }
+          ],
           messages: [
-            ...conversationHistory,
+            ...compressedHistory,  // Historial comprimido (preguntas visibles)
             {
               role: 'user',
               content: message,
@@ -215,13 +355,18 @@ export async function POST(request: Request) {
           }
         }
 
-        // 4. Save messages to database
+        // 4. Save messages to database (con activityId y timestamps explícitos para orden correcto)
+        const userTimestamp = new Date()
+        const assistantTimestamp = new Date(userTimestamp.getTime() + 1) // +1ms para garantizar orden
+
         await prisma.$transaction([
           prisma.message.create({
             data: {
               sessionId: lessonSession.id,
               role: 'user',
               content: message,
+              activityId: currentActivity.id,
+              timestamp: userTimestamp,
             },
           }),
           prisma.message.create({
@@ -231,11 +376,13 @@ export async function POST(request: Request) {
               content: fullResponse,
               inputTokens,
               outputTokens,
+              activityId: currentActivity.id,
+              timestamp: assistantTimestamp,
             },
           }),
           prisma.lessonSession.update({
             where: { id: sessionId },
-            data: { lastActivityAt: new Date() },
+            data: { lastActivityAt: assistantTimestamp },
           }),
         ])
 
@@ -247,8 +394,26 @@ export async function POST(request: Request) {
 
         // 5. Guardar resultado de verificación en ActivityProgress
         // (La verificación ya corrió ANTES del streaming, usamos ese resultado)
-        if (verification.completed) {
+        // Usar ready_to_advance en lugar de solo completed para mayor flexibilidad
+        if (verification.ready_to_advance) {
           // Marcar actividad como completada
+          // Construir evidenceData con historial de intentos (como Instructoria)
+          const newAttempt = {
+            studentResponse: message,
+            analysis: {
+              ready_to_advance: verification.ready_to_advance,
+              completed: verification.completed,
+              criteriaMatched: verification.criteriaMatched,
+              criteriaMissing: verification.criteriaMissing,
+              understanding_level: verification.understanding_level,
+              response_type: verification.response_type,
+            },
+            timestamp: new Date().toISOString(),
+          }
+          const updatedEvidence = JSON.parse(JSON.stringify({
+            attempts: [...(existingEvidence.attempts || []), newAttempt],
+          }))
+
           await prisma.activityProgress.upsert({
             where: {
               lessonSessionId_activityId: {
@@ -262,17 +427,17 @@ export async function POST(request: Request) {
               passedCriteria: true,
               aiFeedback: verification.feedback,
               attempts: attempts + 1,
+              evidenceData: updatedEvidence,
             },
             create: {
               lessonSessionId: lessonSession.id,
-              classId: '',
-              momentId: '',
               activityId: currentActivity.id,
               status: 'COMPLETED',
               completedAt: new Date(),
               passedCriteria: true,
               aiFeedback: verification.feedback,
               attempts: attempts + 1,
+              evidenceData: updatedEvidence,
             },
           })
 
@@ -296,12 +461,12 @@ export async function POST(request: Request) {
           const activityCompletedData = JSON.stringify({
             type: 'activity_completed',
             activityId: currentActivity.id,
-            activityTitle: currentActivity.teaching.main_topic,
-            nextActivityId: nextActivityContext?.activity.id || null,
-            nextActivityTitle: nextActivityContext?.activity.teaching.main_topic || null,
+            activityTitle: currentActivity.verification.question, // Usar pregunta como título
+            nextActivityId: nextActivityContext?.activityId || null,
+            nextActivityTitle: nextActivityContext ? 'Siguiente actividad' : null,
             isLastActivity: !nextActivityContext,
-            currentPosition: nextActivityContext ? nextActivityContext.activityIdx + 1 : totalActivities,
-            completedCount: completedCount + 1, // +1 porque acabamos de completar
+            currentPosition: completedCount + 1,
+            completedCount: completedCount + 1,
             total: totalActivities,
             percentage: Math.round(((completedCount + 1) / totalActivities) * 100),
             completedAt: new Date().toISOString(),
@@ -323,8 +488,7 @@ export async function POST(request: Request) {
             await prisma.lessonSession.update({
               where: { id: lessonSession.id },
               data: {
-                activityId: nextActivityContext.activity.id,
-                momentId: '',
+                activityId: nextActivityContext.activityId,
                 lastActivityAt: new Date(),
               },
             })
@@ -332,8 +496,7 @@ export async function POST(request: Request) {
             logger.info('chat.stream.activity_progressed', {
               sessionId,
               fromActivityId: currentActivity.id,
-              toActivityId: nextActivityContext.activity.id,
-              progress: `${nextActivityContext.activityIdx + 1}/${nextActivityContext.totalActivities}`,
+              toActivityId: nextActivityContext.activityId,
             })
           } else {
             // Era la última actividad → marcar lección como completada
@@ -362,7 +525,23 @@ export async function POST(request: Request) {
             })
           }
         } else {
-          // Incrementar attempts sin completar
+          // Incrementar attempts sin completar + guardar evidenceData
+          const failedAttempt = {
+            studentResponse: message,
+            analysis: {
+              ready_to_advance: verification.ready_to_advance,
+              completed: verification.completed,
+              criteriaMatched: verification.criteriaMatched,
+              criteriaMissing: verification.criteriaMissing,
+              understanding_level: verification.understanding_level,
+              response_type: verification.response_type,
+            },
+            timestamp: new Date().toISOString(),
+          }
+          const failedEvidence = JSON.parse(JSON.stringify({
+            attempts: [...(existingEvidence.attempts || []), failedAttempt],
+          }))
+
           await prisma.activityProgress.upsert({
             where: {
               lessonSessionId_activityId: {
@@ -372,21 +551,45 @@ export async function POST(request: Request) {
             },
             update: {
               attempts: attempts + 1,
+              evidenceData: failedEvidence,
             },
             create: {
               lessonSessionId: lessonSession.id,
-              classId: '',
-              momentId: '',
               activityId: currentActivity.id,
               status: 'IN_PROGRESS',
               attempts: attempts + 1,
+              evidenceData: failedEvidence,
             },
           })
+
+          // 🔥 NUEVO: Notificar al frontend cuando se alcanza max_attempts
+          const maxAttempts = currentActivity.verification.max_attempts || 3
+          const newAttemptCount = attempts + 1
+
+          if (newAttemptCount >= maxAttempts) {
+            const maxAttemptsData = JSON.stringify({
+              type: 'max_attempts_reached',
+              activityId: currentActivity.id,
+              attempts: newAttemptCount,
+              maxAttempts,
+              canSkip: true,  // El frontend puede ofrecer "continuar de todos modos"
+              message: `Has alcanzado el máximo de ${maxAttempts} intentos. Puedes continuar si lo deseas.`,
+            })
+            controller.enqueue(encoder.encode(`data: ${maxAttemptsData}\n\n`))
+
+            logger.info('chat.stream.max_attempts_reached', {
+              sessionId,
+              activityId: currentActivity.id,
+              attempts: newAttemptCount,
+              maxAttempts,
+            })
+          }
         }
 
         // 5. Detectar tangents e incrementar contador
-        // Un tangent es cuando el usuario NO cumple ningún criterio (pregunta off-topic)
-        const isTangent = !verification.completed && verification.criteriaMatched.length === 0
+        // 🔥 FIX: Un tangent es cuando el mensaje es OFF-TOPIC según intent classification
+        // NO cuando simplemente no cumple criterios (podría ser pregunta de clarificación válida)
+        const isTangent = !intent.is_on_topic || intent.intent === 'off_topic' || intent.intent === 'small_talk'
 
         if (isTangent) {
           await prisma.activityProgress.update({
@@ -405,7 +608,7 @@ export async function POST(request: Request) {
             sessionId,
             activityId: currentActivity.id,
             tangentCount: tangentCount + 1,
-            maxAllowed: currentActivity.student_questions.max_tangent_responses,
+            maxAllowed: 3, // Valor fijo para tangentes
           })
         }
 

@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     },
     include: {
       lesson: {
-        select: { title: true, description: true },
+        select: { title: true, keyPoints: true },
       },
       messages: {
         orderBy: { timestamp: 'asc' },
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     metadata: {
       sessionId: lessonSession.id,
       lessonTitle: lessonSession.lesson.title,
-      lessonDescription: lessonSession.lesson.description,
+      lessonKeyPoints: lessonSession.lesson.keyPoints,
       startedAt: lessonSession.startedAt.toISOString(),
       currentActivity: lessonSession.activityId,
       attempts: currentActivity?.attempts || 0,

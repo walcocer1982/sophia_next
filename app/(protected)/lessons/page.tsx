@@ -1,53 +1,55 @@
 import { prisma } from '@/lib/prisma'
 import { LessonCard } from '@/components/lessons/lesson-card'
-import { hardcodedLesson } from '@/data/lesson01'
 import { InteractiveGridPattern } from '@/components/ui/interactive-grid-pattern'
 import { cn } from '@/lib/utils'
 
-// Tipo explícito para las lecciones (debe coincidir con LessonCardProps)
-type LessonWithDetails = {
+// Tipo para lecciones con curso
+type LessonWithCourse = {
   id: string
   title: string
-  description: string | null
   slug: string
-  estimatedMinutes: number | null
+  keyPoints: string[]
+  order: number
+  course: {
+    title: string
+    slug: string
+  }
 }
 
 export default async function LessonsPage() {
-  // Si está activo el flag de lección hardcodeada, usar solo esa
-  const useHardcodedLesson = process.env.ALLOW_HARDCODE_LESSON === '1'
+  // Obtener todas las lecciones publicadas con info del curso
+  const lessons = (await prisma.lesson.findMany({
+    where: {
+      isPublished: true,
+    },
+    orderBy: [
+      { course: { title: 'asc' } },
+      { order: 'asc' },
+    ],
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      keyPoints: true,
+      order: true,
+      course: {
+        select: {
+          title: true,
+          slug: true,
+        },
+      },
+    },
+  })) as LessonWithCourse[]
 
-  let lessons: LessonWithDetails[]
-
-  if (useHardcodedLesson) {
-    // Usar lección hardcodeada en formato compatible con LessonCard
-    lessons = [
-      {
-        id: hardcodedLesson.id,
-        title: hardcodedLesson.lesson.title,
-        description: hardcodedLesson.lesson.description,
-        slug: 'html-basico', // Slug estático para la lección hardcodeada
-        estimatedMinutes: hardcodedLesson.lesson.duration_minutes,
-      },
-    ]
-  } else {
-    // Usar lecciones de la base de datos
-    lessons = (await prisma.lesson.findMany({
-      where: {
-        isPublished: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        slug: true,
-        estimatedMinutes: true,
-      },
-    })) as LessonWithDetails[]
-  }
+  // Agrupar por curso
+  const courseGroups = lessons.reduce((acc, lesson) => {
+    const courseTitle = lesson.course.title
+    if (!acc[courseTitle]) {
+      acc[courseTitle] = []
+    }
+    acc[courseTitle].push(lesson)
+    return acc
+  }, {} as Record<string, LessonWithCourse[]>)
 
   return (
     <div className="container relative mx-auto px-4 py-12">
@@ -73,9 +75,18 @@ export default async function LessonsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {lessons.map((lesson) => (
-              <LessonCard key={lesson.id} lesson={lesson} />
+          <div className="space-y-10">
+            {Object.entries(courseGroups).map(([courseTitle, courseLessons]) => (
+              <div key={courseTitle}>
+                <h2 className="mb-4 text-2xl font-semibold text-primary">
+                  {courseTitle}
+                </h2>
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {courseLessons.map((lesson) => (
+                    <LessonCard key={lesson.id} lesson={lesson} />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}
