@@ -2,7 +2,7 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Circle, Pencil, Image } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 type CourseWithLessons = {
@@ -104,9 +104,16 @@ export default async function CourseOverviewPage({
         <h2 className="mb-4 text-lg font-semibold text-gray-700">Sesiones</h2>
 
         {course.lessons.map((lesson) => {
-          const json = lesson.contentJson as { activities?: unknown[] } | null
+          const json = lesson.contentJson as { activities?: Array<{
+            verified?: boolean
+            teaching?: { images?: Array<{ url: string }>, image?: { url: string } }
+          }> } | null
           const isDesigned =
             json?.activities && json.activities.length > 0
+          const hasResources = json?.activities?.some(
+            (a) => (a.teaching?.images && a.teaching.images.length > 0) || a.teaching?.image?.url
+          ) ?? false
+          const allVerified = isDesigned && json!.activities!.every((a) => a.verified === true)
 
           return (
             <div
@@ -138,16 +145,36 @@ export default async function CourseOverviewPage({
               {/* Actions */}
               <div className="flex shrink-0 gap-2">
                 {isDesigned && (
-                  <Link href={`/planner/${courseId}/${lesson.id}/resources`}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                    >
-                      <Image className="h-3.5 w-3.5" />
-                      Recursos
-                    </Button>
-                  </Link>
+                  <>
+                    <Link href={`/planner/${courseId}/${lesson.id}/verification`}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`gap-1.5 ${allVerified ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : ''}`}
+                      >
+                        {allVerified ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <ClipboardCheck className="h-3.5 w-3.5" />
+                        )}
+                        Verificación
+                      </Button>
+                    </Link>
+                    <Link href={`/planner/${courseId}/${lesson.id}/resources`}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`gap-1.5 ${hasResources ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : ''}`}
+                      >
+                        {hasResources ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <Image className="h-3.5 w-3.5" />
+                        )}
+                        Recursos
+                      </Button>
+                    </Link>
+                  </>
                 )}
                 <Link href={`/planner/${courseId}/${lesson.id}`}>
                   <Button

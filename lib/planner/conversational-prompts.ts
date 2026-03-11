@@ -6,9 +6,9 @@ Tu tarea es obtener el tema de la clase.
 - Si el mensaje es "__INIT__", saluda brevemente y pregunta el tema.
 - Cuando el instructor responda con un tema, confirma y DEBES incluir PANEL_DATA.
 
-Ejemplo — si dice "Trabajos de alto riesgo":
+Ejemplo — si dice "Tipos de masas en pastelería":
 ---PANEL_DATA---
-{"field": "tema", "value": "Trabajos de Alto Riesgo"}
+{"field": "tema", "value": "Tipos de Masas en Pastelería"}
 ---END_PANEL_DATA---`,
 
   OBJETIVO: `PASO ACTUAL: OBJETIVO
@@ -21,7 +21,7 @@ Tu tarea es PROPONER el objetivo de aprendizaje basándote en el tema.
 
 Ejemplo de confirmación:
 ---PANEL_DATA---
-{"field": "objetivo", "value": "Al finalizar la clase, el estudiante será capaz de identificar los principales riesgos en trabajos de alto riesgo y aplicar medidas de control adecuadas"}
+{"field": "objetivo", "value": "Al finalizar la clase, el estudiante será capaz de identificar y preparar los 3 tipos de masas base utilizadas en pastelería profesional"}
 ---END_PANEL_DATA---
 
 ⚠️ OBLIGATORIO: Si el instructor confirma, SIEMPRE incluir PANEL_DATA. Sin esto el panel no se actualiza.`,
@@ -36,18 +36,18 @@ Tu tarea es PROPONER las instrucciones de enseñanza para la IA tutora.
 - Cuando el instructor CONFIRME, DEBES incluir PANEL_DATA con la lista final.
 
 Ejemplo CORRECTO (directivas a la IA, imperativo):
-1. "Explica qué es el IPERC usando preguntas reflexivas antes de dar la definición. No cites artículos textuales."
-2. "Presenta los 5 componentes de la matriz con ejemplos reales del sector minero. Usa un caso de cada tipo."
-3. "Haz que el estudiante clasifique niveles de riesgo usando la pirámide de controles antes de explicar la teoría."
-4. "Guía al estudiante paso a paso para completar una matriz IPERC con un caso práctico de su entorno."
+1. "Explica los 3 tipos de masas base usando preguntas reflexivas antes de dar la definición. No dictes recetas textuales."
+2. "Presenta las diferencias entre masa quebrada, hojaldre y choux con ejemplos de productos reales."
+3. "Haz que el estudiante identifique qué tipo de masa corresponde a cada producto antes de explicar la teoría."
+4. "Guía al estudiante paso a paso para preparar una masa quebrada básica con un caso práctico."
 
 Ejemplo INCORRECTO (descripción metodológica, NO hacer esto):
-❌ "Introducir el marco legal fundamental: Explicar qué es la Ley 29783 usando analogías cotidianas sobre derechos y deberes, antes de presentar el contenido técnico legal."
-❌ "Enseñar los 4 derechos fundamentales del trabajador: Presentar mediante ejemplos reales del entorno laboral peruano."
+❌ "Introducir los fundamentos teóricos: Explicar qué es la pastelería profesional usando analogías cotidianas, antes de presentar el contenido técnico."
+❌ "Enseñar los 4 tipos de horneado: Presentar mediante ejemplos visuales de productos terminados."
 
 Ejemplo de confirmación:
 ---PANEL_DATA---
-{"field": "instrucciones", "value": ["Explica qué es el IPERC usando preguntas reflexivas antes de dar la definición.", "Presenta los 5 componentes de la matriz con ejemplos del sector minero."]}
+{"field": "instrucciones", "value": ["Explica los 3 tipos de masas base usando preguntas reflexivas antes de dar la definición.", "Presenta las diferencias entre masa quebrada, hojaldre y choux con ejemplos de productos reales."]}
 ---END_PANEL_DATA---`,
 
   KEY_POINTS: `PASO ACTUAL: PUNTOS CLAVE
@@ -79,32 +79,31 @@ Reglas:
 - NO son competencias ni capacidades (eso es nivel curso/programa).
 - NO son objetivos de aprendizaje (eso ya se definió en el paso OBJETIVO).
 - Son TÍTULOS cortos que nombran cada logro específico de la sesión.
-- Propón 3-5 puntos clave (generan 4-8 actividades en total).
+- Propón 3-4 puntos clave (generan 4-5 actividades en total, clase de 45 min).
 - Derivalos directamente de las instrucciones de enseñanza.
 - El instructor revisa y ajusta.
 - Cuando el instructor CONFIRME, DEBES incluir PANEL_DATA con la lista.
 
-Ejemplo CORRECTO para tema "IPERC" (títulos cortos, 3-8 palabras):
-- "Diferencia entre peligro y riesgo"
-- "Tipos de peligros laborales"
-- "Matriz de evaluación de riesgos"
-- "Jerarquía de controles"
-- "Aplicación práctica del IPERC"
+Ejemplo CORRECTO para tema "Tipos de Masas Base" (títulos cortos, 3-8 palabras):
+- "Clasificación de masas en pastelería"
+- "Masa quebrada: técnica y aplicaciones"
+- "Masa hojaldre: laminado y reposo"
+- "Aplicación práctica de masas"
 
-Ejemplo CORRECTO para tema "Derechos SST":
-- "Leyes base de SST en Perú"
-- "Derechos fundamentales del trabajador"
-- "Responsabilidades trabajador vs empleador"
-- "Caso práctico de vulneración"
+Ejemplo CORRECTO para tema "Circuitos Eléctricos":
+- "Componentes de un circuito básico"
+- "Ley de Ohm y sus variables"
+- "Circuitos en serie vs paralelo"
+- "Medición con multímetro"
 
 Ejemplo INCORRECTO (demasiado largo, parece objetivo o instrucción):
-- ❌ "Identificar las 2 leyes base que regulan SST en Perú" (parece objetivo)
-- ❌ "Reconocer situaciones de vulneración mediante ejemplos contextualizados" (15+ palabras)
-- ❌ "Analizar un caso práctico aplicando el marco de derechos y responsabilidades" (parece instrucción)
+- ❌ "Identificar las 3 técnicas base de amasado en pastelería" (parece objetivo)
+- ❌ "Reconocer las diferencias entre masas mediante experimentación con ingredientes variados" (15+ palabras)
+- ❌ "Analizar un caso práctico aplicando los principios de proporción y temperatura" (parece instrucción)
 
 Ejemplo de confirmación:
 ---PANEL_DATA---
-{"field": "keyPoints", "value": ["Diferencia entre peligro y riesgo", "Tipos de peligros laborales", "Matriz de evaluación de riesgos"]}
+{"field": "keyPoints", "value": ["Clasificación de masas en pastelería", "Masa quebrada: técnica y aplicaciones", "Masa hojaldre: laminado y reposo"]}
 ---END_PANEL_DATA---`,
 
   CONTENIDO: `PASO ACTUAL: CONTENIDO TÉCNICO
@@ -136,34 +135,68 @@ Luego pregunta: "¿Quieres ajustar algún contenido o lo aprobamos?"
 
 Ejemplo de confirmación:
 ---PANEL_DATA---
-{"field": "contenidoTecnico", "value": [{"keyPoint": "Matriz de evaluación de riesgos", "contenido": "Matriz IPERC: 5 columnas (Peligro, Riesgo, Probabilidad 1-5, Severidad 1-5, Nivel de Riesgo). Se lee de izquierda a derecha. Niveles: Trivial, Tolerable, Moderado, Importante, Intolerable."}, {"keyPoint": "Jerarquía de controles", "contenido": "5 niveles según DS 024: Eliminación, Sustitución, Ingeniería, Administrativo, EPP. Se aplican de arriba hacia abajo priorizando eliminación."}]}
+{"field": "contenidoTecnico", "value": [{"keyPoint": "Clasificación de masas en pastelería", "contenido": "3 familias principales: masas quebradas (sablée, sucrée, brisée), masas hojaldradas (hojaldre clásico, invertido, rápido), masas batidas (choux, bizcocho, merengue). Se clasifican por método de incorporación de grasa."}, {"keyPoint": "Masa quebrada: técnica y aplicaciones", "contenido": "Técnica de sablage: mezclar harina con mantequilla fría hasta obtener textura arenosa, luego agregar líquidos. Temperatura crítica: mantequilla a 4°C. Aplicaciones: tartas, quiches, galletas."}]}
 ---END_PANEL_DATA---`,
 
   ESTRUCTURA: `PASO ACTUAL: ESTRUCTURA DE ACTIVIDADES
 Tu tarea es generar la estructura completa de actividades basándote en los puntos clave (keyPoints) y el contenido técnico.
 
+⏱️ RESTRICCIÓN DE TIEMPO — CLASE DE 45 MINUTOS:
+La clase dura 45 minutos. El presupuesto de tiempo por tipo de actividad es:
+| Tipo         | Simple  | Moderada | Compleja |
+|--------------|---------|----------|----------|
+| Explicación  | 4-5 min | 6-8 min  | —        |
+| Práctica     | 5-7 min | 8-12 min | 12-15 min|
+| Reflexión    | —       | 5-7 min  | 8-10 min |
+| Cierre       | 3-4 min | —        | —        |
+
+ANTES de generar, SUMA los tiempos estimados. Si excede 45 min, REDUCE actividades o baja complejidad.
+La reflexión es OPCIONAL — solo inclúyela si el tema lo amerita Y el tiempo lo permite.
+
+CANTIDAD MÁXIMA: 4-5 actividades para clase de 45 min (NUNCA más de 5).
+Distribución recomendada: 1-2 explicación + 1-2 práctica + 1 cierre.
+
 REGLA PRINCIPAL: Cada actividad está ligada a un keyPoint por su índice (keyPointIndex).
 Asigna el tipo de actividad según la posición del keyPoint en la progresión de Bloom:
 
-- keyPoints iniciales (conceptos base) → "explanation" (la IA enseña, luego verifica comprensión)
-- keyPoints intermedios (aplicación) → pueden tener "explanation" + "practice" (2 actividades para el mismo keyPoint)
-- keyPoints avanzados (evaluación/análisis) → "practice" (el estudiante resuelve un caso/escenario)
-- Último keyPoint o cierre → "reflection" (integra todo lo aprendido)
-- Siempre terminar con 1 "closing" (resumen general, keyPointIndex: null)
+- keyPoints iniciales (conceptos base) → "explanation" / Explicación (la IA enseña, luego verifica comprensión)
+- keyPoints intermedios (aplicación) → "practice" / Práctica (el estudiante aplica con escenarios)
+- keyPoints avanzados (evaluación/análisis) → "practice" / Práctica con caso real
+- Siempre terminar con 1 "closing" / Cierre (resumen + aplicación personal, keyPointIndex: null)
 
-PROGRESIÓN TÍPICA (ejemplo con 4 keyPoints):
-  KP0 (base)         → 1 explanation (complexity: simple)
-  KP1 (intermedio)   → 1 explanation + 1 practice (complexity: moderate)
-  KP2 (aplicación)   → 1 practice (complexity: moderate)
-  KP3 (integración)  → 1 reflection (complexity: complex)
-  Cierre              → 1 closing
-  Total: 6 actividades
+⚠️ UN keyPoint = UNA actividad. NO generar 2 actividades para el mismo keyPoint.
+Solo en casos excepcionales (keyPoint muy denso) se permite explanation + practice para el mismo keyPoint.
 
-Genera entre 4-8 actividades total.
+PROGRESIÓN TÍPICA (ejemplo con 3 keyPoints):
+  KP0 (base)         → 1 Explicación (complexity: simple)
+  KP1 (intermedio)   → 1 Práctica (complexity: moderate)
+  KP2 (aplicación)   → 1 Práctica (complexity: moderate)
+  Cierre              → 1 Cierre (complexity: simple)
+  Total: 4 actividades (~40 min)
+
+PRESENTACIÓN AL INSTRUCTOR:
+Cuando presentes la estructura, USA SIEMPRE los nombres en español:
+- "explanation" → mostrar como "Explicación"
+- "practice" → mostrar como "Práctica"
+- "reflection" → mostrar como "Reflexión"
+- "closing" → mostrar como "Cierre"
+- "simple" → mostrar como "Simple"
+- "moderate" → mostrar como "Moderada"
+- "complex" → mostrar como "Compleja"
+En el JSON de PANEL_DATA mantén los valores en inglés (son claves del sistema).
+Al presentar la estructura, incluye el TIEMPO ESTIMADO de cada actividad y el TOTAL.
+
+ANTI-REDUNDANCIA:
+- NUNCA generar dos actividades que pidan al estudiante hacer la misma acción (ej: dos actividades de elaborar documentos, dos análisis de casos).
+- Si dos prácticas son similares, FUSIÓNALAS en una sola o elimina la menos crítica.
+- Cada actividad debe enseñar o evaluar algo DISTINTO.
+
+Genera entre 4-5 actividades total (MÁXIMO 5 para 45 min).
 - Usa el contenido técnico proporcionado y las instrucciones de enseñanza.
 - Genera IDs en formato: "{tema_slug}_{001}".
-- Preguntas de verificación contextualizadas (escenarios reales).
-- 3-5 criterios observables por actividad.
+- agent_instruction: MÁXIMO 60 palabras. Sé conciso — la IA tutora es inteligente, no necesita instrucciones literales ni que le dictes cada ejemplo. Dale la directiva y el enfoque, no un guion.
+- Preguntas de verificación contextualizadas (escenarios reales, NO preguntas teóricas).
+- 2-4 criterios observables por actividad (concisos, no redundantes).
 - El understanding_level debe escalar con la progresión: memorized → understood → applied → analyzed.
 
 PREGUNTAS ABIERTAS (open_ended):

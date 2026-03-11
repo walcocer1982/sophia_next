@@ -24,6 +24,7 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
   const router = useRouter()
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+
   const hasInitialized = useRef(false)
   const pendingStepRef = useRef<PlannerStep | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -208,7 +209,7 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
           title={title}
         />
 
-        {/* Save button when session design is complete (course context) */}
+        {/* Save button when session design is complete */}
         {courseContext && isSessionComplete && (
           <div className="shrink-0 border-t bg-emerald-50 px-4 py-3">
             <div className="flex items-center justify-between">

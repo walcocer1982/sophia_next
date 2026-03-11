@@ -3,11 +3,21 @@ import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from './lib/prisma'
 
+// Log env vars availability at startup (no values, just presence)
+console.log('[Auth] ENV check:', {
+  GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
+  AUTH_SECRET: !!process.env.AUTH_SECRET,
+  AUTH_TRUST_HOST: process.env.AUTH_TRUST_HOST,
+  DATABASE_URL: !!process.env.DATABASE_URL,
+})
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
     }),
     CredentialsProvider({
       id: 'test-user',
@@ -44,9 +54,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     async jwt({ token, user, account }) {
-      // Al hacer login, guardar el usuario en la BD si es de Google
       if (user && account?.provider === 'google') {
-        // Crear o actualizar usuario en la BD
         const dbUser = await prisma.user.upsert({
           where: { email: user.email! },
           update: {
@@ -63,7 +71,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           },
         })
 
-        // Guardar Account
         await prisma.account.upsert({
           where: {
             provider_providerAccountId: {
@@ -96,10 +103,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         })
 
         token.sub = dbUser.id
-        return token // Early return to prevent overwriting with Google's OAuth ID
+        return token
       }
 
-      // This only executes for CredentialsProvider (test-user)
       if (user) {
         token.sub = user.id
       }

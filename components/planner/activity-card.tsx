@@ -7,8 +7,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ChevronDown, ChevronUp, Check, RotateCcw, Pencil, X } from 'lucide-react'
 import type { Activity } from '@/types/lesson'
 
 interface ActivityCardProps {
@@ -16,51 +16,58 @@ interface ActivityCardProps {
   position: number
   total: number
   keyPoints: string[]
+  isApproved: boolean
+  onApprove: (activityId: string) => void
+  onRevoke: (activityId: string) => void
+  onEdit?: (activityId: string, updates: Partial<ActivityEdits>) => void
 }
 
-const TYPE_CONFIG: Record<string, { label: string; className: string }> = {
-  explanation: { label: 'Explicación', className: 'bg-blue-100 text-blue-800 border-blue-200' },
-  practice: { label: 'Práctica', className: 'bg-green-100 text-green-800 border-green-200' },
-  reflection: { label: 'Reflexión', className: 'bg-purple-100 text-purple-800 border-purple-200' },
-  closing: { label: 'Cierre', className: 'bg-amber-100 text-amber-800 border-amber-200' },
+export interface ActivityEdits {
+  agent_instruction: string
+  question: string
+  must_include: string[]
 }
 
-const COMPLEXITY_LABELS: Record<string, string> = {
-  simple: 'Simple',
-  moderate: 'Moderado',
-  complex: 'Complejo',
-}
 
-export function ActivityCard({ activity, position, total, keyPoints }: ActivityCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const typeInfo = TYPE_CONFIG[activity.type] || TYPE_CONFIG.explanation
+export function ActivityCard({ activity, position, total, keyPoints, isApproved, onApprove, onRevoke, onEdit }: ActivityCardProps) {
+  const [isExpanded, setIsExpanded] = useState(!isApproved)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editInstruction, setEditInstruction] = useState(activity.teaching.agent_instruction)
+  const [editQuestion, setEditQuestion] = useState(activity.verification.question)
+  const [editCriteria, setEditCriteria] = useState(activity.verification.success_criteria.must_include.join('\n'))
   const keyPoint = activity.keyPointIndex !== null
     ? (keyPoints[activity.keyPointIndex] || `Punto ${activity.keyPointIndex + 1}`)
     : 'Cierre general'
 
-  // Extraer un título corto de la instrucción
-  const shortTitle = activity.teaching.agent_instruction.length > 80
-    ? activity.teaching.agent_instruction.slice(0, 80) + '...'
-    : activity.teaching.agent_instruction
-
   return (
     <Card
-      className="cursor-pointer transition-shadow hover:shadow-md"
-      onClick={() => setIsExpanded(!isExpanded)}
+      className={`transition-shadow hover:shadow-md ${
+        isApproved
+          ? 'border-emerald-300 bg-emerald-50/50'
+          : 'border-orange-200 bg-orange-50/30'
+      }`}
     >
-      <CardHeader>
+      <CardHeader
+        className="cursor-pointer"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
-            <span className="mt-0.5 shrink-0 rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-              {position}/{total}
+            <span className={`mt-0.5 shrink-0 rounded px-2 py-0.5 font-mono text-xs ${
+              isApproved
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-muted text-muted-foreground'
+            }`}>
+              {isApproved ? <Check className="inline h-3 w-3" /> : null} {position}/{total}
             </span>
-            <CardTitle className="text-base">{shortTitle}</CardTitle>
+            <div className="min-w-0">
+              <CardTitle className="text-sm leading-snug">{activity.teaching.agent_instruction}</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {keyPoint}
+              </p>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Badge className={typeInfo.className}>{typeInfo.label}</Badge>
-            {activity.complexity && (
-              <Badge variant="outline">{COMPLEXITY_LABELS[activity.complexity]}</Badge>
-            )}
+          <div className="shrink-0">
             {isExpanded ? (
               <ChevronUp className="h-4 w-4 text-muted-foreground" />
             ) : (
@@ -68,9 +75,6 @@ export function ActivityCard({ activity, position, total, keyPoints }: ActivityC
             )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Punto clave: {keyPoint}
-        </p>
       </CardHeader>
 
       {isExpanded && (
@@ -78,27 +82,58 @@ export function ActivityCard({ activity, position, total, keyPoints }: ActivityC
           {/* Instrucción al AI */}
           <div>
             <h4 className="mb-1 text-sm font-semibold">Instrucción al AI</h4>
-            <p className="text-sm text-muted-foreground">
-              {activity.teaching.agent_instruction}
-            </p>
+            {isEditing ? (
+              <textarea
+                value={editInstruction}
+                onChange={(e) => setEditInstruction(e.target.value)}
+                className="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                rows={3}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {activity.teaching.agent_instruction}
+              </p>
+            )}
           </div>
 
           {/* Pregunta de verificación */}
-          <div>
-            <h4 className="mb-1 text-sm font-semibold">Pregunta de Verificación</h4>
-            <p className="text-sm italic">&quot;{activity.verification.question}&quot;</p>
+          <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
+            <h4 className="mb-1 text-sm font-semibold text-blue-800">Pregunta de Verificación</h4>
+            {isEditing ? (
+              <textarea
+                value={editQuestion}
+                onChange={(e) => setEditQuestion(e.target.value)}
+                className="w-full rounded-md border border-blue-300 bg-white p-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                rows={2}
+              />
+            ) : (
+              <p className="text-sm italic text-blue-900">&quot;{activity.verification.question}&quot;</p>
+            )}
           </div>
 
           {/* Criterios de éxito */}
           <div>
             <h4 className="mb-1 text-sm font-semibold">Criterios de Éxito</h4>
-            <ul className="list-inside list-disc space-y-1">
-              {activity.verification.success_criteria.must_include.map((c, i) => (
-                <li key={i} className="text-sm text-muted-foreground">
-                  {c}
-                </li>
-              ))}
-            </ul>
+            {isEditing ? (
+              <>
+                <textarea
+                  value={editCriteria}
+                  onChange={(e) => setEditCriteria(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  rows={4}
+                  placeholder="Un criterio por línea"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">Un criterio por línea</p>
+              </>
+            ) : (
+              <ul className="list-inside list-disc space-y-1">
+                {activity.verification.success_criteria.must_include.map((c, i) => (
+                  <li key={i} className="text-sm text-muted-foreground">
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span>
                 Min completitud:{' '}
@@ -137,6 +172,92 @@ export function ActivityCard({ activity, position, total, keyPoints }: ActivityC
             {activity.teaching.context && (
               <span>Contexto: {activity.teaching.context}</span>
             )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center justify-between border-t pt-3">
+            <div>
+              {isEditing ? (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const criteria = editCriteria
+                        .split('\n')
+                        .map((c) => c.trim())
+                        .filter(Boolean)
+                      onEdit?.(activity.id, {
+                        agent_instruction: editInstruction.trim(),
+                        question: editQuestion.trim(),
+                        must_include: criteria,
+                      })
+                      setIsEditing(false)
+                    }}
+                  >
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    Guardar edición
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditInstruction(activity.teaching.agent_instruction)
+                      setEditQuestion(activity.verification.question)
+                      setEditCriteria(activity.verification.success_criteria.must_include.join('\n'))
+                      setIsEditing(false)
+                    }}
+                  >
+                    <X className="mr-1.5 h-3.5 w-3.5" />
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsEditing(true)
+                  }}
+                >
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                  Editar
+                </Button>
+              )}
+            </div>
+
+            <div>
+              {isApproved ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRevoke(activity.id)
+                  }}
+                >
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                  Revisar de nuevo
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onApprove(activity.id)
+                    setIsExpanded(false)
+                  }}
+                >
+                  <Check className="mr-1.5 h-3.5 w-3.5" />
+                  Aprobar actividad
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       )}

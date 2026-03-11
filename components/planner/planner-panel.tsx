@@ -174,7 +174,10 @@ export function PlannerPanel({
           onCancelEdit={() => {}}
           canEdit={false}
         >
-          <PanelSectionEstructura value={data.activities} />
+          <PanelSectionEstructura
+            value={data.activities}
+            keyPoints={data.keyPoints}
+          />
         </PanelSection>
 
       </div>

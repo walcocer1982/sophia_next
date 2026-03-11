@@ -84,15 +84,16 @@ export default async function ChatPage({
     createdAt: msg.timestamp,
   }))
 
-  // Extract per-activity images from contentJson
-  const allImages = (contentJson?.activities || [])
-    .filter((a) => a.teaching?.image)
-    .map((a) => ({
+  // Extract per-activity images from contentJson (supports images[] and legacy image)
+  const allImages = (contentJson?.activities || []).flatMap((a) => {
+    const imgs = a.teaching?.images || (a.teaching?.image ? [a.teaching.image] : [])
+    return imgs.filter((img) => img.url).map((img) => ({
       activityId: a.id,
-      url: a.teaching.image!.url,
-      description: a.teaching.image!.description,
-      showWhen: a.teaching.image!.showWhen || ('on_reference' as const),
+      url: img.url,
+      description: img.description,
+      showWhen: img.showWhen || ('on_reference' as const),
     }))
+  })
   const keyPoints = lessonSession.lesson.keyPoints || []
 
   // Extraer nombre del instructor del texto completo

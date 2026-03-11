@@ -264,34 +264,37 @@ VERIFICACIÓN FLEXIBLE:
 - Máximo ${maxAttempts} intentos, luego ofrece continuar de todos modos`
 
   // Image block — contextual directives by activity type + showWhen
-  const teachingImage = teaching?.image
+  // Supports both images[] (new) and image (legacy)
+  const teachingImages = teaching?.images || (teaching?.image ? [teaching.image] : [])
+  const validImages = teachingImages.filter((img) => img.description)
   let imageBlock = ''
-  if (teachingImage?.description) {
-    const showWhen = teachingImage.showWhen || 'on_reference'
+  if (validImages.length > 0) {
     const actType = activity.type
 
-    // Directive by activity type
     const typeDirectives: Record<string, string> = {
-      explanation: 'Mientras explicas, referencia la imagen naturalmente: "Como puedes ver en la imagen..." Pide al estudiante que la observe y te diga qué identifica antes de continuar.',
-      practice: 'El estudiante debe usar la imagen como referencia para resolver el ejercicio. Pregunta qué elementos de la imagen aplican al caso presentado.',
-      reflection: 'Pide al estudiante que relacione lo aprendido con lo que muestra la imagen. Pregunta qué conclusiones saca al observarla.',
-      closing: 'Usa la imagen como resumen visual de lo trabajado. Pide al estudiante que explique la imagen usando lo que aprendió en la sesión.',
+      explanation: 'Mientras explicas, referencia las imágenes naturalmente. Pide al estudiante que las observe y te diga qué identifica.',
+      practice: 'El estudiante debe usar las imágenes como referencia para resolver el ejercicio. Pregunta qué elementos aplican al caso.',
+      reflection: 'Pide al estudiante que relacione lo aprendido con lo que muestran las imágenes.',
+      closing: 'Usa las imágenes como resumen visual. Pide al estudiante que las explique con lo aprendido.',
     }
     const typeDirective = typeDirectives[actType] || typeDirectives.explanation
 
-    // Visibility directive by showWhen
     const showDirectives: Record<string, string> = {
-      on_start: 'La imagen ya se muestra al estudiante desde el inicio. Referencíala directamente.',
-      on_reference: 'La imagen se mostrará cuando la menciones. Introdúcela naturalmente en tu explicación.',
-      on_demand: 'La imagen solo se muestra si el estudiante la pide. Menciona que hay una imagen disponible si es relevante.',
+      on_start: 'Ya visible para el estudiante. Referencíala directamente.',
+      on_reference: 'Se mostrará cuando la menciones. Introdúcela naturalmente.',
+      on_demand: 'Solo se muestra si el estudiante pide. Menciona que está disponible.',
     }
-    const showDirective = showDirectives[showWhen] || showDirectives.on_reference
+
+    const imageEntries = validImages.map((img, i) => {
+      const showDirective = showDirectives[img.showWhen || 'on_reference']
+      return `  ${i + 1}. "${img.description}" — ${showDirective}`
+    }).join('\n')
 
     imageBlock = `
-IMAGEN DE APOYO: "${teachingImage.description}"
-${showDirective}
+IMÁGENES DE APOYO (${validImages.length}):
+${imageEntries}
 ${typeDirective}
-- Usa SOLO la descripción proporcionada, no inventes detalles sobre la imagen.`
+- Usa SOLO las descripciones proporcionadas, no inventes detalles sobre las imágenes.`
   }
 
   const staticBlock2 = `
@@ -426,11 +429,11 @@ TU RESPUESTA DEBE:
 
 EJEMPLO DE RESPUESTA CORRECTA:
 "Vamos por partes. ${extractedScenario ? `En el escenario que te describí, ` : ''}había [elemento del escenario].
-¿Qué tipo de peligro crees que representa: [opción A] o [opción B]?"
+¿Qué tipo de [concepto] crees que representa: [opción A] o [opción B]?"
 
 ⛔ NO HAGAS:
 - Re-explicar toda la teoría
-- Listar los 7 tipos de peligros otra vez
+- Listar todos los tipos o categorías otra vez
 - Inventar un escenario nuevo "más simple"
 - Volver a conceptos de actividades anteriores`
   }

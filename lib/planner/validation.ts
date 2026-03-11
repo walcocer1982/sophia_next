@@ -57,6 +57,7 @@ const TeachingSchema = z.object({
   target_length: z.string().optional(),
   context: z.string().optional(),
   image: TeachingImageSchema.optional(),
+  images: z.array(TeachingImageSchema).optional(),
 })
 
 const ActivitySchema = z.object({
@@ -67,6 +68,7 @@ const ActivitySchema = z.object({
   teaching: TeachingSchema,
   verification: VerificationSchema,
   commonMistakes: z.array(z.string()).optional(),
+  verified: z.boolean().optional(),
 })
 
 export const GeneratedStructureSchema = z.object({

@@ -48,7 +48,8 @@ export interface Teaching {
   agent_instruction: string     // Instrucción directa al AI sobre qué enseñar
   target_length?: string        // Extensión esperada: "150-300 palabras"
   context?: string              // Contexto adicional: "Sector: X. País: Y"
-  image?: TeachingImage         // Imagen opcional por actividad
+  image?: TeachingImage         // DEPRECATED: backward compat — usar images[]
+  images?: TeachingImage[]      // Múltiples imágenes por actividad (ordenadas)
 }
 
 /**
@@ -92,6 +93,7 @@ export interface Activity {
   teaching: Teaching                   // Instrucciones de enseñanza (NUEVO: objeto separado)
   verification: Verification           // Verificación con success_criteria
   commonMistakes?: string[]            // Errores típicos a detectar (no corregir directamente)
+  verified?: boolean                   // Marcado como revisado por el profesor en Verificación
 }
 
 /**

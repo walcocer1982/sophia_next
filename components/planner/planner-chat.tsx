@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { ChatMessages } from '@/components/learning/chat-messages'
 import { ChatInput, type ChatInputRef } from '@/components/learning/chat-input'
 import type { PlannerMessage } from '@/types/planner'
@@ -50,6 +50,8 @@ export function PlannerChat({
   title = 'Planificador',
 }: PlannerChatProps) {
   const inputRef = useRef<ChatInputRef>(null)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   const stepLabel = stepLabels[step] ?? step
 
   // Auto-focus input when loading ends
@@ -69,7 +71,7 @@ export function PlannerChat({
           </span>
           <span className="text-xs text-gray-400">|</span>
           <span className="text-xs text-gray-500">
-            Paso: {stepLabel}
+            {mounted ? `Paso: ${stepLabel}` : '\u00A0'}
           </span>
         </div>
       </div>

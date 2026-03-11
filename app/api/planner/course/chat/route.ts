@@ -102,9 +102,9 @@ export async function POST(request: Request) {
     userContent = 'Hola, quiero crear un nuevo curso.'
   } else if (message === '__STEP_TRANSITION__') {
     const stepPrompts: Record<string, string> = {
-      CAPACIDAD: 'Perfecto, ya tenemos el nombre del curso. Ahora necesito definir la capacidad general.',
-      APRENDIZAJES: 'Ya tenemos la capacidad definida. Ahora necesito definir los aprendizajes esperados del curso.',
-      TEMAS: 'Ya tenemos los aprendizajes esperados. Ahora necesito derivar los temas/sesiones a partir de ellos.',
+      CAPACIDAD: '[TRANSICIÓN DE SISTEMA] Paso completado. Ahora PROPÓN directamente la capacidad general del curso. NO hagas preguntas previas — propón UNA capacidad y espera confirmación.',
+      APRENDIZAJES: '[TRANSICIÓN DE SISTEMA] Paso completado. Ahora PROPÓN directamente los aprendizajes esperados del curso. NO hagas preguntas — propón la lista completa.',
+      TEMAS: '[TRANSICIÓN DE SISTEMA] Paso completado. Ahora GENERA directamente los temas/sesiones a partir de los aprendizajes.',
     }
     userContent = stepPrompts[step] || 'Continuemos con el siguiente paso.'
   } else {

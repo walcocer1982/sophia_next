@@ -3,12 +3,13 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Upload, X, Loader2, RefreshCw, Save, Sparkles } from 'lucide-react'
+import { ArrowLeft, Upload, X, Loader2, Save, Sparkles, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { Activity, TeachingImage } from '@/types/lesson'
 
 interface ResourceImage {
+  id: string // unique id per image
   activityId: string
   url: string
   fileName: string
@@ -48,6 +49,11 @@ const SHOW_WHEN_OPTIONS = [
   { value: 'on_demand', label: 'Si el estudiante pide' },
 ] as const
 
+let imageIdCounter = 0
+function generateImageId() {
+  return `img-${Date.now()}-${++imageIdCounter}`
+}
+
 export function ResourceManager({
   lessonId,
   lessonTitle,
@@ -67,24 +73,34 @@ export function ResourceManager({
 
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [describingFor, setDescribingFor] = useState<string | null>(null)
+  const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
 
-  const [images, setImages] = useState<ResourceImage[]>(() =>
-    activities
-      .filter((a) => a.teaching.image?.url)
-      .map((a) => ({
-        activityId: a.id,
-        url: a.teaching.image!.url,
-        fileName: a.teaching.image!.url.split('/').pop() || 'imagen',
-        description: a.teaching.image!.description || '',
-        showWhen: a.teaching.image!.showWhen || 'on_reference',
-      }))
-  )
+  // Initialize from existing data — supports both image (singular) and images (array)
+  const [images, setImages] = useState<ResourceImage[]>(() => {
+    const result: ResourceImage[] = []
+    for (const a of activities) {
+      const existing = a.teaching.images || (a.teaching.image ? [a.teaching.image] : [])
+      for (const img of existing) {
+        if (img.url) {
+          result.push({
+            id: generateImageId(),
+            activityId: a.id,
+            url: img.url,
+            fileName: img.url.split('/').pop() || 'imagen',
+            description: img.description || '',
+            showWhen: img.showWhen || 'on_reference',
+          })
+        }
+      }
+    }
+    return result
+  })
 
-  const getImage = (activityId: string) =>
-    images.find((img) => img.activityId === activityId)
+  const getImages = (activityId: string) =>
+    images.filter((img) => img.activityId === activityId)
 
-  const describeImage = async (activityId: string, imageUrl: string) => {
-    setDescribingFor(activityId)
+  const describeImage = async (imageId: string, imageUrl: string) => {
+    setDescribingFor(imageId)
     try {
       const descRes = await fetch('/api/upload/describe', {
         method: 'POST',
@@ -97,7 +113,7 @@ export function ResourceManager({
         if (description) {
           setImages((prev) =>
             prev.map((img) =>
-              img.activityId === activityId ? { ...img, description } : img
+              img.id === imageId ? { ...img, description } : img
             )
           )
         }
@@ -140,22 +156,21 @@ export function ResourceManager({
       }
 
       const { url } = (await res.json()) as { url: string }
+      const newId = generateImageId()
 
-      setImages((prev) => {
-        const filtered = prev.filter((img) => img.activityId !== activityId)
-        return [
-          ...filtered,
-          {
-            activityId,
-            url,
-            fileName: file.name,
-            description: '',
-            showWhen: 'on_reference' as const,
-          },
-        ]
-      })
+      setImages((prev) => [
+        ...prev,
+        {
+          id: newId,
+          activityId,
+          url,
+          fileName: file.name,
+          description: '',
+          showWhen: 'on_reference' as const,
+        },
+      ])
       toast.success('Imagen subida')
-      describeImage(activityId, url)
+      describeImage(newId, url)
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
@@ -163,14 +178,14 @@ export function ResourceManager({
     }
   }
 
-  const updateImage = (activityId: string, updates: Partial<ResourceImage>) => {
+  const updateImage = (imageId: string, updates: Partial<ResourceImage>) => {
     setImages((prev) =>
-      prev.map((img) => (img.activityId === activityId ? { ...img, ...updates } : img))
+      prev.map((img) => (img.id === imageId ? { ...img, ...updates } : img))
     )
   }
 
-  const removeImage = (activityId: string) => {
-    setImages((prev) => prev.filter((img) => img.activityId !== activityId))
+  const removeImage = (imageId: string) => {
+    setImages((prev) => prev.filter((img) => img.id !== imageId))
   }
 
   const handleSave = async () => {
@@ -181,17 +196,27 @@ export function ResourceManager({
     }
 
     const updatedActivities: Activity[] = activities.map((activity) => {
-      const img = getImage(activity.id)
-      if (img) {
-        const image: TeachingImage = {
-          url: img.url,
-          description: img.description,
-          showWhen: img.showWhen,
+      const actImages = getImages(activity.id)
+      const teachingImages: TeachingImage[] = actImages.map((img) => ({
+        url: img.url,
+        description: img.description,
+        showWhen: img.showWhen,
+      }))
+
+      // Save as images[] (new format) + image (backward compat with first image)
+      const { image: _old, images: _oldArr, ...teachingClean } = activity.teaching as Activity['teaching'] & { image?: TeachingImage; images?: TeachingImage[] }
+
+      if (teachingImages.length > 0) {
+        return {
+          ...activity,
+          teaching: {
+            ...teachingClean,
+            images: teachingImages,
+            image: teachingImages[0], // backward compat
+          },
         }
-        return { ...activity, teaching: { ...activity.teaching, image } }
       }
-      const { image: _removed, ...teachingWithoutImage } = activity.teaching as Activity['teaching'] & { image?: TeachingImage }
-      return { ...activity, teaching: teachingWithoutImage }
+      return { ...activity, teaching: teachingClean }
     })
 
     setIsSaving(true)
@@ -225,7 +250,8 @@ export function ResourceManager({
     }
   }
 
-  const assignedCount = images.length
+  const totalImages = images.length
+  const activitiesWithImages = new Set(images.map((i) => i.activityId)).size
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -271,155 +297,161 @@ export function ResourceManager({
       <div className="mb-6">
         <h1 className="mb-1 text-2xl font-bold">Recursos: {lessonTitle}</h1>
         <p className="text-sm text-gray-500">
-          {assignedCount} de {activities.length} actividades con imagen
+          {totalImages} imagen{totalImages !== 1 ? 'es' : ''} en {activitiesWithImages} de {activities.length} actividades
         </p>
       </div>
 
-      {/* 3-column table */}
-      <div className="overflow-hidden rounded-lg border bg-white">
-        {/* Table header */}
-        <div className="grid grid-cols-[1fr_200px_1fr] border-b bg-gray-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
-          <span>Actividad</span>
-          <span className="text-center">Imagen</span>
-          <span>Configuración</span>
-        </div>
-
-        {/* Rows */}
+      {/* Activity rows */}
+      <div className="space-y-2">
         {activities.map((activity, index) => {
-          const img = getImage(activity.id)
+          const actImages = getImages(activity.id)
           const isUploading = uploadingFor === activity.id
           const typeLabel = TYPE_LABELS[activity.type] || activity.type
           const typeColor = TYPE_COLORS[activity.type] || 'bg-gray-100 text-gray-700'
+          const isExpanded = expandedActivity === activity.id
 
           return (
-            <div
-              key={activity.id}
-              className={`grid grid-cols-[1fr_200px_1fr] items-start gap-4 px-4 py-4 ${
-                index < activities.length - 1 ? 'border-b' : ''
-              }`}
-            >
-              {/* Col 1: Activity info */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-gray-400">{index + 1}.</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${typeColor}`}>
-                    {typeLabel}
-                  </span>
-                </div>
-                <p className="text-sm leading-relaxed text-gray-700">
-                  {activity.teaching.agent_instruction}
-                </p>
-              </div>
-
-              {/* Col 2: Image */}
-              <div className="flex flex-col items-center gap-2">
-                {img ? (
-                  <>
-                    <button
-                      onClick={() => setPreviewImage(img.url)}
-                      className="h-28 w-full overflow-hidden rounded-lg border bg-gray-100 cursor-zoom-in"
-                    >
-                      <img
-                        src={img.url}
-                        alt={img.fileName}
-                        className="h-full w-full object-cover"
-                      />
-                    </button>
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => handleUploadClick(activity.id)}
-                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
-                        disabled={isUploading}
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                        Cambiar
-                      </button>
-                      <button
-                        onClick={() => removeImage(activity.id)}
-                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-red-500 hover:bg-red-50"
-                      >
-                        <X className="h-3 w-3" />
-                        Quitar
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => handleUploadClick(activity.id)}
-                    className="flex h-28 w-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-400 transition-colors hover:border-blue-400 hover:text-blue-500"
-                    disabled={isUploading}
-                  >
-                    {isUploading ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        <span className="text-xs">Subiendo...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-5 w-5" />
-                        <span className="text-xs">Subir imagen</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-
-              {/* Col 3: Config (description + showWhen) */}
-              <div>
-                {img ? (
-                  <div className="space-y-3">
-                    <div>
-                      <div className="mb-1 flex items-center justify-between">
-                        <label className="text-xs font-medium text-gray-600">
-                          Descripción para la IA *
-                        </label>
-                        {describingFor === activity.id ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-violet-600">
-                            <Sparkles className="h-3 w-3 animate-pulse" />
-                            Describiendo...
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => describeImage(activity.id, img.url)}
-                            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-violet-600 hover:bg-violet-50"
-                            title="Generar descripción con IA"
-                          >
-                            <Sparkles className="h-3 w-3" />
-                            Describir con IA
-                          </button>
-                        )}
-                      </div>
-                      <textarea
-                        value={img.description}
-                        onChange={(e) => updateImage(activity.id, { description: e.target.value })}
-                        placeholder="Describe qué muestra la imagen para que la IA la referencie..."
-                        className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none"
-                        rows={2}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <span className="text-xs font-medium text-gray-600">Mostrar imagen:</span>
-                      {SHOW_WHEN_OPTIONS.map(({ value, label }) => (
-                        <label key={value} className="flex items-center gap-1.5 text-xs text-gray-600">
-                          <input
-                            type="radio"
-                            name={`showWhen-${activity.id}`}
-                            value={value}
-                            checked={img.showWhen === value}
-                            onChange={() => updateImage(activity.id, { showWhen: value })}
-                            className="h-3.5 w-3.5"
-                          />
-                          {label}
-                        </label>
-                      ))}
-                    </div>
+            <div key={activity.id} className="overflow-hidden rounded-lg border bg-white">
+              {/* Row: activity left, images right */}
+              <div className="flex">
+                {/* Left: activity info (~60%) */}
+                <div className="flex-1 border-r px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-400">{index + 1}.</span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${typeColor}`}>
+                      {typeLabel}
+                    </span>
                   </div>
-                ) : (
-                  <p className="py-4 text-center text-xs text-gray-400">
-                    Sin imagen asignada
+                  <p className="mt-1 text-sm leading-snug text-gray-600 line-clamp-2">
+                    {activity.teaching.agent_instruction}
                   </p>
-                )}
+                </div>
+
+                {/* Right: image zone (~40%) */}
+                <div className="flex w-[280px] shrink-0 flex-col items-center justify-center gap-2 px-4 py-3">
+                  {actImages.length > 0 ? (
+                    <>
+                      {/* Thumbnails row */}
+                      <div className="flex items-center gap-2">
+                        {actImages.map((img) => (
+                          <button
+                            key={img.id}
+                            onClick={() => setExpandedActivity(isExpanded ? null : activity.id)}
+                            className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border bg-white transition-shadow hover:shadow-md"
+                          >
+                            <img src={img.url} alt={img.fileName} className="h-full w-full object-cover" />
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => handleUploadClick(activity.id)}
+                          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-gray-400 transition-colors hover:border-blue-400 hover:text-blue-500"
+                          disabled={isUploading}
+                        >
+                          {isUploading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Plus className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => setExpandedActivity(isExpanded ? null : activity.id)}
+                        className="text-xs text-gray-400 hover:text-blue-500"
+                      >
+                        {isExpanded ? 'Ocultar detalles ▲' : 'Ver detalles ▼'}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleUploadClick(activity.id)}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 py-3 text-sm text-gray-400 transition-colors hover:border-blue-400 hover:bg-blue-50/50 hover:text-blue-500"
+                      disabled={isUploading}
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Subiendo...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4" />
+                          Subir imagen
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Expanded: image details */}
+              {isExpanded && actImages.length > 0 && (
+                <div className="border-t bg-gray-50 px-4 py-3 space-y-3">
+                  {actImages.map((img, imgIdx) => (
+                    <div key={img.id} className="flex items-start gap-3">
+                      {/* Thumbnail */}
+                      <button
+                        onClick={() => setPreviewImage(img.url)}
+                        className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-white cursor-zoom-in"
+                      >
+                        <img src={img.url} alt={img.fileName} className="h-full w-full object-cover" />
+                      </button>
+
+                      {/* Config */}
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-gray-500">
+                            Imagen {imgIdx + 1}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {describingFor === img.id ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-violet-600">
+                                <Sparkles className="h-3 w-3 animate-pulse" />
+                                Describiendo...
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => describeImage(img.id, img.url)}
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-violet-600 hover:bg-violet-50"
+                              >
+                                <Sparkles className="h-3 w-3" />
+                                IA
+                              </button>
+                            )}
+                            <button
+                              onClick={() => removeImage(img.id)}
+                              className="rounded p-0.5 text-red-400 hover:bg-red-50 hover:text-red-600"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <textarea
+                          value={img.description}
+                          onChange={(e) => updateImage(img.id, { description: e.target.value })}
+                          placeholder="Descripción para la IA..."
+                          className="w-full rounded border border-gray-200 px-2 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none"
+                          rows={2}
+                        />
+                        <div className="flex gap-3">
+                          {SHOW_WHEN_OPTIONS.map(({ value, label }) => (
+                            <label key={value} className="flex items-center gap-1 text-xs text-gray-500">
+                              <input
+                                type="radio"
+                                name={`showWhen-${img.id}`}
+                                value={value}
+                                checked={img.showWhen === value}
+                                onChange={() => updateImage(img.id, { showWhen: value })}
+                                className="h-3 w-3"
+                              />
+                              {label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}
@@ -429,8 +461,8 @@ export function ResourceManager({
       <div className="sticky bottom-0 mt-6 rounded-lg border bg-white p-4 shadow-lg">
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-600">
-            {assignedCount > 0
-              ? `${assignedCount} imagen${assignedCount > 1 ? 'es' : ''} asignada${assignedCount > 1 ? 's' : ''}`
+            {totalImages > 0
+              ? `${totalImages} imagen${totalImages > 1 ? 'es' : ''} en ${activitiesWithImages} actividad${activitiesWithImages > 1 ? 'es' : ''}`
               : 'Sin imágenes — puedes guardar así'}
           </p>
           <Button
