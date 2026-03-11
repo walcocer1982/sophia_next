@@ -36,6 +36,8 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
     abortControllerRef.current = null
   }, [])
 
+  const rafRef = useRef<number | null>(null)
+
   const sendStream = useCallback(async (
     message: string,
     step: PlannerStep,
@@ -58,10 +60,15 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
       history,
       (text) => {
         planner.streamingContentRef.current += text
-        planner.updateAssistantMessage(
-          assistantId,
-          planner.streamingContentRef.current
-        )
+        if (!rafRef.current) {
+          rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = null
+            planner.updateAssistantMessage(
+              assistantId,
+              planner.streamingContentRef.current
+            )
+          })
+        }
       },
       (field, value) => {
         planner.updateField(field as keyof PlannerData, value as PlannerData[keyof PlannerData])
@@ -72,6 +79,12 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
         pendingStepRef.current = typedStep
       },
       () => {
+        // Flush any pending RAF update
+        if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current)
+          rafRef.current = null
+          planner.updateAssistantMessage(assistantId, planner.streamingContentRef.current)
+        }
         planner.completeAssistantMessage(assistantId)
         planner.setIsLoading(false)
         abortControllerRef.current = null

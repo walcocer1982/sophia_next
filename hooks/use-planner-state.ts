@@ -135,12 +135,16 @@ export function usePlannerState(courseContext?: CourseContext, storageKey?: stri
   const [isLoading, setIsLoading] = useState(false)
   const streamingContentRef = useRef<string>('')
 
-  // Persist to localStorage on changes (debounced via completed messages)
+  // Persist to localStorage on changes (debounced to avoid blocking main thread)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    // Only save when not loading (avoid saving mid-stream)
     if (!isLoading) {
-      savePlannerState(storageKey, step, data, messages)
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = setTimeout(() => {
+        savePlannerState(storageKey, step, data, messages)
+      }, 500)
     }
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
   }, [storageKey, step, data, messages, isLoading])
 
   const sectionStatuses = useMemo(
