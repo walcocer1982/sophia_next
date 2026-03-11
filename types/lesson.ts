@@ -48,6 +48,7 @@ export interface Teaching {
   agent_instruction: string     // Instrucción directa al AI sobre qué enseñar
   target_length?: string        // Extensión esperada: "150-300 palabras"
   context?: string              // Contexto adicional: "Sector: X. País: Y"
+  image_suggestions?: string[]  // Sugerencias de IA: qué imágenes necesita esta actividad
   image?: TeachingImage         // DEPRECATED: backward compat — usar images[]
   images?: TeachingImage[]      // Múltiples imágenes por actividad (ordenadas)
 }

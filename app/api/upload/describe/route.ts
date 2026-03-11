@@ -11,7 +11,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { imageUrl } = (await request.json()) as { imageUrl?: string }
+  const { imageUrl, expectedContent } = (await request.json()) as {
+    imageUrl?: string
+    expectedContent?: string // Optional: compare image against expected description
+  }
   if (!imageUrl) {
     return NextResponse.json({ error: 'imageUrl is required' }, { status: 400 })
   }
@@ -54,7 +57,38 @@ export async function POST(request: Request) {
     const description =
       response.content[0].type === 'text' ? response.content[0].text : ''
 
-    return NextResponse.json({ description })
+    // If expectedContent provided, validate relevance
+    let isRelevant: boolean | null = null
+    let relevanceNote: string | null = null
+
+    if (expectedContent && description) {
+      const relevanceCheck = await anthropic.messages.create({
+        model: DEFAULT_MODEL,
+        max_tokens: 100,
+        messages: [
+          {
+            role: 'user',
+            content: `Imagen subida: "${description}"
+Imagen esperada: "${expectedContent}"
+
+¿La imagen subida corresponde a lo que se esperaba? Responde SOLO con JSON:
+{"relevant": true/false, "note": "razón breve en español (máx 15 palabras)"}`,
+          },
+        ],
+      })
+
+      const checkText =
+        relevanceCheck.content[0].type === 'text' ? relevanceCheck.content[0].text : ''
+      try {
+        const parsed = JSON.parse(checkText) as { relevant: boolean; note: string }
+        isRelevant = parsed.relevant
+        relevanceNote = parsed.note
+      } catch {
+        // If parsing fails, skip relevance check
+      }
+    }
+
+    return NextResponse.json({ description, isRelevant, relevanceNote })
   } catch (error) {
     console.error('Error describing image:', error)
     return NextResponse.json(

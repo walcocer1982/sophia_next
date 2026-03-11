@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { PublishToggle } from '@/components/planner/publish-toggle'
 
 type CourseWithLessons = {
   id: string
@@ -18,6 +19,7 @@ type CourseWithLessons = {
     order: number
     keyPoints: string[]
     contentJson: unknown
+    isPublished: boolean
   }>
 }
 
@@ -49,6 +51,7 @@ export default async function CourseOverviewPage({
           order: true,
           keyPoints: true,
           contentJson: true,
+          isPublished: true,
         },
       },
     },
@@ -175,6 +178,12 @@ export default async function CourseOverviewPage({
                       </Button>
                     </Link>
                   </>
+                )}
+                {isDesigned && (
+                  <PublishToggle
+                    lessonId={lesson.id}
+                    initialPublished={lesson.isPublished}
+                  />
                 )}
                 <Link href={`/planner/${courseId}/${lesson.id}`}>
                   <Button

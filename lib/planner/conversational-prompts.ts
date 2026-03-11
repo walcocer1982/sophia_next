@@ -199,6 +199,13 @@ Genera entre 4-5 actividades total (MÁXIMO 5 para 45 min).
 - 2-4 criterios observables por actividad (concisos, no redundantes).
 - El understanding_level debe escalar con la progresión: memorized → understood → applied → analyzed.
 
+SUGERENCIAS DE IMÁGENES (image_suggestions):
+- Para CADA actividad, sugiere 1-2 imágenes que el profesor debería subir.
+- Describe qué tipo de imagen sería útil: "Diagrama de...", "Foto de...", "Tabla comparativa de...", "Esquema de...".
+- Sé específico al tema. Ej: "Foto de técnica de compresiones torácicas mostrando posición de manos" (NO "foto de RCP").
+- Si la actividad no necesita imagen (ej: cierre), usa array vacío [].
+- Las sugerencias guían al profesor para buscar/crear el recurso visual correcto.
+
 PREGUNTAS ABIERTAS (open_ended):
 - Las actividades de tipo "reflection" y "closing" DEBEN tener "open_ended": true en su verificación.
 - Las actividades de tipo "practice" avanzadas (complexity: complex) PUEDEN tener "open_ended": true.
@@ -211,7 +218,7 @@ FORMATO DE ACTIVIDAD:
   "type": "explanation|practice|reflection|closing",
   "complexity": "simple|moderate|complex",
   "keyPointIndex": 0,  // número (0-indexed) o null para closing,
-  "teaching": { "agent_instruction": "string", "target_length": "string" },
+  "teaching": { "agent_instruction": "string", "target_length": "string", "image_suggestions": ["string"] },
   "verification": {
     "question": "string",
     "success_criteria": {

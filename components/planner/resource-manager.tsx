@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Upload, X, Loader2, Save, Sparkles, Plus } from 'lucide-react'
+import { ArrowLeft, Upload, X, Loader2, Save, Sparkles, Plus, ImageIcon, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { Activity, TeachingImage } from '@/types/lesson'
@@ -99,23 +99,44 @@ export function ResourceManager({
   const getImages = (activityId: string) =>
     images.filter((img) => img.activityId === activityId)
 
-  const describeImage = async (imageId: string, imageUrl: string) => {
+  const [relevanceWarnings, setRelevanceWarnings] = useState<Record<string, string>>({})
+
+  const describeImage = async (imageId: string, imageUrl: string, activityId?: string) => {
     setDescribingFor(imageId)
     try {
+      // Find suggestions for this activity to validate relevance
+      const activity = activityId ? activities.find((a) => a.id === activityId) : null
+      const suggestions = activity?.teaching.image_suggestions || []
+      const expectedContent = suggestions.length > 0 ? suggestions.join('. ') : undefined
+
       const descRes = await fetch('/api/upload/describe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl }),
+        body: JSON.stringify({ imageUrl, expectedContent }),
         credentials: 'include',
       })
       if (descRes.ok) {
-        const { description } = (await descRes.json()) as { description: string }
+        const { description, isRelevant, relevanceNote } = (await descRes.json()) as {
+          description: string
+          isRelevant: boolean | null
+          relevanceNote: string | null
+        }
         if (description) {
           setImages((prev) =>
             prev.map((img) =>
               img.id === imageId ? { ...img, description } : img
             )
           )
+        }
+        if (isRelevant === false && relevanceNote) {
+          setRelevanceWarnings((prev) => ({ ...prev, [imageId]: relevanceNote }))
+          toast.warning(`Imagen posiblemente no relevante: ${relevanceNote}`)
+        } else {
+          setRelevanceWarnings((prev) => {
+            const next = { ...prev }
+            delete next[imageId]
+            return next
+          })
         }
       }
     } catch {
@@ -170,7 +191,7 @@ export function ResourceManager({
         },
       ])
       toast.success('Imagen subida')
-      describeImage(newId, url)
+      describeImage(newId, url, activityId)
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
@@ -309,6 +330,7 @@ export function ResourceManager({
           const typeLabel = TYPE_LABELS[activity.type] || activity.type
           const typeColor = TYPE_COLORS[activity.type] || 'bg-gray-100 text-gray-700'
           const isExpanded = expandedActivity === activity.id
+          const suggestions = activity.teaching.image_suggestions || []
 
           return (
             <div key={activity.id} className="overflow-hidden rounded-lg border bg-white">
@@ -328,7 +350,19 @@ export function ResourceManager({
                 </div>
 
                 {/* Right: image zone (~40%) */}
-                <div className="flex w-[280px] shrink-0 flex-col items-center justify-center gap-2 px-4 py-3">
+                <div className="flex w-[320px] shrink-0 flex-col gap-2 border-l px-4 py-3">
+                  {/* Image suggestions from AI */}
+                  {suggestions.length > 0 && actImages.length === 0 && (
+                    <div className="space-y-1">
+                      {suggestions.map((s, si) => (
+                        <div key={si} className="flex items-start gap-1.5 text-xs text-amber-700">
+                          <ImageIcon className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+                          <span>{s}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {actImages.length > 0 ? (
                     <>
                       {/* Thumbnails row */}
@@ -354,17 +388,23 @@ export function ResourceManager({
                           )}
                         </button>
                       </div>
+                      {/* Show remaining suggestions */}
+                      {suggestions.length > actImages.length && (
+                        <p className="text-xs text-amber-600">
+                          Faltan {suggestions.length - actImages.length} imagen{suggestions.length - actImages.length > 1 ? 'es' : ''} sugerida{suggestions.length - actImages.length > 1 ? 's' : ''}
+                        </p>
+                      )}
                       <button
                         onClick={() => setExpandedActivity(isExpanded ? null : activity.id)}
                         className="text-xs text-gray-400 hover:text-blue-500"
                       >
-                        {isExpanded ? 'Ocultar detalles ▲' : 'Ver detalles ▼'}
+                        {isExpanded ? 'Ocultar detalles' : 'Ver detalles'}
                       </button>
                     </>
                   ) : (
                     <button
                       onClick={() => handleUploadClick(activity.id)}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 py-3 text-sm text-gray-400 transition-colors hover:border-blue-400 hover:bg-blue-50/50 hover:text-blue-500"
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50/50 py-3 text-sm text-amber-600 transition-colors hover:border-amber-400 hover:bg-amber-50"
                       disabled={isUploading}
                     >
                       {isUploading ? (
@@ -432,6 +472,12 @@ export function ResourceManager({
                           className="w-full rounded border border-gray-200 px-2 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none"
                           rows={2}
                         />
+                        {relevanceWarnings[img.id] && (
+                          <div className="flex items-start gap-1.5 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-700">
+                            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                            <span>{relevanceWarnings[img.id]}</span>
+                          </div>
+                        )}
                         <div className="flex gap-3">
                           {SHOW_WHEN_OPTIONS.map(({ value, label }) => (
                             <label key={value} className="flex items-center gap-1 text-xs text-gray-500">

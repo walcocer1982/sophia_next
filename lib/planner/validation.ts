@@ -56,6 +56,7 @@ const TeachingSchema = z.object({
   agent_instruction: z.string().min(20),
   target_length: z.string().optional(),
   context: z.string().optional(),
+  image_suggestions: z.array(z.string()).optional(),
   image: TeachingImageSchema.optional(),
   images: z.array(TeachingImageSchema).optional(),
 })
