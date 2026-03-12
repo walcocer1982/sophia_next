@@ -12,7 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, Home, BookOpen, Sparkles } from 'lucide-react'
+import { User, LogOut, Settings, Home, BookOpen, Sparkles, Shield } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import Image from 'next/image'
 import { nameInitials } from '@/lib/utils'
@@ -33,6 +34,14 @@ export function Navbar() {
 
   const role = session?.user?.role || 'STUDENT'
   const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN'
+  const isSuperadmin = role === 'SUPERADMIN'
+
+  const roleLabel = role === 'SUPERADMIN' ? 'Super Admin' : role === 'ADMIN' ? 'Instructor' : 'Estudiante'
+  const roleBadgeClass = role === 'SUPERADMIN'
+    ? 'bg-red-100 text-red-700 border-red-200'
+    : role === 'ADMIN'
+      ? 'bg-amber-100 text-amber-700 border-amber-200'
+      : ''
 
   return (
     <header className="h-14 border-b  bg-white flex items-center justify-between px-6 sticky top-0 z-50">
@@ -78,6 +87,19 @@ export function Navbar() {
             Planificador
           </Link>
         )}
+        {isSuperadmin && (
+          <Link
+            href="/admin"
+            className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+              pathname.startsWith('/admin')
+                ? 'text-instructor-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Shield className="h-4 w-4" />
+            Admin
+          </Link>
+        )}
       </nav>
 
       {/* User Menu */}
@@ -87,6 +109,11 @@ export function Navbar() {
             <Button variant="ghost" className="relative h-10 rounded-xl flex items-center gap-2 px-4 ring-0">
               <span className='text-xs hidden sm:block'>{session.user.name || ''}</span>
               <span className='text-xs block sm:hidden'>{nameInitials(session.user.name || '')}</span>
+              {role !== 'STUDENT' && (
+                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${roleBadgeClass}`}>
+                  {roleLabel}
+                </Badge>
+              )}
               <Avatar className="size-8">
                 <AvatarImage src={session.user.image || undefined} alt={session.user.name || 'Usuario'} />
                 <AvatarFallback className="bg-student-100 text-student-700">
@@ -100,7 +127,10 @@ export function Navbar() {
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none">{session.user.name || 'Usuario'}</p>
                 <p className="text-xs leading-none text-muted-foreground">
-                  {session.user.email || 'Estudiante'}
+                  {session.user.email}
+                </p>
+                <p className="text-xs leading-none text-muted-foreground">
+                  {roleLabel}
                 </p>
               </div>
             </DropdownMenuLabel>
