@@ -119,6 +119,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.role = dbUser.role
           token.careerId = dbUser.careerId
         }
+        return token
+      }
+
+      // On subsequent requests: refresh careerId from DB if missing
+      // This handles the case where a user selects their career after login
+      if (token.sub && !token.careerId) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: { careerId: true },
+        })
+        if (dbUser?.careerId) {
+          token.careerId = dbUser.careerId
+        }
       }
 
       return token
