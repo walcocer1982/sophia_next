@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   let baseSlug = slugify(titulo)
   let slug = baseSlug
   let counter = 1
-  while (await prisma.course.findUnique({ where: { slug } })) {
+  while (await prisma.course.findFirst({ where: { slug, deletedAt: null } })) {
     slug = `${baseSlug}-${counter}`
     counter++
   }

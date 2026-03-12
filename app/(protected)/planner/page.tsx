@@ -21,7 +21,7 @@ export default async function PlannerPage() {
   if (!session?.user?.id) redirect('/login')
 
   const courses = (await prisma.course.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, deletedAt: null },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,

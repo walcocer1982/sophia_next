@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PublishToggle } from '@/components/planner/publish-toggle'
+import { DeleteCourseButton } from '@/components/planner/delete-course-button'
 
 type CourseWithLessons = {
   id: string
@@ -33,8 +34,8 @@ export default async function CourseOverviewPage({
 
   const { courseId } = await params
 
-  const course = (await prisma.course.findUnique({
-    where: { id: courseId },
+  const course = (await prisma.course.findFirst({
+    where: { id: courseId, deletedAt: null },
     select: {
       id: true,
       title: true,
@@ -88,11 +89,14 @@ export default async function CourseOverviewPage({
               </p>
             )}
           </div>
-          {!course.isPublished && (
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-600">
-              Borrador
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {!course.isPublished && (
+              <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-600">
+                Borrador
+              </span>
+            )}
+            <DeleteCourseButton courseId={course.id} courseTitle={course.title} />
+          </div>
         </div>
 
         <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
