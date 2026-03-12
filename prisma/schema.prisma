@@ -147,6 +147,7 @@ model LessonSession {
   activityId     String?   // Referencia a contentJson.activities[].id
   summaryText    String?   @db.Text
   lastSummaryAt  DateTime?
+  isTest         Boolean   @default(false)
   progress       Float     @default(0)
   grade          Float?
   completedAt    DateTime?

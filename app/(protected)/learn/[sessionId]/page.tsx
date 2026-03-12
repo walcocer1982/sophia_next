@@ -49,6 +49,7 @@ export default async function ChatPage({
         include: {
           course: {
             select: {
+              id: true,
               instructor: true,
             },
           },
@@ -101,6 +102,18 @@ export default async function ChatPage({
     lessonSession.lesson.course?.instructor || ''
   )
 
+  // Build test mode props if this is a test session
+  const testMode = lessonSession.isTest && lessonSession.lesson.course
+    ? {
+        courseId: lessonSession.lesson.course.id,
+        activities: (contentJson?.activities || []).map((a) => ({
+          id: a.id,
+          type: a.type,
+          title: a.teaching.agent_instruction,
+        })),
+      }
+    : undefined
+
   return (
     <LearningLayout
       sessionId={lessonSession.id}
@@ -114,6 +127,7 @@ export default async function ChatPage({
         total: totalActivities,
         percentage: Math.round((completedCount / totalActivities) * 100),
       }}
+      testMode={testMode}
     >
       <ChatInterface
         sessionId={lessonSession.id}

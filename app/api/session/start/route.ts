@@ -33,11 +33,26 @@ export async function POST(request: Request) {
   }
 
   // 3. Parse body
-  const { lessonId } = await request.json()
+  const { lessonId, isTest, startFromActivity } = await request.json() as {
+    lessonId: string
+    isTest?: boolean
+    startFromActivity?: string // activityId to start from
+  }
 
-  // 4. Check if lesson exists and is published
+  // 3b. Test mode: only ADMIN/SUPERADMIN can create test sessions
+  if (isTest) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true },
+    })
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPERADMIN')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
+  // 4. Check if lesson exists (test mode: allow unpublished)
   const lesson = await prisma.lesson.findUnique({
-    where: { id: lessonId, isPublished: true },
+    where: { id: lessonId, ...(isTest ? {} : { isPublished: true }) },
     select: {
       id: true,
       title: true,
@@ -70,16 +85,86 @@ export async function POST(request: Request) {
     )
   }
 
-  // 6. Check for active session
+  // 6. Determine starting activity
+  const activities = contentJson?.activities || []
+  let startActivityId = firstActivity.activityId
+
+  if (isTest && startFromActivity) {
+    const targetIdx = activities.findIndex((a) => a.id === startFromActivity)
+    if (targetIdx >= 0) {
+      startActivityId = startFromActivity
+    }
+  }
+
+  // 7. Test mode: delete any existing test session for this lesson, then create fresh
+  if (isTest) {
+    const existingTest = await prisma.lessonSession.findFirst({
+      where: {
+        userId: session.user.id,
+        lessonId,
+        isTest: true,
+      },
+    })
+    if (existingTest) {
+      await prisma.lessonSession.delete({ where: { id: existingTest.id } })
+    }
+
+    const lessonSession = await prisma.lessonSession.create({
+      data: {
+        userId: session.user.id,
+        lessonId,
+        sessionAttempt: 1,
+        startedAt: new Date(),
+        lastActivityAt: new Date(),
+        activityId: startActivityId,
+        isTest: true,
+      },
+    })
+
+    // If starting from a later activity, mark previous ones as completed
+    if (startFromActivity) {
+      const targetIdx = activities.findIndex((a) => a.id === startFromActivity)
+      if (targetIdx > 0) {
+        const previousActivities = activities.slice(0, targetIdx)
+        await prisma.activityProgress.createMany({
+          data: previousActivities.map((a) => ({
+            lessonSessionId: lessonSession.id,
+            activityId: a.id,
+            status: 'COMPLETED' as const,
+            completedAt: new Date(),
+          })),
+        })
+      }
+    }
+
+    logger.info('session.start.test_created', {
+      sessionId: lessonSession.id,
+      userId: session.user.id,
+      lessonId,
+      activityId: startActivityId,
+    })
+
+    return NextResponse.json({
+      sessionId: lessonSession.id,
+      isTest: true,
+      lesson: {
+        title: lesson.title,
+        courseTitle: lesson.course.title,
+      },
+    })
+  }
+
+  // 8. Normal mode: Check for active session
   let lessonSession = await prisma.lessonSession.findFirst({
     where: {
       userId: session.user.id,
       lessonId: lessonId,
+      isTest: false,
       endedAt: null,
     },
   })
 
-  // 7. If no active session, create one with first activity
+  // 9. If no active session, create one with first activity
   if (!lessonSession) {
     lessonSession = await prisma.lessonSession.create({
       data: {
@@ -88,7 +173,7 @@ export async function POST(request: Request) {
         sessionAttempt: 1,
         startedAt: new Date(),
         lastActivityAt: new Date(),
-        activityId: firstActivity.activityId, // 🔥 FIX: Inicializar con primera actividad
+        activityId: firstActivity.activityId,
       },
     })
 
@@ -113,7 +198,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // 8. Return session info
+  // 10. Return session info
   return NextResponse.json({
     sessionId: lessonSession.id,
     lesson: {

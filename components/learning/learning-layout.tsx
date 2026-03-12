@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { LearningSidebar } from './learning-sidebar'
 import { ImagePanel, type ActivityImage } from './image-panel'
+import { TestModeBanner } from './test-mode-banner'
 import { PanelLeft, PanelRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +24,10 @@ interface LearningLayoutProps {
     total: number
     percentage: number
   }
+  testMode?: {
+    courseId: string
+    activities: { id: string; type: string; title: string }[]
+  }
 }
 
 export function LearningLayout({
@@ -34,6 +39,7 @@ export function LearningLayout({
   keyPoints,
   allImages,
   initialProgress,
+  testMode,
 }: LearningLayoutProps) {
   const [leftCollapsed, setLeftCollapsed] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(false)
@@ -112,6 +118,13 @@ export function LearningLayout({
           leftCollapsed && rightCollapsed && 'max-w-5xl mx-auto'
         )}
       >
+        {testMode && (
+          <TestModeBanner
+            sessionId={sessionId}
+            courseId={testMode.courseId}
+            activities={testMode.activities}
+          />
+        )}
         {children}
       </main>
 

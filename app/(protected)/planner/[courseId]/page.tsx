@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PublishToggle } from '@/components/planner/publish-toggle'
+import { TestLessonButton } from '@/components/planner/test-lesson-button'
 import { DeleteCourseButton } from '@/components/planner/delete-course-button'
 
 type CourseWithLessons = {
@@ -112,8 +113,14 @@ export default async function CourseOverviewPage({
 
         {course.lessons.map((lesson) => {
           const json = lesson.contentJson as { activities?: Array<{
+            id: string
+            type: string
             verified?: boolean
-            teaching?: { images?: Array<{ url: string }>, image?: { url: string } }
+            teaching?: {
+              agent_instruction: string
+              images?: Array<{ url: string }>
+              image?: { url: string }
+            }
           }> } | null
           const isDesigned =
             json?.activities && json.activities.length > 0
@@ -151,6 +158,16 @@ export default async function CourseOverviewPage({
 
               {/* Actions */}
               <div className="flex shrink-0 gap-2">
+                <Link href={`/planner/${courseId}/${lesson.id}`}>
+                  <Button
+                    variant={isDesigned ? 'outline' : 'default'}
+                    size="sm"
+                    className="gap-1.5"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Diseño
+                  </Button>
+                </Link>
                 {isDesigned && (
                   <>
                     <Link href={`/planner/${courseId}/${lesson.id}/verification`}>
@@ -181,24 +198,20 @@ export default async function CourseOverviewPage({
                         Recursos
                       </Button>
                     </Link>
+                    <TestLessonButton
+                      lessonId={lesson.id}
+                      activities={(json?.activities || []).map((a) => ({
+                        id: a.id,
+                        type: a.type,
+                        title: a.teaching?.agent_instruction || '',
+                      }))}
+                    />
+                    <PublishToggle
+                      lessonId={lesson.id}
+                      initialPublished={lesson.isPublished}
+                    />
                   </>
                 )}
-                {isDesigned && (
-                  <PublishToggle
-                    lessonId={lesson.id}
-                    initialPublished={lesson.isPublished}
-                  />
-                )}
-                <Link href={`/planner/${courseId}/${lesson.id}`}>
-                  <Button
-                    variant={isDesigned ? 'outline' : 'default'}
-                    size="sm"
-                    className="gap-1.5"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    {isDesigned ? 'Editar' : 'Diseñar'}
-                  </Button>
-                </Link>
               </div>
             </div>
           )

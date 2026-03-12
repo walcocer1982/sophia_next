@@ -63,17 +63,19 @@ export function Navbar() {
           <Home className="h-4 w-4" />
           Inicio
         </Link>
-        <Link
-          href="/lessons"
-          className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-            pathname === '/lessons'
-              ? 'text-instructor-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <BookOpen className="h-4 w-4" />
-          Clases
-        </Link>
+        {role !== 'ADMIN' && (
+          <Link
+            href="/lessons"
+            className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+              pathname === '/lessons'
+                ? 'text-instructor-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <BookOpen className="h-4 w-4" />
+            Clases
+          </Link>
+        )}
         {isAdmin && (
           <Link
             href="/planner"
