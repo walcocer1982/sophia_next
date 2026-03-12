@@ -8,7 +8,7 @@ import {
   CardDescription,
   CardTitle,
 } from '@/components/ui/card'
-import { BookOpen, Loader2 } from 'lucide-react'
+import { BookOpen, Loader2, CheckCircle2, Play } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface LessonCardProps {
@@ -23,9 +23,10 @@ interface LessonCardProps {
       slug: string
     }
   }
+  status?: 'completed' | 'in_progress' | 'not_started'
 }
 
-export function LessonCard({ lesson }: LessonCardProps) {
+export function LessonCard({ lesson, status }: LessonCardProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 
@@ -82,7 +83,20 @@ export function LessonCard({ lesson }: LessonCardProps) {
             </ul>
           </CardDescription>
         )}
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-between">
+          {status === 'completed' && (
+            <span className="flex items-center gap-1 text-xs font-medium text-green-600">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Completada
+            </span>
+          )}
+          {status === 'in_progress' && (
+            <span className="flex items-center gap-1 text-xs font-medium text-blue-600">
+              <Play className="h-3.5 w-3.5" />
+              En progreso
+            </span>
+          )}
+          {(!status || status === 'not_started') && <span />}
           {isLoading && (
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
           )}

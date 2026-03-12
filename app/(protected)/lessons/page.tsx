@@ -1,11 +1,10 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { LessonCard } from '@/components/lessons/lesson-card'
+import { CareerFilter } from '@/components/lessons/career-filter'
 import { InteractiveGridPattern } from '@/components/ui/interactive-grid-pattern'
 import { cn } from '@/lib/utils'
 
-// Tipo para lecciones con curso
-type LessonWithCourse = {
+type LessonRow = {
   id: string
   title: string
   slug: string
@@ -14,30 +13,32 @@ type LessonWithCourse = {
   course: {
     title: string
     slug: string
+    career: { name: string } | null
   }
 }
 
 export default async function LessonsPage() {
   const session = await auth()
 
-  // Get user's career to filter lessons
-  let userCareerId: string | null = null
-  if (session?.user?.id) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { careerId: true, role: true },
-    })
-    // SUPERADMIN sees all careers, others see only their career
-    if (user && user.role !== 'SUPERADMIN') {
-      userCareerId = user.careerId
-    }
-  }
+  const user = session?.user?.id
+    ? await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { careerId: true, role: true },
+      })
+    : null
 
-  // Filter lessons by career if user has one assigned
+  const role = user?.role || 'STUDENT'
+  const isSuperadmin = role === 'SUPERADMIN'
+
+  // Filter by career for non-SUPERADMIN
+  const careerFilter = !isSuperadmin && user?.careerId
+    ? { course: { careerId: user.careerId } }
+    : {}
+
   const lessons = (await prisma.lesson.findMany({
     where: {
       isPublished: true,
-      ...(userCareerId ? { course: { careerId: userCareerId } } : {}),
+      ...careerFilter,
     },
     orderBy: [
       { course: { title: 'asc' } },
@@ -53,20 +54,58 @@ export default async function LessonsPage() {
         select: {
           title: true,
           slug: true,
+          career: { select: { name: true } },
         },
       },
     },
-  })) as LessonWithCourse[]
+  })) as LessonRow[]
 
-  // Agrupar por curso
-  const courseGroups = lessons.reduce((acc, lesson) => {
-    const courseTitle = lesson.course.title
-    if (!acc[courseTitle]) {
-      acc[courseTitle] = []
+  // Fetch user's sessions for progress (non-test only)
+  const userSessions = session?.user?.id
+    ? await prisma.lessonSession.findMany({
+        where: {
+          userId: session.user.id,
+          isTest: false,
+        },
+        select: {
+          lessonId: true,
+          completedAt: true,
+        },
+      })
+    : []
+
+  // Build progress map: lessonId → status
+  const progressMap = new Map<string, 'completed' | 'in_progress'>()
+  for (const s of userSessions) {
+    if (s.completedAt) {
+      progressMap.set(s.lessonId, 'completed')
+    } else if (!progressMap.has(s.lessonId)) {
+      progressMap.set(s.lessonId, 'in_progress')
     }
-    acc[courseTitle].push(lesson)
-    return acc
-  }, {} as Record<string, LessonWithCourse[]>)
+  }
+
+  // Enrich lessons with status and career name
+  const enrichedLessons = lessons.map((l) => ({
+    id: l.id,
+    title: l.title,
+    slug: l.slug,
+    keyPoints: l.keyPoints,
+    order: l.order,
+    course: {
+      title: l.course.title,
+      slug: l.course.slug,
+      careerName: l.course.career?.name || null,
+    },
+    status: (progressMap.get(l.id) || 'not_started') as 'completed' | 'in_progress' | 'not_started',
+  }))
+
+  // Fetch careers for SUPERADMIN filter
+  const careers = isSuperadmin
+    ? await prisma.career.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      })
+    : []
 
   return (
     <div className="container relative mx-auto px-4 py-12">
@@ -77,7 +116,6 @@ export default async function LessonsPage() {
         )}
       />
       <div className="relative z-10">
-
         <div className="mb-8">
           <h1 className="mb-2 text-4xl font-bold">Lecciones Disponibles</h1>
           <p className="text-lg text-muted-foreground">
@@ -85,30 +123,12 @@ export default async function LessonsPage() {
           </p>
         </div>
 
-        {lessons.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-12 text-center">
-            <p className="text-lg text-muted-foreground">
-              No hay lecciones disponibles en este momento
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-10">
-            {Object.entries(courseGroups).map(([courseTitle, courseLessons]) => (
-              <div key={courseTitle}>
-                <h2 className="mb-4 text-2xl font-semibold text-primary">
-                  {courseTitle}
-                </h2>
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {courseLessons.map((lesson) => (
-                    <LessonCard key={lesson.id} lesson={lesson} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <CareerFilter
+          lessons={enrichedLessons}
+          careers={careers}
+          showCareerFilter={isSuperadmin}
+        />
       </div>
-
     </div>
   )
 }

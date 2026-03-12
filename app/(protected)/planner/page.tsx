@@ -13,7 +13,7 @@ type CourseWithLessons = {
   isPublished: boolean
   createdAt: Date
   _count: { lessons: number }
-  lessons: Array<{ id: string; contentJson: unknown }>
+  lessons: Array<{ id: string; contentJson: unknown; isPublished: boolean }>
 }
 
 export default async function PlannerPage() {
@@ -32,7 +32,7 @@ export default async function PlannerPage() {
       createdAt: true,
       _count: { select: { lessons: true } },
       lessons: {
-        select: { id: true, contentJson: true },
+        select: { id: true, contentJson: true, isPublished: true },
         orderBy: { order: 'asc' },
       },
     },
@@ -78,6 +78,7 @@ export default async function PlannerPage() {
               const json = l.contentJson as { activities?: unknown[] } | null
               return json?.activities && json.activities.length > 0
             }).length
+            const publishedCount = course.lessons.filter((l) => l.isPublished).length
             const totalLessons = course._count.lessons
 
             return (
@@ -104,6 +105,10 @@ export default async function PlannerPage() {
                   <span className="text-gray-300">|</span>
                   <span>
                     {designedCount}/{totalLessons} diseñadas
+                  </span>
+                  <span className="text-gray-300">|</span>
+                  <span>
+                    {publishedCount}/{totalLessons} publicadas
                   </span>
                   {!course.isPublished && (
                     <>
