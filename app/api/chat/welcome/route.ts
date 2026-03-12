@@ -102,7 +102,7 @@ export async function POST(request: Request) {
       lessonContext,
     })
 
-    // Instrucción para mensaje de bienvenida - Estructura clara con objetivo y pregunta directa
+    // Instrucción para mensaje de bienvenida - Presenta el tema e invita a aprender
     const welcomeInstruction = `PRIMER MENSAJE DE LA LECCIÓN.
 
 TAREA: Genera el mensaje de bienvenida para la lección "${lessonTitle}".
@@ -111,14 +111,15 @@ ESTRUCTURA OBLIGATORIA (en este orden):
 1. Saludo breve y presentación (1 oración)
 2. Menciona el OBJETIVO de aprendizaje de la lección
 3. Lista los PUNTOS CLAVE que van a cubrir (usa los del sistema)
-4. Termina con la PREGUNTA DE VERIFICACIÓN de la primera actividad
+4. Invita al estudiante a comenzar: pregunta si tiene experiencia previa con el tema o si está listo para empezar
 
 ESTILO:
 - Tono conversacional pero estructurado
 - Sin emojis
 - Sin "Bienvenido" formal
 - Sin exclamaciones exageradas
-- La pregunta final debe ser la pregunta de verificación de la actividad actual
+
+IMPORTANTE: NO hagas la pregunta de verificación todavía. Primero debes ENSEÑAR el contenido de la primera actividad. La bienvenida solo presenta el tema e invita a empezar.
 
 Genera el mensaje ahora.`
 

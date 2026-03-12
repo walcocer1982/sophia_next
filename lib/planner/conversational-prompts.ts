@@ -199,6 +199,19 @@ Genera entre 4-5 actividades total (MÁXIMO 5 para 45 min).
 - 2-4 criterios observables por actividad (concisos, no redundantes).
 - El understanding_level debe escalar con la progresión: memorized → understood → applied → analyzed.
 
+⚠️ NIVEL DE PREGUNTAS SEGÚN TIPO DE ACTIVIDAD (Taxonomía de Bloom):
+- EXPLICACIÓN → Preguntas de COMPRENSIÓN (Bloom: Recordar/Comprender):
+  "¿Cuáles son los 3 tipos de...?", "¿Qué diferencia hay entre X e Y?", "¿Cómo se define...?"
+  Son preguntas sobre lo que se acaba de explicar. NO pidas análisis ni aplicación todavía.
+- PRÁCTICA → Preguntas de APLICACIÓN (Bloom: Aplicar/Analizar):
+  "En este escenario, ¿qué harías?", "Identifica los riesgos en...", "Clasifica estos elementos según..."
+  El estudiante aplica lo aprendido a situaciones concretas.
+- REFLEXIÓN → Preguntas de EVALUACIÓN (Bloom: Analizar/Evaluar):
+  "¿Por qué crees que...?", "¿Qué cambiarías si...?", "Compara estas dos situaciones y argumenta..."
+  El estudiante reflexiona críticamente sobre lo aprendido.
+- CIERRE → Preguntas ABIERTAS de síntesis:
+  "¿Qué fue lo más importante que aprendiste?", "¿Cómo aplicarías esto en tu trabajo?"
+
 SUGERENCIAS DE IMÁGENES (image_suggestions):
 - Para CADA actividad, sugiere 1-2 imágenes que el profesor debería subir.
 - Describe qué tipo de imagen sería útil: "Diagrama de...", "Foto de...", "Tabla comparativa de...", "Esquema de...".
@@ -206,11 +219,18 @@ SUGERENCIAS DE IMÁGENES (image_suggestions):
 - Si la actividad no necesita imagen (ej: cierre), usa array vacío [].
 - Las sugerencias guían al profesor para buscar/crear el recurso visual correcto.
 
-PREGUNTAS ABIERTAS (open_ended):
-- Las actividades de tipo "reflection" y "closing" DEBEN tener "open_ended": true en su verificación.
-- Las actividades de tipo "practice" avanzadas (complexity: complex) PUEDEN tener "open_ended": true.
+PREGUNTAS ABIERTAS vs CERRADAS (open_ended):
+Regla: la progresión es CERRADAS → MIXTAS → ABIERTAS, siguiendo Bloom.
+
+| Tipo actividad | open_ended | Razón |
+|----------------|------------|-------|
+| explanation    | SIEMPRE false | El estudiante acaba de aprender. Preguntas cerradas verifican comprensión sin sobrecargar. |
+| practice       | false (default) | Preguntas específicas del escenario. Solo "true" si complexity: complex. |
+| reflection     | SIEMPRE true | El estudiante ya practicó. Evalúa razonamiento, no keywords. |
+| closing        | SIEMPRE true | Síntesis personal. No hay respuesta única correcta. |
+
 - Cuando open_ended es true, los must_include son GUÍAS de evaluación (aspectos a observar), no respuestas exactas.
-- Las preguntas abiertas evalúan calidad de razonamiento, no keywords específicos.
+- Cuando open_ended es false, los must_include son criterios concretos que el estudiante debe mencionar.
 
 FORMATO DE ACTIVIDAD:
 {

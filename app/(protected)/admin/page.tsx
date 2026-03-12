@@ -2,13 +2,23 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { UserTable } from '@/components/admin/user-table'
+import { CareerManager } from '@/components/admin/career-manager'
 
 type UserRow = {
   id: string
   name: string | null
   email: string
   role: string
+  careerId: string | null
+  careerName: string | null
   createdAt: string
+}
+
+type CareerRow = {
+  id: string
+  name: string
+  slug: string
+  _count: { users: number; courses: number }
 }
 
 export default async function AdminPage() {
@@ -16,24 +26,46 @@ export default async function AdminPage() {
   if (!session?.user?.id) redirect('/login')
   if (session.user.role !== 'SUPERADMIN') redirect('/lessons')
 
-  const dbUsers = await prisma.user.findMany({
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      createdAt: true,
-      _count: { select: { lessonSessions: true, courses: true } },
-    },
-  })
+  const [dbUsers, dbCareers] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        careerId: true,
+        career: { select: { name: true } },
+        createdAt: true,
+        _count: { select: { lessonSessions: true, courses: true } },
+      },
+    }),
+    prisma.career.findMany({
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        _count: { select: { users: true, courses: true } },
+      },
+    }),
+  ])
 
   const users: UserRow[] = dbUsers.map((u) => ({
     id: u.id,
     name: u.name,
     email: u.email,
     role: u.role,
+    careerId: u.careerId,
+    careerName: u.career?.name || null,
     createdAt: u.createdAt.toISOString(),
+  }))
+
+  const careers: CareerRow[] = dbCareers.map((c) => ({
+    id: c.id,
+    name: c.name,
+    slug: c.slug,
+    _count: c._count,
   }))
 
   const stats = {
@@ -47,7 +79,7 @@ export default async function AdminPage() {
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="mb-1 text-3xl font-bold">Administración</h1>
-        <p className="text-muted-foreground">Gestión de usuarios y roles</p>
+        <p className="text-muted-foreground">Gestión de usuarios, roles y carreras</p>
       </div>
 
       {/* Stats */}
@@ -70,10 +102,16 @@ export default async function AdminPage() {
         </div>
       </div>
 
+      {/* Careers */}
+      <div className="mb-8 rounded-lg border bg-white p-6">
+        <h2 className="mb-4 text-lg font-semibold">Carreras</h2>
+        <CareerManager careers={careers} />
+      </div>
+
       {/* User Table */}
       <div className="rounded-lg border bg-white p-6">
         <h2 className="mb-4 text-lg font-semibold">Usuarios</h2>
-        <UserTable users={users} currentUserId={session.user.id} />
+        <UserTable users={users} currentUserId={session.user.id} careers={careers} />
       </div>
     </div>
   )

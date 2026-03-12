@@ -104,17 +104,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         token.sub = dbUser.id
         token.role = dbUser.role
+        token.careerId = dbUser.careerId
         return token
       }
 
       if (user) {
         token.sub = user.id
-        // Fetch role for credentials provider
+        // Fetch role and careerId for credentials provider
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { role: true },
+          select: { role: true, careerId: true },
         })
-        if (dbUser) token.role = dbUser.role
+        if (dbUser) {
+          token.role = dbUser.role
+          token.careerId = dbUser.careerId
+        }
       }
 
       return token
@@ -123,6 +127,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (session.user && token.sub) {
         session.user.id = token.sub
         session.user.role = (token.role as string) || 'STUDENT'
+        session.user.careerId = (token.careerId as string) || null
       }
       return session
     },

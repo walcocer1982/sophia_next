@@ -1,3 +1,4 @@
+import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { LessonCard } from '@/components/lessons/lesson-card'
 import { InteractiveGridPattern } from '@/components/ui/interactive-grid-pattern'
@@ -17,10 +18,26 @@ type LessonWithCourse = {
 }
 
 export default async function LessonsPage() {
-  // Obtener todas las lecciones publicadas con info del curso
+  const session = await auth()
+
+  // Get user's career to filter lessons
+  let userCareerId: string | null = null
+  if (session?.user?.id) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { careerId: true, role: true },
+    })
+    // SUPERADMIN sees all careers, others see only their career
+    if (user && user.role !== 'SUPERADMIN') {
+      userCareerId = user.careerId
+    }
+  }
+
+  // Filter lessons by career if user has one assigned
   const lessons = (await prisma.lesson.findMany({
     where: {
       isPublished: true,
+      ...(userCareerId ? { course: { careerId: userCareerId } } : {}),
     },
     orderBy: [
       { course: { title: 'asc' } },

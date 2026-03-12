@@ -93,24 +93,25 @@ export function getMaxTokensForActivity(complexity?: ActivityComplexity): number
  */
 const ACTIVITY_TYPE_TEMPLATES: Record<ActivityType, string> = {
   explanation: `MODO: EXPLICACIÓN
-- Introduce el concepto brevemente
-- Usa 1-2 ejemplos concretos
-- Termina con UNA pregunta`,
+- Explica tú primero el concepto con ejemplos concretos
+- El estudiante escucha y aprende, no adivina
+- Termina con UNA pregunta de comprensión sobre lo que acabas de explicar`,
 
   practice: `MODO: PRÁCTICA
-- Presenta el ejercicio
-- Espera que intente resolver
-- Da feedback específico`,
+- Presenta el escenario o ejercicio concreto
+- Haz preguntas CERRADAS y específicas: "¿Qué tipo de X es este?" "¿Qué harías primero?"
+- Abre progresivamente: si responde bien, pregunta "¿por qué?" o "¿qué pasaría si...?"
+- Da feedback específico sobre cada intento`,
 
   reflection: `MODO: REFLEXIÓN
-- Haz UNA pregunta abierta
-- Escucha la respuesta
-- Profundiza si es necesario`,
+- Haz UNA pregunta ABIERTA que invite a razonar
+- No hay respuesta única correcta — evalúa calidad del razonamiento
+- Profundiza con "¿por qué piensas eso?" o "¿puedes dar un ejemplo?"`,
 
   closing: `MODO: CIERRE
-- Resume en 2-3 puntos
-- Felicita brevemente
-- Indica siguiente paso`
+- Resume en 2-3 puntos clave
+- Pregunta ABIERTA de síntesis: "¿Qué fue lo más importante?" o "¿Cómo lo aplicarías?"
+- Felicita brevemente`
 }
 
 /**
@@ -240,22 +241,46 @@ EXTENSIÓN:
   const minCompleteness = verification.success_criteria?.min_completeness ?? 60
   const isOpenEnded = verification.open_ended === true
 
+  // Guidance for question approach by activity type
+  const questionTypeGuidance: Record<string, string> = {
+    explanation: `TIPO DE PREGUNTAS: CERRADAS (comprensión directa)
+- Pregunta sobre lo que ACABAS de explicar, no sobre lo que el estudiante debería deducir
+- Ej: "¿Cuáles son los 3 tipos de...?", "¿Qué diferencia hay entre X e Y?"
+- Si responde bien, puedes profundizar: "¿Y por qué es importante esa diferencia?"
+- NO pidas análisis ni aplicación — eso es para la práctica`,
+    practice: `TIPO DE PREGUNTAS: CERRADAS → ABIERTAS (progresión)
+- Empieza con preguntas específicas del escenario: "¿Qué tipo de riesgo ves aquí?"
+- Si responde correctamente, abre: "¿Por qué clasificaste así?" o "¿Qué harías diferente si...?"
+- Si se equivoca, mantén cerradas para guiar: "¿Es tipo A o tipo B?"`,
+    reflection: `TIPO DE PREGUNTAS: ABIERTAS (razonamiento)
+- No hay respuesta única correcta
+- Evalúa calidad del razonamiento, no keywords
+- Profundiza: "¿Por qué piensas eso?" "¿Puedes dar un ejemplo?"`,
+    closing: `TIPO DE PREGUNTAS: ABIERTAS (síntesis)
+- Busca que el estudiante integre lo aprendido
+- "¿Qué fue lo más importante?" "¿Cómo lo aplicarías?"
+- Acepta cualquier reflexión genuina`,
+  }
+  const questionGuidance = questionTypeGuidance[activityType] || questionTypeGuidance.explanation
+
   const verificationBlock = isOpenEnded
     ? `VERIFICACIÓN - Pregunta ABIERTA: "${verification.question}"
 Aspectos a observar (guías, no criterios estrictos): ${successCriteria.join(' | ')}
 Máximo intentos: ${maxAttempts}
 
-PREGUNTA ABIERTA — REGLAS ESPECIALES:
+${questionGuidance}
+
+PREGUNTA ABIERTA — REGLAS:
 - NO hay una única respuesta correcta
-- Evalúa calidad del RAZONAMIENTO, no keywords específicos
 - Acepta cualquier posición coherente y fundamentada
 - Si el estudiante reflexiona genuinamente, permite avanzar
-- Profundiza con "¿por qué piensas eso?" o "¿puedes dar un ejemplo?"
 - NO corrijas opiniones válidas, enriquece la discusión`
     : `VERIFICACIÓN - Pregunta: "${verification.question}"
 Criterios: ${successCriteria.join(' | ')}
 Umbral de aprobación: ${minCompleteness}%
 Máximo intentos: ${maxAttempts}
+
+${questionGuidance}
 
 VERIFICACIÓN FLEXIBLE:
 - Evalúa COMPRENSIÓN del concepto, no perfección de formato
@@ -272,7 +297,7 @@ VERIFICACIÓN FLEXIBLE:
     const actType = activity.type
 
     const typeDirectives: Record<string, string> = {
-      explanation: 'Mientras explicas, referencia las imágenes naturalmente. Pide al estudiante que las observe y te diga qué identifica.',
+      explanation: 'Usa las imágenes para ilustrar tu explicación. Describe qué muestra cada imagen y conecta con el concepto que estás enseñando. Después haz preguntas de comprensión sobre lo que acabas de explicar.',
       practice: 'El estudiante debe usar las imágenes como referencia para resolver el ejercicio. Pregunta qué elementos aplican al caso.',
       reflection: 'Pide al estudiante que relacione lo aprendido con lo que muestran las imágenes.',
       closing: 'Usa las imágenes como resumen visual. Pide al estudiante que las explique con lo aprendido.',

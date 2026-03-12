@@ -58,6 +58,12 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Auto-assign career from instructor
+    const instructor = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { careerId: true },
+    })
+
     const course = await prisma.course.create({
       data: {
         title: titulo,
@@ -65,6 +71,7 @@ export async function POST(request: Request) {
         capacidad,
         instructor: DEFAULT_INSTRUCTOR,
         userId: session.user.id,
+        careerId: instructor?.careerId || null,
         isPublished: false,
         lessons: {
           create: temas.map((tema, index) => {

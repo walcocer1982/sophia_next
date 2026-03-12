@@ -26,7 +26,14 @@ type UserRow = {
   name: string | null
   email: string
   role: string
+  careerId: string | null
+  careerName: string | null
   createdAt: string
+}
+
+type CareerOption = {
+  id: string
+  name: string
 }
 
 const ROLE_CONFIG: Record<string, { label: string; className: string }> = {
@@ -38,9 +45,11 @@ const ROLE_CONFIG: Record<string, { label: string; className: string }> = {
 export function UserTable({
   users: initialUsers,
   currentUserId,
+  careers,
 }: {
   users: UserRow[]
   currentUserId: string
+  careers: CareerOption[]
 }) {
   const [users, setUsers] = useState(initialUsers)
   const [search, setSearch] = useState('')
@@ -49,7 +58,8 @@ export function UserTable({
   const filtered = users.filter(
     (u) =>
       u.name?.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase())
+      u.email.toLowerCase().includes(search.toLowerCase()) ||
+      u.careerName?.toLowerCase().includes(search.toLowerCase())
   )
 
   const handleRoleChange = async (userId: string, newRole: string) => {
@@ -62,7 +72,7 @@ export function UserTable({
         credentials: 'include',
       })
       if (res.ok) {
-        const { user } = (await res.json()) as { user: UserRow }
+        const { user } = (await res.json()) as { user: { role: string } }
         setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: user.role } : u)))
         toast.success(`Rol actualizado a ${ROLE_CONFIG[user.role]?.label || user.role}`)
       } else {
@@ -76,12 +86,39 @@ export function UserTable({
     }
   }
 
+  const handleCareerChange = async (userId: string, careerId: string) => {
+    setUpdating(userId)
+    try {
+      const res = await fetch('/api/admin/users/update-career', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, careerId: careerId === 'none' ? null : careerId }),
+      })
+      if (res.ok) {
+        const careerName = careerId === 'none' ? null : careers.find((c) => c.id === careerId)?.name || null
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === userId ? { ...u, careerId: careerId === 'none' ? null : careerId, careerName } : u
+          )
+        )
+        toast.success(careerName ? `Carrera asignada: ${careerName}` : 'Carrera removida')
+      } else {
+        const data = (await res.json()) as { error?: string }
+        toast.error(data.error || 'Error al asignar carrera')
+      }
+    } catch {
+      toast.error('Error de conexión')
+    } finally {
+      setUpdating(null)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <Input
-          placeholder="Buscar por nombre o email..."
+          placeholder="Buscar por nombre, email o carrera..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"
@@ -95,14 +132,16 @@ export function UserTable({
               <TableHead>Usuario</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Rol</TableHead>
+              <TableHead>Carrera</TableHead>
               <TableHead>Registrado</TableHead>
-              <TableHead className="w-[180px]">Cambiar rol</TableHead>
+              <TableHead className="w-[150px]">Cambiar rol</TableHead>
+              <TableHead className="w-[180px]">Asignar carrera</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-gray-500 py-8">
+                <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                   No se encontraron usuarios
                 </TableCell>
               </TableRow>
@@ -124,6 +163,9 @@ export function UserTable({
                         {config.label}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-sm text-gray-600">
+                      {user.careerName || <span className="text-gray-400">Sin carrera</span>}
+                    </TableCell>
                     <TableCell className="text-gray-500 text-sm">
                       {new Date(user.createdAt).toLocaleDateString('es-PE', {
                         day: '2-digit',
@@ -144,6 +186,25 @@ export function UserTable({
                           <SelectItem value="STUDENT">Estudiante</SelectItem>
                           <SelectItem value="ADMIN">Instructor</SelectItem>
                           <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={user.careerId || 'none'}
+                        onValueChange={(val) => handleCareerChange(user.id, val)}
+                        disabled={updating === user.id}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Sin carrera" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin carrera</SelectItem>
+                          {careers.map((career) => (
+                            <SelectItem key={career.id} value={career.id}>
+                              {career.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </TableCell>

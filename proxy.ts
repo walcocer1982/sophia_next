@@ -53,6 +53,12 @@ export async function proxy(request: NextRequest) {
 
   if (session) {
     const role = session.user?.role || 'STUDENT'
+    const careerId = session.user?.careerId
+
+    // Users without career → redirect to career selection (SUPERADMIN exempt)
+    if (!careerId && role !== 'SUPERADMIN' && pathname !== '/select-career') {
+      return NextResponse.redirect(new URL('/select-career', request.url))
+    }
 
     // SUPERADMIN paths → solo SUPERADMIN
     const isSuperadminPath = SUPERADMIN_PATHS.some(

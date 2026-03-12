@@ -31,16 +31,19 @@ model User {
   googleId      String?   @unique
   avatar        String?
   role          UserRole  @default(STUDENT)
+  careerId      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // Relaciones
+  career         Career?          @relation(fields: [careerId], references: [id])
   lessonSessions LessonSession[]
   accounts       Account[]
   courses        Course[]
 
   @@index([email])
   @@index([googleId])
+  @@index([careerId])
 }
 
 model Account {
@@ -65,7 +68,22 @@ model Account {
 }
 
 // ============================================
-// 2. CONTENIDO EDUCATIVO
+// 2. CARRERAS / PROGRAMAS
+// ============================================
+
+model Career {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  // Relaciones
+  users   User[]
+  courses Course[]
+}
+
+// ============================================
+// 3. CONTENIDO EDUCATIVO
 // ============================================
 
 model Course {
@@ -75,6 +93,7 @@ model Course {
   capacidad   String?  @db.Text  // Competencia general del curso
   instructor  String   @db.Text  // Personalidad del AI instructor
   userId      String?            // Instructor que creó el curso
+  careerId    String?            // Carrera a la que pertenece el curso
   isPublished Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -82,10 +101,12 @@ model Course {
 
   // Relaciones
   user    User?    @relation(fields: [userId], references: [id])
+  career  Career?  @relation(fields: [careerId], references: [id])
   lessons Lesson[]
 
   @@index([slug])
   @@index([userId])
+  @@index([careerId])
   @@index([deletedAt])
 }
 
