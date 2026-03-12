@@ -31,6 +31,9 @@ export function Navbar() {
     }
   }
 
+  const role = session?.user?.role || 'STUDENT'
+  const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN'
+
   return (
     <header className="h-14 border-b  bg-white flex items-center justify-between px-6 sticky top-0 z-50">
       {/* Logo */}
@@ -62,17 +65,19 @@ export function Navbar() {
           <BookOpen className="h-4 w-4" />
           Clases
         </Link>
-        <Link
-          href="/planner"
-          className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-            pathname.startsWith('/planner')
-              ? 'text-instructor-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <Sparkles className="h-4 w-4" />
-          Planificador
-        </Link>
+        {isAdmin && (
+          <Link
+            href="/planner"
+            className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+              pathname.startsWith('/planner')
+                ? 'text-instructor-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Sparkles className="h-4 w-4" />
+            Planificador
+          </Link>
+        )}
       </nav>
 
       {/* User Menu */}

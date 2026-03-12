@@ -19,6 +19,12 @@ const PUBLIC_PATHS = [
   '/login',   // Página de login
 ]
 
+// Rutas que requieren rol ADMIN o SUPERADMIN
+const ADMIN_PATHS = ['/planner']
+
+// Rutas que requieren rol SUPERADMIN
+const SUPERADMIN_PATHS = ['/admin']
+
 export async function proxy(request: NextRequest) {
   const session = await auth()
   const { pathname } = request.nextUrl
@@ -35,12 +41,34 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Si intenta ir a /login pero ya está autenticado → Redirect a /lessons
+  // Si intenta ir a /login pero ya está autenticado → Redirect según rol
   if (pathname === '/login' && session) {
     const callbackUrl = request.nextUrl.searchParams.get('callbackUrl')
+    const role = session.user?.role || 'STUDENT'
+    const defaultRedirect = role === 'STUDENT' ? '/lessons' : '/planner'
     return NextResponse.redirect(
-      new URL(callbackUrl || '/lessons', request.url)
+      new URL(callbackUrl || defaultRedirect, request.url)
     )
+  }
+
+  if (session) {
+    const role = session.user?.role || 'STUDENT'
+
+    // SUPERADMIN paths → solo SUPERADMIN
+    const isSuperadminPath = SUPERADMIN_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    )
+    if (isSuperadminPath && role !== 'SUPERADMIN') {
+      return NextResponse.redirect(new URL('/lessons', request.url))
+    }
+
+    // ADMIN paths → solo ADMIN o SUPERADMIN
+    const isAdminPath = ADMIN_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    )
+    if (isAdminPath && role !== 'ADMIN' && role !== 'SUPERADMIN') {
+      return NextResponse.redirect(new URL('/lessons', request.url))
+    }
   }
 
   return NextResponse.next()

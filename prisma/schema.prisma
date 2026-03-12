@@ -16,6 +16,12 @@ datasource db {
 // 1. AUTENTICACIÓN Y USUARIOS
 // ============================================
 
+enum UserRole {
+  STUDENT
+  ADMIN
+  SUPERADMIN
+}
+
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
@@ -24,6 +30,7 @@ model User {
   image         String?
   googleId      String?   @unique
   avatar        String?
+  role          UserRole  @default(STUDENT)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

@@ -68,6 +68,10 @@ export async function POST(request: Request) {
   if (!session?.user?.id) {
     return new Response('Unauthorized', { status: 401 })
   }
+  const role = session.user.role || 'STUDENT'
+  if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
+    return new Response('Forbidden', { status: 403 })
+  }
 
   let body: unknown
   try {
