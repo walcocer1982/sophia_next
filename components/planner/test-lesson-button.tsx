@@ -37,11 +37,10 @@ export function TestLessonButton({
         }),
       })
 
+      const data = await res.json()
       if (res.ok) {
-        const { sessionId } = (await res.json()) as { sessionId: string }
-        router.push(`/learn/${sessionId}`)
+        router.push(`/learn/${data.sessionId}`)
       } else {
-        const data = (await res.json()) as { error?: string }
         toast.error(data.error || 'Error al iniciar prueba')
       }
     } catch {
@@ -65,6 +64,8 @@ export function TestLessonButton({
         size="sm"
         className="gap-1.5"
         onClick={() => setOpen(true)}
+        disabled={activities.length === 0}
+        title={activities.length === 0 ? 'Diseña la sesión primero' : undefined}
       >
         <Play className="h-3.5 w-3.5" />
         Probar

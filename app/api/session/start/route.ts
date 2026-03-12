@@ -80,8 +80,8 @@ export async function POST(request: Request) {
       userId: session.user.id,
     })
     return NextResponse.json(
-      { error: 'Lesson has no activities' },
-      { status: 500 }
+      { error: 'La sesión no tiene actividades diseñadas' },
+      { status: 400 }
     )
   }
 
