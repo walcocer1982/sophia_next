@@ -1,5 +1,6 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check } from 'lucide-react'
@@ -59,7 +60,7 @@ export default async function CourseOverviewPage({
     },
   })) as (CourseWithLessons & { userId: string | null }) | null
 
-  if (!course || course.userId !== session.user.id) {
+  if (!course || !isOwnerOrSuperadmin(session, course.userId)) {
     notFound()
   }
 

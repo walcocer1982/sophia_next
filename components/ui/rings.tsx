@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +20,7 @@ interface RingsProps {
  * - speed: Velocidad de rotación (slow, regular, fast, faster)
  * - color: Color de los anillos (black, blue, green, orange)
  */
-export function Rings({
+export const Rings = memo(function Rings({
   size = 40,
   speed = "regular",
   color = "black",
@@ -237,4 +238,4 @@ export function Rings({
       />
     </motion.div>
   );
-}
+})

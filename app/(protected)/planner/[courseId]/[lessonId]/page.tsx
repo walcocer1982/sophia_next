@@ -1,5 +1,6 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
 import { notFound, redirect } from 'next/navigation'
 import { PlannerLayout } from '@/components/planner/planner-layout'
 import type { CourseContext } from '@/types/planner'
@@ -65,7 +66,7 @@ export default async function SessionPlannerPage({
     },
   })) as LessonWithCourse | null
 
-  if (!lesson || lesson.course.id !== courseId || lesson.course.userId !== session.user.id) {
+  if (!lesson || lesson.course.id !== courseId || !isOwnerOrSuperadmin(session, lesson.course.userId)) {
     notFound()
   }
 

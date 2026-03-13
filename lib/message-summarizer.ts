@@ -83,8 +83,8 @@ function extractLastQuestion(content: string): string | null {
  * CRÍTICO: Preservar ESCENARIO + PREGUNTA para continuidad pedagógica
  */
 export function summarizeInstructorMessage(content: string): string {
-  // Mensajes cortos: mantener completos
-  if (content.length < 200) {
+  // Mensajes cortos: mantener completos (raised from 200 to 350 for better context)
+  if (content.length < 350) {
     return content
   }
 
@@ -93,20 +93,41 @@ export function summarizeInstructorMessage(content: string): string {
   // Extraer el escenario/ejemplo (CRÍTICO para "no sé")
   const scenario = extractScenario(content)
 
+  // Detectar si es un mensaje de TRANSICIÓN (contiene nuevo tema + pregunta)
+  // Estos mensajes son críticos: contienen la introducción al siguiente concepto
+  const isTransition = content.includes('Siguiente') ||
+      content.includes('siguiente') ||
+      content.includes('Ahora vamos') ||
+      content.includes('ahora vamos') ||
+      content.includes('nuevo tema') ||
+      content.includes('Pasemos') ||
+      content.includes('pasemos')
+
+  // Mensajes de transición: preservar más contexto (hasta 500 chars + pregunta)
+  if (isTransition && content.length < 600) {
+    return content
+  }
+
   // Construir contexto preservado
-  const buildContext = () => {
+  const buildContext = (includeIntro: boolean = false) => {
     const parts: string[] = []
+    if (includeIntro) {
+      // Preservar primeras 200 chars como intro del concepto
+      const intro = content.slice(0, 200).replace(/\n/g, ' ').trim()
+      parts.push(intro)
+    }
     if (scenario) parts.push(`ESCENARIO: "${scenario}"`)
     if (question) parts.push(`PREGUNTA: "${question}"`)
     return parts.join(' | ')
   }
 
-  // 1. Validación de respuesta correcta
+  // 1. Validación de respuesta correcta + transición a nuevo tema
   if (content.includes('completado') ||
       content.includes('Excelente') ||
       content.includes('Perfecto') ||
       content.includes('Correcto')) {
-    const ctx = buildContext()
+    // Si tiene escenario/pregunta, es una transición — preservar más
+    const ctx = buildContext(!!scenario || !!question)
     if (ctx) {
       return `[Validó respuesta. ${ctx}]`
     }
@@ -126,7 +147,7 @@ export function summarizeInstructorMessage(content: string): string {
       content.includes('Recuerda') ||
       content.includes('Pista:') ||
       content.includes('¿Qué parte')) {
-    const ctx = buildContext()
+    const ctx = buildContext(true)  // Include intro for hints (context matters)
     if (ctx) {
       return `[Dio pista. ${ctx}]`
     }
@@ -134,13 +155,14 @@ export function summarizeInstructorMessage(content: string): string {
   }
 
   // 4. Explicación con escenario y/o pregunta (caso más común)
-  const ctx = buildContext()
+  // Always include intro for explanations to preserve teaching context
+  const ctx = buildContext(true)
   if (ctx) {
     return `[${ctx}]`
   }
 
   // 5. Explicación sin pregunta ni escenario - mantener más contexto
-  const firstMeaningful = content.slice(0, 150).replace(/\n/g, ' ')
+  const firstMeaningful = content.slice(0, 250).replace(/\n/g, ' ')
   return `[${firstMeaningful}...]`
 }
 

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { ChatMessages } from './chat-messages'
 import { ChatInput, type ChatInputRef } from './chat-input'
 import { DevToolsModal } from './dev-tools-modal'
+import { useProgress } from './progress-context'
 import type { ChatMessage, OptimisticMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { toast } from 'sonner'
@@ -33,14 +34,7 @@ export function ChatInterface({
   const [isGeneratingWelcome, setIsGeneratingWelcome] = useState(
     initialMessages.length === 0
   )
-  const [activityProgress, setActivityProgress] = useState({
-    current: 1,
-    total: 3,
-    activityTitle: '',
-    percentage: 0,
-    lastCompletedId: null as string | null,
-    lastCompletedAt: null as string | null,
-  })
+  const { progress, updateProgress } = useProgress()
   const streamingContentRef = useRef<string>('')
   const assistantIdRef = useRef<string>('')
   const hasGeneratedWelcome = useRef(false)
@@ -152,53 +146,6 @@ export function ChatInterface({
     }
   }
 
-  // Poll for activity progress
-  useEffect(() => {
-    const fetchProgress = async () => {
-      try {
-        const res = await fetch(`/api/activity/progress?sessionId=${sessionId}`)
-        if (!res.ok) return
-
-        const data = await res.json()
-
-        // Detectar nueva actividad completada
-        if (
-          data.lastCompleted?.activityId &&
-          data.lastCompleted.activityId !== activityProgress.lastCompletedId
-        ) {
-          toast.success('¡Completaste una actividad!', {
-            description: data.lastCompleted.passedCriteria
-              ? 'Avanzando a la siguiente...'
-              : 'Continúa practicando',
-          })
-        }
-
-        // Detectar lección completada (solo mostrar toast una vez)
-        if (data.completedAt && data.completedAt !== activityProgress.lastCompletedAt) {
-          toast.success('¡Felicitaciones!', {
-            description: '¡Completaste toda la lección!',
-          })
-        }
-
-        setActivityProgress({
-          current: data.currentPosition, // Fix: usar currentPosition directamente del backend
-          total: data.total,
-          activityTitle: data.currentActivity || lessonTitle,
-          percentage: data.percentage,
-          lastCompletedId: data.lastCompleted?.activityId || null,
-          lastCompletedAt: data.completedAt,
-        })
-      } catch (error) {
-        console.error('Error fetching progress:', error)
-      }
-    }
-
-    fetchProgress() // Initial fetch
-    const interval = setInterval(fetchProgress, 5000) // Poll cada 5s
-
-    return () => clearInterval(interval)
-  }, [sessionId, activityProgress.lastCompletedId, lessonTitle])
-
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return
 
@@ -284,16 +231,15 @@ export function ChatInterface({
           )
           setIsLoading(false)
         },
-        // onActivityCompleted: update progress immediately
+        // onActivityCompleted: update shared progress immediately
         (progressData) => {
-          // Actualizar progreso inmediatamente (no esperar polling)
-          setActivityProgress({
+          updateProgress({
             current: progressData.currentPosition,
             total: progressData.total,
-            activityTitle: progressData.nextActivityTitle || progressData.activityTitle,
+            currentActivity: progressData.nextActivityTitle || progressData.activityTitle,
             percentage: progressData.percentage,
             lastCompletedId: progressData.activityId,
-            lastCompletedAt: progressData.completedAt || null,
+            completedAt: progressData.completedAt || null,
           })
 
           // Toast inmediato

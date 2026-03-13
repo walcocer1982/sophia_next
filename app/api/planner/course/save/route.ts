@@ -1,4 +1,4 @@
-import { auth } from '@/auth'
+import { requireRole } from '@/lib/auth-utils'
 import { prisma } from '@/lib/prisma'
 import { CourseSaveSchema } from '@/lib/planner/validation'
 import { NextResponse } from 'next/server'
@@ -21,14 +21,8 @@ Hablas de manera conversacional, como un mentor amigable.
 Nunca usas emojis ni exclamaciones exageradas.`
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  const role = session.user.role || 'STUDENT'
-  if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const session = await requireRole('ADMIN')
+  if (session instanceof NextResponse) return session
 
   let body: unknown
   try {

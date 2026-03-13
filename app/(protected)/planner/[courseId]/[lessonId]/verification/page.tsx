@@ -1,5 +1,6 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
 import { notFound, redirect } from 'next/navigation'
 import { VerificationManager } from '@/components/planner/verification-manager'
 import type { Activity } from '@/types/lesson'
@@ -39,7 +40,7 @@ export default async function VerificationPage({
     },
   })) as LessonWithCourse | null
 
-  if (!lesson || lesson.course.userId !== session.user.id || lesson.course.id !== courseId) {
+  if (!lesson || !isOwnerOrSuperadmin(session, lesson.course.userId) || lesson.course.id !== courseId) {
     notFound()
   }
 

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { LearningSidebar } from './learning-sidebar'
 import { ImagePanel, type ActivityImage } from './image-panel'
 import { TestModeBanner } from './test-mode-banner'
+import { ProgressProvider, useProgress } from './progress-context'
 import { PanelLeft, PanelRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -41,51 +42,44 @@ export function LearningLayout({
   initialProgress,
   testMode,
 }: LearningLayoutProps) {
+  return (
+    <ProgressProvider sessionId={sessionId} initialProgress={initialProgress}>
+      <LearningLayoutInner
+        sessionId={sessionId}
+        instructorName={instructorName}
+        lessonTitle={lessonTitle}
+        objective={objective}
+        keyPoints={keyPoints}
+        allImages={allImages}
+        testMode={testMode}
+      >
+        {children}
+      </LearningLayoutInner>
+    </ProgressProvider>
+  )
+}
+
+function LearningLayoutInner({
+  children,
+  sessionId,
+  instructorName,
+  lessonTitle,
+  objective,
+  keyPoints,
+  allImages,
+  testMode,
+}: Omit<LearningLayoutProps, 'initialProgress'>) {
   const [leftCollapsed, setLeftCollapsed] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(false)
-  const [progress, setProgress] = useState(initialProgress)
-  const [currentActivityId, setCurrentActivityId] = useState<string | null>(null)
-
-  // Poll for activity progress to keep sidebar in sync
-  useEffect(() => {
-    const fetchProgress = async () => {
-      try {
-        const res = await fetch(`/api/activity/progress?sessionId=${sessionId}`)
-        if (!res.ok) return
-
-        const data = await res.json()
-
-        setProgress({
-          current: data.currentPosition,
-          total: data.total,
-          percentage: data.percentage,
-        })
-
-        if (data.currentActivityId) {
-          setCurrentActivityId(data.currentActivityId)
-        }
-      } catch (error) {
-        console.error('Error fetching progress:', error)
-      }
-    }
-
-    // Initial fetch
-    fetchProgress()
-
-    // Poll every 3 seconds for faster updates
-    const interval = setInterval(fetchProgress, 3000)
-
-    return () => clearInterval(interval)
-  }, [sessionId])
+  const { progress } = useProgress()
 
   // Filter images for the current activity
   const currentImages = useMemo(() => {
-    if (!currentActivityId) {
-      // Show all images if we don't know the current activity yet
+    if (!progress.currentActivityId) {
       return allImages
     }
-    return allImages.filter((img) => img.activityId === currentActivityId)
-  }, [allImages, currentActivityId])
+    return allImages.filter((img) => img.activityId === progress.currentActivityId)
+  }, [allImages, progress.currentActivityId])
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] bg-gray-50">
@@ -106,7 +100,11 @@ export function LearningLayout({
         lessonTitle={lessonTitle}
         objective={objective}
         keyPoints={keyPoints}
-        progress={progress}
+        progress={{
+          current: progress.current,
+          total: progress.total,
+          percentage: progress.percentage,
+        }}
         isCollapsed={leftCollapsed}
         onToggle={() => setLeftCollapsed(!leftCollapsed)}
       />

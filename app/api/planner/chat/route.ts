@@ -1,9 +1,10 @@
-import { auth } from '@/auth'
+import { requireRole } from '@/lib/auth-utils'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { PlannerChatRequestSchema, GeneratedStructureSchema } from '@/lib/planner/validation'
 import { buildPlannerSystemPrompt } from '@/lib/planner/conversational-prompts'
 import { PLANNER_STEPS } from '@/types/planner'
 import type { PlannerStep, PlannerData } from '@/types/planner'
+import { NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -83,14 +84,8 @@ function shouldAdvanceStep(
 }
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return new Response('Unauthorized', { status: 401 })
-  }
-  const role = session.user.role || 'STUDENT'
-  if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
-    return new Response('Forbidden', { status: 403 })
-  }
+  const session = await requireRole('ADMIN')
+  if (session instanceof NextResponse) return session
 
   let body: unknown
   try {

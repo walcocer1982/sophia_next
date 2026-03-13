@@ -1,4 +1,4 @@
-import { auth } from '@/auth'
+import { requireRole, isOwnerOrSuperadmin } from '@/lib/auth-utils'
 import { prisma } from '@/lib/prisma'
 import { SessionSaveSchema } from '@/lib/planner/validation'
 import { NextResponse } from 'next/server'
@@ -6,14 +6,8 @@ import { NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  const role = session.user.role || 'STUDENT'
-  if (role !== 'ADMIN' && role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const session = await requireRole('ADMIN')
+  if (session instanceof NextResponse) return session
 
   let body: unknown
   try {
@@ -45,7 +39,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
-  if (lesson.course.userId !== session.user.id) {
+  if (!isOwnerOrSuperadmin(session, lesson.course.userId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

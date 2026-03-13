@@ -351,7 +351,7 @@ Tu objetivo: que el estudiante comprenda y responda "${verification.question}".`
     role: m.role,
     content: m.content
   }))
-  const optimizedHistory = buildOptimizedContext(conversationHistory, 5)
+  const optimizedHistory = buildOptimizedContext(conversationHistory, 8)
 
   let dynamicPrompt = `
 ---
@@ -391,11 +391,45 @@ IMPORTANTE: Tu respuesta debe incluir la introducción al nuevo tema y terminar 
     } else {
       // Usar response_type para feedback más específico
       const responseType = verificationResult.response_type || 'partial'
-      const responseTypeGuidance = {
-        partial: `RESPUESTA PARCIAL - El estudiante va por buen camino pero falta: ${verificationResult.criteriaMissing.join(', ')}. Usa "Bien esa parte. ¿Qué más puedes agregar sobre...?"`,
-        incorrect: `RESPUESTA INCORRECTA - Hay errores conceptuales. Usa "Interesante. ¿Qué te llevó a esa conclusión?" NO corrijas directamente.`,
-        off_topic: `RESPUESTA FUERA DE TEMA - Redirige amablemente: "Buena pregunta, pero volvamos a..." y repite la pregunta de verificación.`,
-        correct: `RESPUESTA CORRECTA - Esto no debería pasar si llegamos aquí, pero felicita y avanza.`,
+
+      // Construir guía según tipo de respuesta
+      let responseGuidance = ''
+      const matchedStr = verificationResult.criteriaMatched.length > 0
+        ? `Lo que el estudiante YA dijo bien: ${verificationResult.criteriaMatched.join('; ')}`
+        : ''
+      const missingStr = verificationResult.criteriaMissing.length > 0
+        ? `Lo que falta por cubrir: ${verificationResult.criteriaMissing.join('; ')}`
+        : ''
+
+      switch (responseType) {
+        case 'partial':
+          responseGuidance = `RESPUESTA PARCIAL — El estudiante va por buen camino.
+${matchedStr}
+${missingStr}
+
+CÓMO RESPONDER:
+1. PRIMERO reconoce explícitamente lo que dijo bien ("Correcto, [lo que dijo]")
+2. LUEGO guía hacia lo que falta con UNA pregunta específica
+3. NO repitas la misma pregunta original — reformula enfocándote en lo que falta
+4. NO ignores lo que ya respondió correctamente`
+          break
+        case 'incorrect':
+          responseGuidance = `RESPUESTA INCORRECTA — Hay errores conceptuales.
+CÓMO RESPONDER:
+1. NO digas "incorrecto" directamente
+2. Usa "Interesante. ¿Qué te llevó a esa conclusión?"
+3. Da una pista que guíe hacia la respuesta correcta
+4. Reformula la pregunta de forma más específica`
+          break
+        case 'off_topic':
+          responseGuidance = `RESPUESTA FUERA DE TEMA — Redirige amablemente.
+CÓMO RESPONDER:
+1. "Buena observación, pero enfoquémonos en..."
+2. Reformula la pregunta de verificación de forma más directa`
+          break
+        case 'correct':
+          responseGuidance = `RESPUESTA CORRECTA — Felicita y avanza.`
+          break
       }
 
       // Extraer escenario de la pregunta para hacerlo más explícito
@@ -407,22 +441,25 @@ IMPORTANTE: Tu respuesta debe incluir la introducción al nuevo tema y terminar 
                             questionText.match(/[Ee]n\s+(?:un[ao]?\s+)?(taller|fábrica|obra|cocina|hospital)[^?]*/i)
       const extractedScenario = scenarioMatch ? scenarioMatch[1]?.trim() || scenarioMatch[0]?.trim() : null
 
-      dynamicPrompt += `\n\nESTADO: ${responseTypeGuidance[responseType]}
+      dynamicPrompt += `\n\nESTADO: ${responseGuidance}
 Nivel de comprensión: ${verificationResult.understanding_level} | Confianza: ${verificationResult.confidence}
 Intento: ${attempts}/${maxAttempts}
 
-🎯 PREGUNTA ACTUAL (COPIA EXACTA - NO CAMBIAR DE TEMA):
+🎯 TEMA DE LA PREGUNTA (NO cambiar de tema, pero REFORMULA — no repitas textual):
 "${verification.question}"
+
+⚠️ REGLA CRÍTICA: Si el estudiante ya respondió parte de la pregunta correctamente, NO vuelvas a preguntar eso. Enfócate SOLO en lo que falta.
 
 ${extractedScenario ? `📍 ESCENARIO A USAR (OBLIGATORIO):
 "${extractedScenario}"
 - Todas tus pistas deben referirse a ESTE escenario
-- NO inventes escenarios nuevos (cables, otros talleres, etc.)` : ''}
+- NO inventes escenarios nuevos` : ''}
 
 ⛔ PROHIBIDO:
+- Repetir la misma pregunta textual que ya hiciste
+- Ignorar lo que el estudiante ya respondió bien
 - Volver a explicar conceptos de actividades anteriores
-- Cambiar el escenario por uno "más simple"
-- Introducir nuevos ejemplos que no estén en la pregunta`
+- Cambiar el escenario por uno "más simple"`
     }
   }
 

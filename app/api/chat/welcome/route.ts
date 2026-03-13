@@ -1,15 +1,11 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import Anthropic from '@anthropic-ai/sdk'
+import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { logger } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { getFirstActivity, getCurrentActivity, getLessonContext } from '@/lib/lesson-parser'
 import { buildSystemPrompt } from '@/lib/prompt-builder'
 import type { LessonContent } from '@/types/lesson'
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
 
 export const runtime = 'nodejs'
 
@@ -125,7 +121,7 @@ Genera el mensaje ahora.`
 
     // Stream response from Claude con bloques cacheables
     const stream = await anthropic.messages.stream({
-      model: 'claude-sonnet-4-5-20250929',
+      model: DEFAULT_MODEL,
       max_tokens: 600,
       system: [
         ...staticBlocks,

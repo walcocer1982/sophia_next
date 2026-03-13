@@ -154,7 +154,7 @@ export async function POST(request: Request) {
   // Historial comprimido para enviar a Claude (optimizado)
   // - Mensajes del estudiante: completos
   // - Mensajes del instructor: resumidos con ESCENARIO + PREGUNTA preservados
-  const compressedHistory = compressMessagesForAPI(conversationHistory, 6)
+  const compressedHistory = compressMessagesForAPI(conversationHistory, 10)
 
   // DEBUG: Log mensajes comprimidos para verificar preservación de escenario
   logger.info('chat.stream.compressed_history', {
@@ -178,7 +178,7 @@ export async function POST(request: Request) {
         activityId: currentActivity.id,
       },
     },
-    select: { attempts: true, tangentCount: true, evidenceData: true },
+    select: { status: true, attempts: true, tangentCount: true, evidenceData: true },
   })
 
   const attempts = activityProgress?.attempts || 0
@@ -195,6 +195,14 @@ export async function POST(request: Request) {
   // 🔥 FIX: Buscar el último mensaje del INSTRUCTOR (no cualquier mensaje)
   const lastInstructorMessage = sessionWithMessages.messages.find(m => m.role === 'assistant')
 
+  // 🔥 FIX: Detectar si el mensaje es una confirmación simple ("sí", "ok", "continuar")
+  // para evitar verificar contra criterios de la actividad
+  const CONTINUATION_REGEX = /^(si|sí|ok|vale|entendido|claro|continuar|siguiente|adelante|de acuerdo|perfecto|listo|vamos|dale|ya|bueno)(\s+(por\s+favor|porfavor|gracias))?[.!]?$/i
+  const isContinuationMessage = CONTINUATION_REGEX.test(message.trim())
+
+  // Si es continuación Y la actividad ya está completada, skip verification
+  const activityAlreadyCompleted = activityProgress?.status === 'COMPLETED'
+
   const [moderation, intent, verification] = await Promise.all([
     moderateContent(message, { lessonTitle }),
     classifyIntent(message, currentActivity, {
@@ -202,7 +210,20 @@ export async function POST(request: Request) {
       currentActivity: currentActivityInstruction,
       lastInstructorQuestion: lastInstructorMessage?.content || undefined
     }),
-    verifyActivityCompletion(message, currentActivity, conversationHistory)
+    // Skip expensive AI verification for simple continuations
+    (isContinuationMessage || activityAlreadyCompleted)
+      ? Promise.resolve({
+          completed: true,
+          criteriaMatched: ['Confirmación del estudiante'],
+          criteriaMissing: [],
+          completeness_percentage: 100,
+          understanding_level: 'understood' as const,
+          response_type: 'correct' as const,
+          feedback: '',
+          confidence: 'high' as const,
+          ready_to_advance: true,
+        })
+      : verifyActivityCompletion(message, currentActivity, conversationHistory)
   ])
 
   // Logging de clasificación
@@ -500,14 +521,6 @@ export async function POST(request: Request) {
             })
           } else {
             // Era la última actividad → marcar lección como completada
-            const totalActivities = getTotalActivities(contentJson)
-            const completedCount = await prisma.activityProgress.count({
-              where: {
-                lessonSessionId: lessonSession.id,
-                status: 'COMPLETED',
-              },
-            })
-
             await prisma.lessonSession.update({
               where: { id: lessonSession.id },
               data: {

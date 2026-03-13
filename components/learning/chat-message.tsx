@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import { AvatarInstructor } from '@/components/learning/avatar-instructor'
 import ReactMarkdown from 'react-markdown'
@@ -13,7 +14,7 @@ interface ChatMessageProps {
   isStreaming?: boolean
 }
 
-export function ChatMessage({
+export const ChatMessage = memo(function ChatMessage({
   role,
   content,
   timestamp,
@@ -92,4 +93,4 @@ export function ChatMessage({
     </div>
   )
 
-}
+})

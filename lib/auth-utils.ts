@@ -27,3 +27,14 @@ export async function requireRole(minRole: RoleCheck) {
 
   return session
 }
+
+/**
+ * Check if session user is the resource owner or a SUPERADMIN.
+ * Used to relax ownership checks for SUPERADMIN across planner pages/APIs.
+ */
+export function isOwnerOrSuperadmin(
+  session: { user: { id: string; role?: string } },
+  resourceUserId: string | null
+): boolean {
+  return session.user.role === 'SUPERADMIN' || resourceUserId === session.user.id
+}

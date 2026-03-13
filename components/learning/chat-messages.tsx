@@ -13,11 +13,15 @@ interface ChatMessagesProps {
 
 export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messageCountRef = useRef(messages.length)
 
-  // Auto-scroll when messages change
+  // Auto-scroll only when a new message is added (not on content updates during streaming)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (messages.length !== messageCountRef.current) {
+      messageCountRef.current = messages.length
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages.length])
 
   return (
     <ScrollArea className="h-full bg-linear-to-b from-white to-slate-300">
