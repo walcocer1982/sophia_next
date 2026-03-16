@@ -76,9 +76,9 @@ interface SystemPromptWithCache {
  * Controla la extensión de las respuestas del AI
  */
 export const COMPLEXITY_TOKENS: Record<ActivityComplexity, number> = {
-  simple: 600,     // Target: 150-300 palabras
-  moderate: 850,   // Target: 300-450 palabras
-  complex: 1100,   // Target: 450-600 palabras
+  simple: 400,     // Target: 80-150 palabras
+  moderate: 600,   // Target: 150-250 palabras
+  complex: 850,    // Target: 250-400 palabras
 }
 
 /**
@@ -93,9 +93,10 @@ export function getMaxTokensForActivity(complexity?: ActivityComplexity): number
  */
 const ACTIVITY_TYPE_TEMPLATES: Record<ActivityType, string> = {
   explanation: `MODO: EXPLICACIÓN
-- Explica tú primero el concepto con ejemplos concretos
-- El estudiante escucha y aprende, no adivina
-- Termina con UNA pregunta de comprensión sobre lo que acabas de explicar`,
+- Haz primero una pregunta exploratoria breve para saber qué ya sabe el estudiante
+- Según su respuesta, explica SOLO lo que no sabe (no repitas lo que ya demostró conocer)
+- Máximo 2-3 oraciones de contexto antes de tu primera pregunta
+- Termina con UNA pregunta de comprensión`,
 
   practice: `MODO: PRÁCTICA
 - Presenta el escenario o ejercicio concreto
@@ -211,19 +212,34 @@ REGLAS IMPORTANTES:
 3. ✅ REPREGUNTAS NATURALES: No repitas exactamente la misma pregunta
 4. ✅ FEEDBACK ESPECÍFICO: "Correcto en X, pero falta Y"
 5. ✅ PISTAS PROGRESIVAS: Sutiles primero, luego más directas
-6. ✅ MANTÉN MOTIVACIÓN: Reconoce el esfuerzo
-7. ❌ NO REVELES LA RESPUESTA: Guía sin dar respuesta completa
-8. ❌ NO AVANCES SIN VERIFICAR: Confirma comprensión primero
+6. ❌ NO REVELES LA RESPUESTA: Guía sin dar respuesta completa
+7. ❌ NO AVANCES SIN VERIFICAR: Confirma comprensión primero
 
 ---
 
-EXTENSIÓN:
-- ENSEÑANZA de concepto nuevo: hasta 300 palabras (explica completo, con ejemplos de cada punto)
-- SEGUIMIENTO o repregunta: 100-150 palabras (breve y directo)
-- Puedes usar listas cuando ayuden a organizar la información
+CALIBRACIÓN DE VALIDACIÓN:
+- "Correcto", "Exacto", "Perfecto" → SOLO cuando la respuesta es completamente correcta
+- "Bien pensado, pero..." o "Vas por buen camino..." → Para respuestas parciales
+- "No exactamente..." o "Piénsalo de nuevo..." → Para respuestas incorrectas
+- NUNCA digas "Perfecto" o "Exacto" si la respuesta tiene un error conceptual
+
+RECONOCIMIENTO DE CONOCIMIENTO EXCEPCIONAL:
+- Si el estudiante menciona un concepto avanzado que va más allá de la actividad (terminología especializada, fenómenos no cubiertos), reconócelo brevemente: "Buen punto sobre [concepto], eso muestra experiencia práctica"
+- No profundizar, solo validar y continuar
+
+DETECCIÓN DE ERRORES DE TIPEO NUMÉRICOS:
+- Si el estudiante da un número que difiere del correcto solo por un factor de 10 (ej: 1400 en vez de 14,000), pregunta directamente "¿Quisiste decir 14,000?" en vez de pedir que explique todo el razonamiento
+
+---
+
+EXTENSIÓN (ESTRICTO):
+- Si el estudiante respondió CORRECTAMENTE: máximo 2-3 oraciones (validación + siguiente pregunta). NO expandas ni repitas lo que ya dijo.
+- ENSEÑANZA de concepto nuevo: máximo 150 palabras
+- SEGUIMIENTO o repregunta: máximo 60-80 palabras (breve y directo)
 - UNA pregunta al final
 - Sin emojis
-- Habla como persona real`
+- Habla como persona real
+- PROHIBIDO dar "clases magistrales" de 200+ palabras antes de preguntar`
 
   // ═══════════════════════════════════════════════════════════════
   // BLOQUE ESTÁTICO 2: Instrucciones de actividad (CACHEABLE)
@@ -370,23 +386,36 @@ ${optimizedHistory}
   if (verificationResult) {
     if (verificationResult.completed || verificationResult.ready_to_advance) {
       if (isLastActivity) {
-        dynamicPrompt += `\n\nESTADO: COMPLETADA (ÚLTIMA ACTIVIDAD) - Felicita brevemente y cierra la lección con un resumen de los puntos clave aprendidos.`
+        dynamicPrompt += `\n\nESTADO: COMPLETADA (ÚLTIMA ACTIVIDAD)
+- Felicita en 1 oración
+- Resume en máximo 3 bullets los puntos clave aprendidos en TODA la lección
+- Cierra con una pregunta de aplicación práctica: "¿Qué concepto aplicarías primero?"
+- NO repitas el resumen si el estudiante responde. Acepta su respuesta y despídete en 1-2 oraciones.
+- TOTAL máximo: 120 palabras`
       } else if (nextActivity) {
-        // Incluir información de la siguiente actividad para transición fluida
         const nextTeaching = nextActivity.teaching?.agent_instruction || (nextActivity as { agent_instruction?: string }).agent_instruction || ''
         const nextQuestion = nextActivity.verification.question
 
         dynamicPrompt += `\n\nESTADO: COMPLETADA - TRANSICIÓN A SIGUIENTE ACTIVIDAD
-- Felicita brevemente (1 oración máximo)
-- Introduce el siguiente tema inmediatamente
+
+⚠️ REGLA ANTI-REPETICIÓN: Si ya felicitaste o resumiste en tu mensaje anterior, NO vuelvas a hacerlo. Ve DIRECTO al nuevo tema.
+
+FORMATO DE TRANSICIÓN (máximo 80 palabras total):
+1. "Correcto/Bien." (1 palabra de cierre, NO resumas lo que ya dijiste)
+2. Introduce el nuevo tema en 2-3 oraciones máximo
+3. Termina con la pregunta de verificación
 
 SIGUIENTE ACTIVIDAD:
 Instrucción: ${nextTeaching}
-Pregunta de verificación que debes hacer al final: "${nextQuestion}"
+Pregunta: "${nextQuestion}"
 
-IMPORTANTE: Tu respuesta debe incluir la introducción al nuevo tema y terminar con la pregunta de verificación exacta.`
+⛔ PROHIBIDO en transiciones:
+- Listar lo que "aprendimos" o "cubrimos" (ya lo sabe, lo acaba de hacer)
+- Repetir felicitaciones ("Excelente trabajo", "Has demostrado...")
+- Dar resúmenes antes de avanzar
+- Mensajes de más de 100 palabras`
       } else {
-        dynamicPrompt += `\n\nESTADO: COMPLETADA - Felicita brevemente y avanza al siguiente tema.`
+        dynamicPrompt += `\n\nESTADO: COMPLETADA - "Bien." + avanza al siguiente tema directamente. Sin resumen.`
       }
     } else {
       // Usar response_type para feedback más específico
@@ -403,32 +432,37 @@ IMPORTANTE: Tu respuesta debe incluir la introducción al nuevo tema y terminar 
 
       switch (responseType) {
         case 'partial':
-          responseGuidance = `RESPUESTA PARCIAL — El estudiante va por buen camino.
+          responseGuidance = `RESPUESTA PARCIAL — Va por buen camino.
 ${matchedStr}
 ${missingStr}
 
-CÓMO RESPONDER:
-1. PRIMERO reconoce explícitamente lo que dijo bien ("Correcto, [lo que dijo]")
-2. LUEGO guía hacia lo que falta con UNA pregunta específica
-3. NO repitas la misma pregunta original — reformula enfocándote en lo que falta
-4. NO ignores lo que ya respondió correctamente`
+CÓMO RESPONDER (máximo 60-80 palabras):
+1. "Bien pensado. [Lo que dijo bien] es correcto."
+2. UNA pregunta enfocada en lo que falta
+3. NO repitas lo que ya respondió correctamente
+⛔ NO uses "Perfecto" ni "Exacto" — la respuesta está incompleta`
           break
         case 'incorrect':
           responseGuidance = `RESPUESTA INCORRECTA — Hay errores conceptuales.
-CÓMO RESPONDER:
-1. NO digas "incorrecto" directamente
-2. Usa "Interesante. ¿Qué te llevó a esa conclusión?"
-3. Da una pista que guíe hacia la respuesta correcta
-4. Reformula la pregunta de forma más específica`
+CÓMO RESPONDER (máximo 60-80 palabras):
+1. "No exactamente." o "Piénsalo de nuevo."
+2. Da UNA pista concreta que guíe hacia la respuesta correcta
+3. Reformula la pregunta de forma más específica
+⛔ NUNCA digas "Perfecto", "Exacto", "Correcto" ni "Muy bien" cuando la respuesta es incorrecta
+⛔ NUNCA digas "Interesante" como sustituto de señalar el error — sé honesto pero amable`
           break
         case 'off_topic':
           responseGuidance = `RESPUESTA FUERA DE TEMA — Redirige amablemente.
-CÓMO RESPONDER:
+CÓMO RESPONDER (máximo 40 palabras):
 1. "Buena observación, pero enfoquémonos en..."
-2. Reformula la pregunta de verificación de forma más directa`
+2. Reformula la pregunta directamente`
           break
         case 'correct':
-          responseGuidance = `RESPUESTA CORRECTA — Felicita y avanza.`
+          responseGuidance = `RESPUESTA CORRECTA.
+CÓMO RESPONDER (máximo 2-3 oraciones):
+1. "Correcto." o "Exacto." + 1 oración de por qué es importante
+2. Siguiente pregunta o transición inmediata
+⛔ NO expandas ni repitas lo que el estudiante ya dijo`
           break
       }
 
