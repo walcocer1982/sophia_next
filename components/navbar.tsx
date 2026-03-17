@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, Home, BookOpen, Sparkles, Shield } from 'lucide-react'
+import { User, LogOut, Settings, Home, BookOpen, Sparkles, Shield, LayoutDashboard } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -77,17 +77,30 @@ export function Navbar() {
           </Link>
         )}
         {isAdmin && (
-          <Link
-            href="/planner"
-            className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-              pathname.startsWith('/planner')
-                ? 'text-instructor-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <Sparkles className="h-4 w-4" />
-            Planificador
-          </Link>
+          <>
+            <Link
+              href="/planner"
+              className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+                pathname.startsWith('/planner')
+                  ? 'text-instructor-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Sparkles className="h-4 w-4" />
+              Planificador
+            </Link>
+            <Link
+              href="/dashboard"
+              className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+                pathname.startsWith('/dashboard')
+                  ? 'text-instructor-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboard
+            </Link>
+          </>
         )}
         {isSuperadmin && (
           <Link

@@ -520,13 +520,47 @@ export async function POST(request: Request) {
               toActivityId: nextActivityContext.activityId,
             })
           } else {
-            // Era la última actividad → marcar lección como completada
+            // Era la última actividad → calcular nota y marcar lección como completada
+            const allActivities = await prisma.activityProgress.findMany({
+              where: {
+                lessonSessionId: lessonSession.id,
+                status: 'COMPLETED',
+              },
+              select: {
+                attempts: true,
+                tangentCount: true,
+                evidenceData: true,
+              },
+            })
+
+            // Scoring: comprensión × penalización intentos × penalización tangentes
+            const comprehensionScores: Record<string, number> = {
+              memorized: 40, understood: 70, applied: 85, analyzed: 100,
+            }
+            const attemptPenalty = [1.0, 0.85, 0.7, 0.6] // 1st, 2nd, 3rd, 4th+
+
+            let totalScore = 0
+            for (const ap of allActivities) {
+              const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
+              const lastAttempt = evidence?.attempts?.at(-1)
+              const level = lastAttempt?.analysis?.understanding_level || 'memorized'
+              const base = comprehensionScores[level] || 40
+              const penalty = attemptPenalty[Math.min(ap.attempts - 1, 3)]
+              const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
+              totalScore += base * penalty * tangentPenalty
+            }
+
+            const grade = allActivities.length > 0
+              ? Math.round(totalScore / allActivities.length)
+              : 0
+
             await prisma.lessonSession.update({
               where: { id: lessonSession.id },
               data: {
                 completedAt: new Date(),
                 passed: true,
                 progress: 100,
+                grade,
               },
             })
 
