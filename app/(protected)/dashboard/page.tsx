@@ -3,22 +3,23 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Users, CheckCircle, Award, Activity } from 'lucide-react'
 import Link from 'next/link'
 
-interface CourseStats {
-  id: string
-  title: string
-  career: { id: string; name: string } | null
+interface LessonRow {
+  courseId: string
+  courseTitle: string
+  careerId: string | null
+  careerName: string
   instructor: string
+  lessonId: string
+  lessonTitle: string
   totalStudents: number
-  totalSessions: number
-  completedSessions: number
+  completedCount: number
   completionRate: number
   avgGrade: number | null
   activeNow: number
-  publishedLessons: number
 }
 
 interface DashboardData {
@@ -28,7 +29,7 @@ interface DashboardData {
     avgGrade: number | null
     activeNow: number
   }
-  courses: CourseStats[]
+  lessons: LessonRow[]
 }
 
 export default function DashboardPage() {
@@ -72,11 +73,7 @@ export default function DashboardPage() {
               <div key={i} className="h-28 bg-gray-200 rounded-lg" />
             ))}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[1, 2].map(i => (
-              <div key={i} className="h-40 bg-gray-200 rounded-lg" />
-            ))}
-          </div>
+          <div className="h-64 bg-gray-200 rounded-lg" />
         </div>
       </div>
     )
@@ -84,19 +81,34 @@ export default function DashboardPage() {
 
   if (!data) return null
 
-  const { stats, courses } = data
+  const { stats, lessons } = data
 
-  // Agrupar por carrera para SUPERADMIN
-  const coursesByCareer = isSuperadmin
-    ? courses.reduce<Record<string, { careerName: string; courses: CourseStats[] }>>((acc, course) => {
-        const key = course.career?.id || 'sin-carrera'
-        if (!acc[key]) {
-          acc[key] = { careerName: course.career?.name || 'Sin carrera', courses: [] }
-        }
-        acc[key].courses.push(course)
-        return acc
-      }, {})
-    : null
+  // Group lessons by career > course
+  const grouped: Record<string, {
+    careerName: string
+    courses: Record<string, {
+      courseTitle: string
+      courseId: string
+      instructor: string
+      lessons: LessonRow[]
+    }>
+  }> = {}
+
+  for (const row of lessons) {
+    const careerKey = row.careerId || 'sin-carrera'
+    if (!grouped[careerKey]) {
+      grouped[careerKey] = { careerName: row.careerName, courses: {} }
+    }
+    if (!grouped[careerKey].courses[row.courseId]) {
+      grouped[careerKey].courses[row.courseId] = {
+        courseTitle: row.courseTitle,
+        courseId: row.courseId,
+        instructor: row.instructor,
+        lessons: [],
+      }
+    }
+    grouped[careerKey].courses[row.courseId].lessons.push(row)
+  }
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
@@ -137,32 +149,112 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Courses */}
-      {isSuperadmin && coursesByCareer ? (
-        // SUPERADMIN: agrupado por carrera
-        Object.entries(coursesByCareer).map(([careerId, { careerName, courses: careerCourses }]) => (
-          <div key={careerId} className="space-y-3">
+      {/* Lesson Tables grouped by Career > Course */}
+      {Object.entries(grouped).map(([careerKey, { careerName, courses }]) => (
+        <div key={careerKey} className="space-y-6">
+          {isSuperadmin && (
             <h2 className="text-lg font-semibold text-gray-800 border-b pb-2">{careerName}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {careerCourses.map(course => (
-                <CourseCard key={course.id} course={course} showInstructor />
-              ))}
-            </div>
-          </div>
-        ))
-      ) : (
-        // ADMIN: lista simple
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">Mis Cursos</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {courses.map(course => (
-              <CourseCard key={course.id} course={course} />
-            ))}
-          </div>
-        </div>
-      )}
+          )}
 
-      {courses.length === 0 && (
+          {Object.entries(courses).map(([courseId, { courseTitle, instructor, lessons: courseLessons }]) => (
+            <div key={courseId} className="space-y-2">
+              <div className="flex items-center gap-3">
+                <h3 className="text-base font-medium text-gray-700">{courseTitle}</h3>
+                {isSuperadmin && (
+                  <span className="text-xs text-gray-400">{instructor}</span>
+                )}
+              </div>
+
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50/50">
+                      <th className="text-left py-2.5 px-4 font-medium text-gray-500 text-xs uppercase tracking-wide">Sesión / Lección</th>
+                      <th className="text-center py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Estudiantes</th>
+                      <th className="text-center py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Completaron</th>
+                      <th className="text-center py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Nota Prom</th>
+                      <th className="text-center py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {courseLessons.map(lesson => (
+                      <tr
+                        key={lesson.lessonId}
+                        className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors"
+                      >
+                        <td className="py-3 px-4">
+                          <Link
+                            href={`/dashboard/${courseId}`}
+                            className="text-gray-900 hover:text-blue-600 hover:underline font-medium"
+                          >
+                            {lesson.lessonTitle}
+                          </Link>
+                        </td>
+                        <td className="text-center py-3 px-3 text-gray-600">
+                          {lesson.totalStudents}
+                        </td>
+                        <td className="text-center py-3 px-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  lesson.completionRate === 100
+                                    ? 'bg-green-500'
+                                    : lesson.completionRate >= 50
+                                      ? 'bg-blue-500'
+                                      : lesson.completionRate > 0
+                                        ? 'bg-amber-500'
+                                        : 'bg-gray-300'
+                                }`}
+                                style={{ width: `${lesson.completionRate}%` }}
+                              />
+                            </div>
+                            <span className="text-gray-700 text-xs font-medium min-w-[60px]">
+                              {lesson.completedCount}/{lesson.totalStudents} ({lesson.completionRate}%)
+                            </span>
+                          </div>
+                        </td>
+                        <td className="text-center py-3 px-3">
+                          {lesson.avgGrade !== null ? (
+                            <span className={`font-semibold ${
+                              lesson.avgGrade >= 70
+                                ? 'text-green-700'
+                                : lesson.avgGrade >= 50
+                                  ? 'text-amber-700'
+                                  : 'text-red-600'
+                            }`}>
+                              {lesson.avgGrade}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="text-center py-3 px-3">
+                          {lesson.activeNow > 0 ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-green-700 font-medium bg-green-50 px-2 py-1 rounded-full">
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                              </span>
+                              {lesson.activeNow} activo{lesson.activeNow > 1 ? 's' : ''}
+                            </span>
+                          ) : lesson.completionRate === 100 ? (
+                            <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">Completado</span>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+
+      {lessons.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           <p>No hay cursos con lecciones publicadas.</p>
           <Link href="/planner" className="text-blue-600 hover:underline mt-2 inline-block">
@@ -199,59 +291,5 @@ function StatCard({
         </div>
       </CardContent>
     </Card>
-  )
-}
-
-function CourseCard({ course, showInstructor }: { course: CourseStats; showInstructor?: boolean }) {
-  return (
-    <Link href={`/dashboard/${course.id}`}>
-      <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">{course.title}</CardTitle>
-          {showInstructor && (
-            <p className="text-xs text-gray-500">{course.instructor}</p>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {/* Progress bar */}
-            <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1">
-                <span>{course.completedSessions}/{course.totalSessions} sesiones completadas</span>
-                <span>{course.completionRate}%</span>
-              </div>
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-green-500 rounded-full transition-all duration-500"
-                  style={{ width: `${course.completionRate}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Stats row */}
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>{course.totalStudents} estudiantes</span>
-              <span>{course.publishedLessons} lecciones</span>
-              {course.avgGrade !== null && (
-                <span className="font-medium text-gray-700">Nota: {course.avgGrade}</span>
-              )}
-            </div>
-
-            {/* Active now badge */}
-            {course.activeNow > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                </span>
-                <span className="text-xs text-green-700 font-medium">
-                  {course.activeNow} activo{course.activeNow > 1 ? 's' : ''} ahora
-                </span>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
   )
 }

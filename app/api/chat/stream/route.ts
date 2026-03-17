@@ -10,6 +10,7 @@ import { verifyActivityCompletion } from '@/lib/activity-verification'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
 import { classifyIntent } from '@/lib/services/intent-classification'
 import { compressMessagesForAPI } from '@/lib/message-summarizer'
+import { generateLessonReport } from '@/lib/lesson-report'
 import type { LessonContent } from '@/types/lesson'
 import type { Message } from '@prisma/client'
 
@@ -568,7 +569,13 @@ export async function POST(request: Request) {
               sessionId,
               totalActivities,
               completedActivities: completedCount + 1,
+              grade,
               duration: new Date().getTime() - new Date(lessonSession.startedAt).getTime(),
+            })
+
+            // Generate AI report asynchronously (don't block the response)
+            generateLessonReport(lessonSession.id, lessonTitle, allActivities, grade, contentJson).catch((err: unknown) => {
+              logger.error('chat.stream.report_generation_failed', { sessionId, error: String(err) })
             })
           }
         } else {

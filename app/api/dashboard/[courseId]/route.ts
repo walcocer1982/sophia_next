@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
+import { checkAndGeneratePartialReports } from '@/lib/lesson-report'
+import { logger } from '@/lib/logger'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -243,6 +245,36 @@ export async function GET(
   const students = Array.from(uniqueStudents.values())
     .sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime())
 
+  // === GENERATE PARTIAL REPORTS (async, don't block response) ===
+  // Check for 24h+ inactive sessions without reports
+  checkAndGeneratePartialReports(courseId).then(count => {
+    if (count > 0) {
+      logger.info('dashboard.partial_reports_generated', { courseId, count })
+    }
+  }).catch((err: unknown) => {
+    logger.error('dashboard.partial_reports_failed', { courseId, error: String(err) })
+  })
+
+  // === INACTIVITY ALERTS ===
+  const twentyFourHoursAgoAlert = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const inactivityAlerts = allSessions
+    .filter(s => !s.completedAt && s.lastActivityAt <= twentyFourHoursAgoAlert)
+    .map(s => {
+      const meta = s.activityId ? activityMeta[s.activityId] : null
+      const hoursInactive = Math.round((Date.now() - s.lastActivityAt.getTime()) / 1000 / 60 / 60)
+      return {
+        userId: s.user.id,
+        name: s.user.name,
+        email: s.user.email,
+        lessonTitle: meta?.lessonTitle || null,
+        activityIndex: meta?.index || null,
+        activityTotal: meta?.total || null,
+        activityTitle: meta?.title || null,
+        hoursInactive,
+        hasReport: !!allSessions.find(sess => sess.user.id === s.user.id && sess.id === s.id),
+      }
+    })
+
   return NextResponse.json({
     course: {
       id: course.id,
@@ -254,6 +286,7 @@ export async function GET(
       active: activeStudents,
       inactive: inactiveStudents,
     },
+    alerts: inactivityAlerts,
     funnels: lessonFunnels,
     students,
   })

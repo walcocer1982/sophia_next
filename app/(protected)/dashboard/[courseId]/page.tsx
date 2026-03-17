@@ -66,6 +66,17 @@ interface StudentRow {
   status: 'active' | 'inactive' | 'completed'
 }
 
+interface InactivityAlert {
+  userId: string
+  name: string | null
+  email: string | null
+  lessonTitle: string | null
+  activityIndex: number | null
+  activityTotal: number | null
+  activityTitle: string | null
+  hoursInactive: number
+}
+
 interface CourseData {
   course: {
     id: string
@@ -77,6 +88,7 @@ interface CourseData {
     active: ActiveStudent[]
     inactive: InactiveStudent[]
   }
+  alerts: InactivityAlert[]
   funnels: LessonFunnel[]
   students: StudentRow[]
 }
@@ -133,7 +145,7 @@ export default function CourseDashboardPage() {
 
   if (!data) return null
 
-  const { course, monitoring, funnels, students } = data
+  const { course, monitoring, alerts, funnels, students } = data
 
   const filteredStudents = students.filter(s =>
     (s.name?.toLowerCase().includes(search.toLowerCase())) ||
@@ -157,6 +169,57 @@ export default function CourseDashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* === INACTIVITY ALERTS (24h+) === */}
+      {alerts.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-800">
+              <AlertTriangle className="h-4 w-4" />
+              Alertas de Inactividad
+              <span className="text-xs bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full font-normal">
+                {alerts.length}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {alerts.map(alert => (
+                <div
+                  key={alert.userId}
+                  className="flex items-center justify-between p-3 bg-white rounded-lg border border-amber-100"
+                >
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {alert.name || alert.email}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {alert.lessonTitle}
+                        {alert.activityIndex && alert.activityTotal && (
+                          <> — Act {alert.activityIndex}/{alert.activityTotal}</>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-amber-700 font-medium bg-amber-100 px-2 py-1 rounded">
+                      {alert.hoursInactive}h inactivo
+                    </span>
+                    <Link
+                      href={`/dashboard/${courseId}/${alert.userId}`}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Ver detalle
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* === REAL-TIME MONITORING === */}
       <Card>

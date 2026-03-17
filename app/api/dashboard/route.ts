@@ -22,7 +22,6 @@ export async function GET() {
     select: {
       id: true,
       title: true,
-      careerId: true,
       career: {
         select: { id: true, name: true },
       },
@@ -40,12 +39,8 @@ export async function GET() {
               id: true,
               userId: true,
               completedAt: true,
-              passed: true,
               grade: true,
-              startedAt: true,
               lastActivityAt: true,
-              activityId: true,
-              progress: true,
             },
           },
         },
@@ -54,62 +49,81 @@ export async function GET() {
     orderBy: { createdAt: 'desc' },
   })
 
-  // Calcular stats por curso
-  const coursesWithStats = courses.map(course => {
-    const allSessions = course.lessons.flatMap(l => l.sessions)
-    const uniqueStudents = new Set(allSessions.map(s => s.userId))
-    const completedSessions = allSessions.filter(s => s.completedAt)
-    const grades = completedSessions.filter(s => s.grade !== null).map(s => s.grade as number)
-    const avgGrade = grades.length > 0 ? Math.round(grades.reduce((a, b) => a + b, 0) / grades.length) : null
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
 
-    // Sesiones activas: no completadas y con actividad en las últimas 2h
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
-    const activeSessions = allSessions.filter(
-      s => !s.completedAt && s.lastActivityAt > twoHoursAgo
-    )
+  // Build lesson-level rows grouped by career > course
+  const lessonRows: Array<{
+    courseId: string
+    courseTitle: string
+    careerId: string | null
+    careerName: string
+    instructor: string
+    lessonId: string
+    lessonTitle: string
+    totalStudents: number
+    completedCount: number
+    completionRate: number
+    avgGrade: number | null
+    activeNow: number
+  }> = []
 
-    const completionRate = allSessions.length > 0
-      ? Math.round((completedSessions.length / allSessions.length) * 100)
-      : 0
+  let globalStudents = new Set<string>()
+  let globalCompleted = 0
+  let globalTotal = 0
+  let globalActiveNow = 0
+  const allGrades: number[] = []
 
-    return {
-      id: course.id,
-      title: course.title,
-      career: course.career,
-      instructor: course.user?.name || 'Sin instructor',
-      totalStudents: uniqueStudents.size,
-      totalSessions: allSessions.length,
-      completedSessions: completedSessions.length,
-      completionRate,
-      avgGrade,
-      activeNow: activeSessions.length,
-      publishedLessons: course.lessons.length,
+  for (const course of courses) {
+    for (const lesson of course.lessons) {
+      const uniqueStudents = new Set(lesson.sessions.map(s => s.userId))
+      const completed = lesson.sessions.filter(s => s.completedAt)
+      const grades = completed.filter(s => s.grade !== null).map(s => s.grade as number)
+      const avgGrade = grades.length > 0
+        ? Math.round(grades.reduce((a, b) => a + b, 0) / grades.length)
+        : null
+      const activeNow = lesson.sessions.filter(
+        s => !s.completedAt && s.lastActivityAt > twoHoursAgo
+      ).length
+
+      lessonRows.push({
+        courseId: course.id,
+        courseTitle: course.title,
+        careerId: course.career?.id || null,
+        careerName: course.career?.name || 'Sin carrera',
+        instructor: course.user?.name || 'Sin instructor',
+        lessonId: lesson.id,
+        lessonTitle: lesson.title,
+        totalStudents: uniqueStudents.size,
+        completedCount: completed.length,
+        completionRate: uniqueStudents.size > 0
+          ? Math.round((completed.length / uniqueStudents.size) * 100)
+          : 0,
+        avgGrade,
+        activeNow,
+      })
+
+      // Global stats
+      for (const s of lesson.sessions) {
+        globalStudents.add(s.userId)
+      }
+      globalCompleted += completed.length
+      globalTotal += lesson.sessions.length
+      globalActiveNow += activeNow
+      allGrades.push(...grades)
     }
-  })
+  }
 
-  // Stats globales
-  const allSessions = coursesWithStats.flatMap(c => [c])
-  const totalStudentsSet = new Set(
-    courses.flatMap(c => c.lessons.flatMap(l => l.sessions.map(s => s.userId)))
-  )
-  const totalCompleted = coursesWithStats.reduce((a, c) => a + c.completedSessions, 0)
-  const totalSessionsCount = coursesWithStats.reduce((a, c) => a + c.totalSessions, 0)
-  const allGrades = coursesWithStats.filter(c => c.avgGrade !== null).map(c => c.avgGrade as number)
   const globalAvgGrade = allGrades.length > 0
     ? Math.round(allGrades.reduce((a, b) => a + b, 0) / allGrades.length)
     : null
-  const totalActiveNow = coursesWithStats.reduce((a, c) => a + c.activeNow, 0)
-  const globalCompletionRate = totalSessionsCount > 0
-    ? Math.round((totalCompleted / totalSessionsCount) * 100)
-    : 0
 
   return NextResponse.json({
     stats: {
-      totalStudents: totalStudentsSet.size,
-      completionRate: globalCompletionRate,
+      totalStudents: globalStudents.size,
+      completionRate: globalTotal > 0 ? Math.round((globalCompleted / globalTotal) * 100) : 0,
       avgGrade: globalAvgGrade,
-      activeNow: totalActiveNow,
+      activeNow: globalActiveNow,
     },
-    courses: coursesWithStats,
+    lessons: lessonRows,
   })
 }
