@@ -2,10 +2,67 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
 import { checkAndGeneratePartialReports } from '@/lib/lesson-report'
+import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '@/lib/rubric'
 import { logger } from '@/lib/logger'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
+
+// Calculate partial grade from completed activities (same formula as chat/stream)
+function calculatePartialGrade(activities: Array<{
+  status: string
+  attempts: number
+  tangentCount: number
+  evidenceData: unknown
+}>): number | null {
+  const completed = activities.filter(a => a.status === 'COMPLETED')
+  if (completed.length === 0) return null
+
+  const comprehensionScores: Record<string, number> = {
+    memorized: 40, understood: 70, applied: 85, analyzed: 100,
+  }
+  const attemptPenalty = [1.0, 0.95, 0.90, 0.85, 0.80, 0.75]
+
+  let totalScore = 0
+  for (const ap of completed) {
+    const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
+    const lastAttempt = evidence?.attempts?.at(-1)
+    const level = lastAttempt?.analysis?.understanding_level || 'memorized'
+    const comprehension = comprehensionScores[level] || 40
+    const efficiency = attemptPenalty[Math.min(ap.attempts - 1, 5)]
+    const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
+    totalScore += (comprehension * 0.7) + (comprehension * 0.3 * efficiency * tangentPenalty)
+  }
+
+  return Math.round(totalScore / completed.length)
+}
+
+// Calculate rubric levels from session activities
+function calculateSessionRubric(activities: Array<{
+  status: string
+  attempts: number
+  evidenceData: unknown
+  passedCriteria?: boolean | null
+}>): { lastActivityLevel: RubricLevel | null; overallLevel: RubricLevel | null } {
+  const completed = activities.filter(a => a.status === 'COMPLETED')
+  if (completed.length === 0) return { lastActivityLevel: null, overallLevel: null }
+
+  const levels: RubricLevel[] = completed.map(ap => {
+    const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string; completeness_percentage?: number; response_type?: string } }> } | null
+    const bestCompleteness = evidence?.attempts
+      ? Math.max(...evidence.attempts.map(a => a.analysis?.completeness_percentage || 0))
+      : 0
+    const lastAttempt = evidence?.attempts?.at(-1)
+    const level = lastAttempt?.analysis?.understanding_level || 'memorized'
+    const responseType = lastAttempt?.analysis?.response_type
+    const passed = ap.passedCriteria !== false
+    return calculateRubricLevel(level, bestCompleteness, ap.attempts, passed, responseType)
+  })
+
+  const lastActivityLevel = levels.at(-1) || null
+  const overallLevel = calculateOverallRubric(levels)
+  return { lastActivityLevel, overallLevel }
+}
 
 export async function GET(
   request: Request,
@@ -54,6 +111,12 @@ export async function GET(
                   tangentCount: true,
                   completedAt: true,
                   evidenceData: true,
+                  passedCriteria: true,
+                },
+              },
+              _count: {
+                select: {
+                  messages: { where: { role: 'user' } },
                 },
               },
             },
@@ -97,6 +160,9 @@ export async function GET(
       } | null
       const lastAttempt = lastEvidence?.attempts?.at(-1)
 
+      // Calculate active time in minutes
+      const activeMinutes = Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 1000 / 60)
+
       return {
         userId: s.user.id,
         name: s.user.name,
@@ -111,21 +177,76 @@ export async function GET(
         percentage: s.progress || 0,
         criteriaMatched: lastAttempt?.analysis?.criteriaMatched || [],
         criteriaMissing: lastAttempt?.analysis?.criteriaMissing || [],
+        startedAt: s.startedAt,
         lastActivityAt: s.lastActivityAt,
+        activeMinutes,
+        messageCount: s._count.messages,
+        grade: s.grade ?? calculatePartialGrade(s.activities),
+        ...calculateSessionRubric(s.activities),
       }
     })
 
   // Inactive students (started but no activity in 2h+ and not completed)
   const inactiveStudents = allSessions
     .filter(s => !s.completedAt && s.lastActivityAt <= twoHoursAgo)
-    .map(s => ({
-      userId: s.user.id,
-      name: s.user.name,
-      email: s.user.email,
-      image: s.user.image,
-      lastActivityAt: s.lastActivityAt,
-      hoursInactive: Math.round((Date.now() - s.lastActivityAt.getTime()) / 1000 / 60 / 60),
-    }))
+    .map(s => {
+      const meta = s.activityId ? activityMeta[s.activityId] : null
+      const currentActivityProgress = s.activities.find(a => a.activityId === s.activityId)
+      const activeMinutes = Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 1000 / 60)
+
+      return {
+        userId: s.user.id,
+        name: s.user.name,
+        email: s.user.email,
+        image: s.user.image,
+        sessionId: s.id,
+        activityIndex: meta?.index || null,
+        activityTotal: meta?.total || null,
+        activityTitle: meta?.title || null,
+        lessonTitle: meta?.lessonTitle || null,
+        attempts: currentActivityProgress?.attempts || 0,
+        percentage: s.progress || 0,
+        startedAt: s.startedAt,
+        lastActivityAt: s.lastActivityAt,
+        activeMinutes,
+        messageCount: s._count.messages,
+        grade: s.grade ?? calculatePartialGrade(s.activities),
+        ...calculateSessionRubric(s.activities),
+        hoursInactive: Math.round((Date.now() - s.lastActivityAt.getTime()) / 1000 / 60 / 60),
+      }
+    })
+
+  // Completed students (session completed)
+  const completedStudents = allSessions
+    .filter(s => !!s.completedAt)
+    .map(s => {
+      const activeMinutes = Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 1000 / 60)
+      // Find which lesson this session belongs to
+      const sessionLesson = course.lessons.find(l => l.sessions.some(ls => ls.id === s.id))
+
+      return {
+        userId: s.user.id,
+        name: s.user.name,
+        email: s.user.email,
+        image: s.user.image,
+        sessionId: s.id,
+        activityIndex: null,
+        activityTotal: null,
+        activityTitle: null,
+        lessonTitle: sessionLesson?.title || null,
+        attempts: 0,
+        percentage: 100,
+        criteriaMatched: [] as string[],
+        criteriaMissing: [] as string[],
+        startedAt: s.startedAt,
+        lastActivityAt: s.lastActivityAt,
+        activeMinutes,
+        messageCount: s._count.messages,
+        grade: s.grade ?? calculatePartialGrade(s.activities),
+        ...calculateSessionRubric(s.activities),
+        completedAt: s.completedAt,
+      }
+    })
 
   // === ACTIVITY FUNNEL (per lesson) ===
   const lessonFunnels = course.lessons.map(lesson => {
@@ -285,6 +406,7 @@ export async function GET(
     monitoring: {
       active: activeStudents,
       inactive: inactiveStudents,
+      completed: completedStudents,
     },
     alerts: inactivityAlerts,
     funnels: lessonFunnels,

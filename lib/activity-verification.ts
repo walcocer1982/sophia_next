@@ -62,6 +62,9 @@ ${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO DE LA CONV
 TAREA:
 Evalúa la CALIDAD DEL RAZONAMIENTO del estudiante, no si menciona palabras clave.
 
+REGLA CRÍTICA — CONTEXTO DE CONVERSACIÓN:
+Antes de evaluar, revisa la CONVERSACIÓN PREVIA. Si el instructor hizo una pregunta de seguimiento diferente a la original, evalúa si el estudiante respondió correctamente a ESA pregunta. No marques como "off_topic" si el estudiante responde a lo que le preguntaron.
+
 CRITERIOS PARA PREGUNTA ABIERTA:
 - ¿Demuestra reflexión genuina sobre el tema?
 - ¿Articula una posición o perspectiva propia?
@@ -131,6 +134,13 @@ ${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO DE LA CONV
 TAREA:
 Evalúa la respuesta del estudiante contra los criterios de éxito.
 
+REGLA CRÍTICA — CONTEXTO DE CONVERSACIÓN:
+Antes de evaluar, revisa la CONVERSACIÓN PREVIA. Si el instructor (IA) hizo una PREGUNTA DE SEGUIMIENTO o PROFUNDIZACIÓN diferente a la pregunta de verificación original, y el estudiante está respondiendo a ESA pregunta de seguimiento:
+- NO marques como "off_topic" — el estudiante está respondiendo lo que le preguntaron
+- Evalúa si la respuesta del estudiante demuestra comprensión del tema general de la actividad
+- Si el estudiante ya cumplió criterios en mensajes ANTERIORES de la conversación, considéralos como cumplidos
+- Si la pregunta de seguimiento va MÁS ALLÁ de los criterios originales (profundización), y el estudiante responde correctamente, marca ready_to_advance como true
+
 REGLAS DE EVALUACIÓN FLEXIBLE:
 - Evalúa COMPRENSIÓN DEL CONCEPTO, NO palabras exactas
 - Acepta sinónimos, paráfrasis y diferentes formas de expresar el mismo concepto
@@ -171,6 +181,39 @@ Responde SOLO con el JSON, sin texto adicional.`
 }
 
 /**
+ * Extraer respuestas acumuladas del estudiante de la conversación reciente.
+ * Combina los últimos N mensajes del estudiante para evaluar criterios
+ * que fueron respondidos en mensajes separados.
+ */
+function buildAccumulatedStudentResponse(
+  userMessage: string,
+  conversationHistory?: { role: 'user' | 'assistant'; content: string }[]
+): string {
+  if (!conversationHistory || conversationHistory.length < 3) {
+    return userMessage
+  }
+
+  // Extraer los últimos 5 mensajes del estudiante (excluyendo continuaciones cortas)
+  const recentStudentMessages = conversationHistory
+    .filter(m => m.role === 'user')
+    .slice(-5)
+    .map(m => m.content.trim())
+    .filter(m => m.length > 15) // Ignorar "sí", "ok", "listo", etc.
+
+  // Agregar el mensaje actual si no es una continuación
+  if (userMessage.trim().length > 15) {
+    recentStudentMessages.push(userMessage)
+  }
+
+  if (recentStudentMessages.length <= 1) {
+    return userMessage
+  }
+
+  // Combinar en un resumen acumulativo
+  return `[Respuestas acumuladas del estudiante en esta actividad]:\n${recentStudentMessages.map((m, i) => `- Respuesta ${i + 1}: "${m}"`).join('\n')}\n\n[Último mensaje]: "${userMessage}"`
+}
+
+/**
  * Verificar si el estudiante completó la actividad usando IA
  * Usa la nueva estructura success_criteria con min_completeness y understanding_level
  */
@@ -202,10 +245,13 @@ export async function verifyActivityCompletion(
   // Umbral efectivo: open-ended es más permisivo (40%) que estándar
   const effectiveThreshold = isOpenEnded ? 40 : minCompleteness
 
+  // Construir respuesta acumulada del estudiante para evaluar criterios repartidos en varios mensajes
+  const accumulatedResponse = buildAccumulatedStudentResponse(userMessage, conversationHistory)
+
   // Construir contexto para verificación
   const verificationPrompt = isOpenEnded
-    ? buildOpenEndedVerificationPrompt(agentInstruction, activity, userMessage, conversationHistory, hintsSection, expectedLevel)
-    : buildStandardVerificationPrompt(agentInstruction, activity, userMessage, conversationHistory, successCriteria, hintsSection, minCompleteness, expectedLevel)
+    ? buildOpenEndedVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, hintsSection, expectedLevel)
+    : buildStandardVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, successCriteria, hintsSection, minCompleteness, expectedLevel)
 
   try {
     const response = await anthropic.messages.create({

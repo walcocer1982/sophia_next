@@ -26,6 +26,9 @@ export interface ActivityEdits {
   agent_instruction: string
   question: string
   must_include: string[]
+  open_ended: boolean
+  max_attempts: number
+  understanding_level: string
 }
 
 
@@ -35,6 +38,9 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
   const [editInstruction, setEditInstruction] = useState(activity.teaching.agent_instruction)
   const [editQuestion, setEditQuestion] = useState(activity.verification.question)
   const [editCriteria, setEditCriteria] = useState(activity.verification.success_criteria.must_include.join('\n'))
+  const [editOpenEnded, setEditOpenEnded] = useState(activity.verification.open_ended ?? false)
+  const [editMaxAttempts, setEditMaxAttempts] = useState(activity.verification.max_attempts ?? 5)
+  const [editUnderstandingLevel, setEditUnderstandingLevel] = useState<string>(activity.verification.success_criteria?.understanding_level ?? 'understood')
   const keyPoint = activity.keyPointIndex !== null
     ? (keyPoints[activity.keyPointIndex] || `Punto ${activity.keyPointIndex + 1}`)
     : 'Cierre general'
@@ -134,19 +140,64 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                 ))}
               </ul>
             )}
-            <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-              <span>
-                Min completitud:{' '}
-                {activity.verification.success_criteria.min_completeness ?? 60}%
-              </span>
-              <span>
-                Nivel:{' '}
-                {activity.verification.success_criteria.understanding_level ?? 'understood'}
-              </span>
-              <span>
-                Max intentos: {activity.verification.max_attempts ?? 3}
-              </span>
-            </div>
+            {isEditing ? (
+              <div className="mt-3 space-y-3 rounded-lg bg-gray-50 p-3">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editOpenEnded}
+                      onChange={(e) => setEditOpenEnded(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="font-medium">Evaluación abierta</span>
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">
+                    {editOpenEnded ? 'Evalúa comprensión, no palabras exactas' : 'Requiere criterios específicos'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  <label className="text-sm">
+                    <span className="font-medium">Max intentos:</span>{' '}
+                    <select
+                      value={editMaxAttempts}
+                      onChange={(e) => setEditMaxAttempts(Number(e.target.value))}
+                      className="rounded border border-gray-300 px-2 py-1 text-sm"
+                    >
+                      <option value={3}>3</option>
+                      <option value={5}>5</option>
+                      <option value={7}>7</option>
+                    </select>
+                  </label>
+                  <label className="text-sm">
+                    <span className="font-medium">Nivel esperado:</span>{' '}
+                    <select
+                      value={editUnderstandingLevel}
+                      onChange={(e) => setEditUnderstandingLevel(e.target.value)}
+                      className="rounded border border-gray-300 px-2 py-1 text-sm"
+                    >
+                      <option value="memorized">Memoriza</option>
+                      <option value="understood">Comprende</option>
+                      <option value="applied">Aplica</option>
+                      <option value="analyzed">Analiza</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                <span>
+                  {activity.verification.open_ended ? '📖 Evaluación abierta' : '📋 Evaluación por criterios'}
+                </span>
+                <span>
+                  Nivel:{' '}
+                  {activity.verification.success_criteria.understanding_level ?? 'understood'}
+                </span>
+                <span>
+                  Max intentos: {activity.verification.max_attempts ?? 5}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Errores comunes */}
@@ -192,6 +243,9 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                         agent_instruction: editInstruction.trim(),
                         question: editQuestion.trim(),
                         must_include: criteria,
+                        open_ended: editOpenEnded,
+                        max_attempts: editMaxAttempts,
+                        understanding_level: editUnderstandingLevel,
                       })
                       setIsEditing(false)
                     }}
@@ -207,6 +261,9 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                       setEditInstruction(activity.teaching.agent_instruction)
                       setEditQuestion(activity.verification.question)
                       setEditCriteria(activity.verification.success_criteria.must_include.join('\n'))
+                      setEditOpenEnded(activity.verification.open_ended ?? false)
+                      setEditMaxAttempts(activity.verification.max_attempts ?? 5)
+                      setEditUnderstandingLevel(activity.verification.success_criteria?.understanding_level ?? 'understood')
                       setIsEditing(false)
                     }}
                   >

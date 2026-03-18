@@ -62,7 +62,8 @@ interface StudentData {
     totalLessons: number
     avgGrade: number | null
     totalMessages: number
-    comprehension: Record<string, number>
+    overallRubric: string
+    rubricDistribution: Record<string, number>
     gradeTrend: Array<{ lesson: string; grade: number }>
   }
   lessons: LessonDetail[]
@@ -141,12 +142,24 @@ export default function StudentDetailPage() {
   const { student, course, stats, lessons } = data
 
   // Chart data
-  const comprehensionData = Object.entries(stats.comprehension)
-    .filter(([, count]) => count > 0)
+  const rubricLabels: Record<string, string> = {
+    logrado_destacado: 'Destacado',
+    logrado: 'Logrado',
+    en_proceso: 'En proceso',
+    en_inicio: 'En inicio',
+  }
+  const rubricColors: Record<string, string> = {
+    logrado_destacado: '#059669',
+    logrado: '#2563eb',
+    en_proceso: '#d97706',
+    en_inicio: '#dc2626',
+  }
+  const comprehensionData = Object.entries(stats.rubricDistribution || {} as Record<string, number>)
+    .filter(([, count]) => (count as number) > 0)
     .map(([level, count]) => ({
-      name: levelLabels[level] || level,
-      value: count,
-      fill: levelColors[level] || '#94a3b8',
+      name: rubricLabels[level] || level,
+      value: count as number,
+      fill: rubricColors[level] || '#94a3b8',
     }))
 
   const gradeTrendData = stats.gradeTrend.map(g => ({
@@ -186,8 +199,8 @@ export default function StudentDetailPage() {
           bgColor="bg-blue-50"
         />
         <StatCard
-          title="Nota Promedio"
-          value={stats.avgGrade !== null ? `${stats.avgGrade}/100` : '—'}
+          title="Nivel General"
+          value={rubricLabels[stats.overallRubric] || '—'}
           icon={<Award className="h-5 w-5 text-amber-600" />}
           bgColor="bg-amber-50"
         />

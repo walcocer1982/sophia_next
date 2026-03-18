@@ -30,7 +30,7 @@ export type UnderstandingLevel = 'memorized' | 'understood' | 'applied' | 'analy
 /**
  * Tipo de respuesta del estudiante (útil para feedback diferenciado)
  */
-export type ResponseType = 'correct' | 'partial' | 'incorrect' | 'off_topic'
+export type ResponseType = 'correct' | 'partial' | 'incorrect' | 'off_topic' | 'continuation'
 
 /**
  * Imagen asociada a una actividad

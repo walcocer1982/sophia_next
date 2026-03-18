@@ -82,10 +82,19 @@ export function VerificationManager({
             ...(updates.question !== undefined && {
               question: updates.question,
             }),
+            ...(updates.open_ended !== undefined && {
+              open_ended: updates.open_ended,
+            }),
+            ...(updates.max_attempts !== undefined && {
+              max_attempts: updates.max_attempts,
+            }),
             success_criteria: {
               ...a.verification.success_criteria,
               ...(updates.must_include !== undefined && {
                 must_include: updates.must_include,
+              }),
+              ...(updates.understanding_level !== undefined && {
+                understanding_level: updates.understanding_level as 'memorized' | 'understood' | 'applied' | 'analyzed',
               }),
             },
           },

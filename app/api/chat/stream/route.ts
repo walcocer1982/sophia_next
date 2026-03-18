@@ -196,13 +196,12 @@ export async function POST(request: Request) {
   // 🔥 FIX: Buscar el último mensaje del INSTRUCTOR (no cualquier mensaje)
   const lastInstructorMessage = sessionWithMessages.messages.find(m => m.role === 'assistant')
 
-  // 🔥 FIX: Detectar si el mensaje es una confirmación simple ("sí", "ok", "continuar")
-  // para evitar verificar contra criterios de la actividad
+  // Detectar si la actividad ya fue completada previamente
+  const activityAlreadyCompleted = activityProgress?.status === 'COMPLETED'
+
+  // Detectar si el mensaje es una confirmación simple ("sí", "ok", "continuar")
   const CONTINUATION_REGEX = /^(si|sí|ok|vale|entendido|claro|continuar|siguiente|adelante|de acuerdo|perfecto|listo|vamos|dale|ya|bueno)(\s+(por\s+favor|porfavor|gracias))?[.!]?$/i
   const isContinuationMessage = CONTINUATION_REGEX.test(message.trim())
-
-  // Si es continuación Y la actividad ya está completada, skip verification
-  const activityAlreadyCompleted = activityProgress?.status === 'COMPLETED'
 
   const [moderation, intent, verification] = await Promise.all([
     moderateContent(message, { lessonTitle }),
@@ -211,11 +210,11 @@ export async function POST(request: Request) {
       currentActivity: currentActivityInstruction,
       lastInstructorQuestion: lastInstructorMessage?.content || undefined
     }),
-    // Skip expensive AI verification for simple continuations
-    (isContinuationMessage || activityAlreadyCompleted)
+    // Solo skip verificación si la actividad YA está completada en DB
+    activityAlreadyCompleted
       ? Promise.resolve({
           completed: true,
-          criteriaMatched: ['Confirmación del estudiante'],
+          criteriaMatched: ['Actividad ya completada'],
           criteriaMissing: [],
           completeness_percentage: 100,
           understanding_level: 'understood' as const,
@@ -224,6 +223,8 @@ export async function POST(request: Request) {
           confidence: 'high' as const,
           ready_to_advance: true,
         })
+      // Continuaciones ("sí", "listo"): verificar acumulativamente
+      // El estudiante puede haber cumplido criterios en mensajes previos
       : verifyActivityCompletion(message, currentActivity, conversationHistory)
   ])
 
@@ -429,6 +430,7 @@ export async function POST(request: Request) {
               criteriaMissing: verification.criteriaMissing,
               understanding_level: verification.understanding_level,
               response_type: verification.response_type,
+              completeness_percentage: verification.completeness_percentage,
             },
             timestamp: new Date().toISOString(),
           }
@@ -534,21 +536,26 @@ export async function POST(request: Request) {
               },
             })
 
-            // Scoring: comprensión × penalización intentos × penalización tangentes
+            // Scoring: comprensión (70%) + eficiencia (30%)
+            // Comprensión = nivel demostrado al final de la actividad
+            // Eficiencia = penalización gradual por intentos y tangentes
             const comprehensionScores: Record<string, number> = {
               memorized: 40, understood: 70, applied: 85, analyzed: 100,
             }
-            const attemptPenalty = [1.0, 0.85, 0.7, 0.6] // 1st, 2nd, 3rd, 4th+
+            // Penalización gradual: más suave que antes, mínimo ×0.75
+            const attemptPenalty = [1.0, 0.95, 0.90, 0.85, 0.80, 0.75] // 1st-6th+
 
             let totalScore = 0
             for (const ap of allActivities) {
               const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
               const lastAttempt = evidence?.attempts?.at(-1)
               const level = lastAttempt?.analysis?.understanding_level || 'memorized'
-              const base = comprehensionScores[level] || 40
-              const penalty = attemptPenalty[Math.min(ap.attempts - 1, 3)]
+              const comprehension = comprehensionScores[level] || 40
+              const efficiency = attemptPenalty[Math.min(ap.attempts - 1, 5)]
               const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
-              totalScore += base * penalty * tangentPenalty
+              // Comprensión pesa 70%, eficiencia por intentos pesa 30%
+              const activityScore = (comprehension * 0.7) + (comprehension * 0.3 * efficiency * tangentPenalty)
+              totalScore += activityScore
             }
 
             const grade = allActivities.length > 0
@@ -578,8 +585,9 @@ export async function POST(request: Request) {
               logger.error('chat.stream.report_generation_failed', { sessionId, error: String(err) })
             })
           }
-        } else {
+        } else if (verification.response_type !== 'continuation') {
           // Incrementar attempts sin completar + guardar evidenceData
+          // Skip para mensajes de continuación ("sí", "listo") — no son intentos reales
           const failedAttempt = {
             studentResponse: message,
             analysis: {
@@ -589,6 +597,7 @@ export async function POST(request: Request) {
               criteriaMissing: verification.criteriaMissing,
               understanding_level: verification.understanding_level,
               response_type: verification.response_type,
+              completeness_percentage: verification.completeness_percentage,
             },
             timestamp: new Date().toISOString(),
           }
@@ -616,26 +625,74 @@ export async function POST(request: Request) {
             },
           })
 
-          // 🔥 NUEVO: Notificar al frontend cuando se alcanza max_attempts
-          const maxAttempts = currentActivity.verification.max_attempts || 3
+          // Forzar avance al llegar a 5 intentos
+          // La IA ya dio la respuesta en el intento 5 (prompt-builder maneja esto)
+          // Marcamos como completado con nivel "En inicio"
+          const forcedAdvanceLimit = 5
           const newAttemptCount = attempts + 1
 
-          if (newAttemptCount >= maxAttempts) {
-            const maxAttemptsData = JSON.stringify({
-              type: 'max_attempts_reached',
+          if (newAttemptCount >= forcedAdvanceLimit) {
+            // Buscar el mejor intento (mayor completeness_percentage)
+            type AttemptAnalysis = { understanding_level?: string; completeness_percentage?: number }
+            type AttemptRecord = { analysis?: AttemptAnalysis }
+            const allAttempts = (existingEvidence.attempts || []) as AttemptRecord[]
+            const currentAttempt: AttemptRecord = {
+              analysis: {
+                understanding_level: verification.understanding_level,
+                completeness_percentage: verification.completeness_percentage,
+              }
+            }
+            const bestAttempt = [...allAttempts, currentAttempt].reduce((best, att) => {
+              const pct = att.analysis?.completeness_percentage || 0
+              const bestPct = best.analysis?.completeness_percentage || 0
+              return pct > bestPct ? att : best
+            })
+
+            const bestLevel = bestAttempt.analysis?.understanding_level || 'memorized'
+
+            // Mark activity as completed by limit
+            await prisma.activityProgress.update({
+              where: {
+                lessonSessionId_activityId: {
+                  lessonSessionId: lessonSession.id,
+                  activityId: currentActivity.id,
+                },
+              },
+              data: {
+                status: 'COMPLETED',
+                completedAt: new Date(),
+                passedCriteria: false, // Did not pass on merit
+                aiFeedback: `Avanzó por límite de intentos (${forcedAdvanceLimit}). Mejor nivel: ${bestLevel}`,
+              },
+            })
+
+            // Auto-advance to next activity
+            const currentIdx = contentJson.activities.findIndex((a: { id: string }) => a.id === currentActivity.id)
+            const nextAct = contentJson.activities[currentIdx + 1]
+
+            if (nextAct) {
+              await prisma.lessonSession.update({
+                where: { id: lessonSession.id },
+                data: { activityId: nextAct.id },
+              })
+            }
+
+            // Notify frontend
+            const forcedAdvanceData = JSON.stringify({
+              type: 'forced_advance',
               activityId: currentActivity.id,
               attempts: newAttemptCount,
-              maxAttempts,
-              canSkip: true,  // El frontend puede ofrecer "continuar de todos modos"
-              message: `Has alcanzado el máximo de ${maxAttempts} intentos. Puedes continuar si lo deseas.`,
+              bestLevel,
+              nextActivityId: nextAct?.id || null,
             })
-            controller.enqueue(encoder.encode(`data: ${maxAttemptsData}\n\n`))
+            controller.enqueue(encoder.encode(`data: ${forcedAdvanceData}\n\n`))
 
-            logger.info('chat.stream.max_attempts_reached', {
+            logger.info('chat.stream.forced_advance', {
               sessionId,
               activityId: currentActivity.id,
               attempts: newAttemptCount,
-              maxAttempts,
+              bestLevel,
+              nextActivityId: nextAct?.id || null,
             })
           }
         }

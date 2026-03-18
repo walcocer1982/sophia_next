@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
+import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '@/lib/rubric'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -66,6 +67,7 @@ export async function GET(
               completedAt: true,
               evidenceData: true,
               aiFeedback: true,
+              passedCriteria: true,
             },
           },
           messages: {
@@ -93,6 +95,7 @@ export async function GET(
           analysis?: {
             understanding_level?: string
             response_type?: string
+            completeness_percentage?: number
             criteriaMatched?: string[]
             criteriaMissing?: string[]
           }
@@ -102,16 +105,20 @@ export async function GET(
 
       const lastAttempt = evidence?.attempts?.at(-1)
 
-      // Calculate score for this activity
-      const comprehensionScores: Record<string, number> = {
-        memorized: 40, understood: 70, applied: 85, analyzed: 100,
-      }
-      const attemptPenalty = [1.0, 0.85, 0.7, 0.6]
+      // Calculate rubric level for this activity
       const level = lastAttempt?.analysis?.understanding_level || 'memorized'
-      const base = comprehensionScores[level] || 40
-      const penalty = attemptPenalty[Math.min((progress?.attempts || 1) - 1, 3)]
-      const tangentPenalty = (progress?.tangentCount || 0) > 3 ? 0.9 : 1.0
-      const score = progress?.status === 'COMPLETED' ? Math.round(base * penalty * tangentPenalty) : null
+      const completeness = lastAttempt?.analysis?.completeness_percentage || 0
+      const passedCriteria = progress?.passedCriteria !== false // default true for old data
+
+      // Find best attempt completeness for rubric calculation
+      const bestCompleteness = evidence?.attempts
+        ? Math.max(...evidence.attempts.map(a => (a.analysis as { completeness_percentage?: number })?.completeness_percentage || 0))
+        : completeness
+
+      const responseType = lastAttempt?.analysis?.response_type
+      const rubricLevel = progress?.status === 'COMPLETED'
+        ? calculateRubricLevel(level, bestCompleteness, progress.attempts, passedCriteria, responseType)
+        : null
 
       return {
         id: actDef.id,
@@ -124,7 +131,8 @@ export async function GET(
         responseType: lastAttempt?.analysis?.response_type || null,
         criteriaMatched: lastAttempt?.analysis?.criteriaMatched || [],
         criteriaMissing: lastAttempt?.analysis?.criteriaMissing || [],
-        score,
+        rubricLevel,
+        passedCriteria,
         completedAt: progress?.completedAt,
       }
     })
@@ -152,15 +160,22 @@ export async function GET(
   const avgGrade = grades.length > 0 ? Math.round(grades.reduce((a, b) => a + b, 0) / grades.length) : null
   const totalMessages = lessonDetails.reduce((a, l) => a + l.totalMessages, 0)
 
-  // Understanding level distribution across all completed activities
-  const allLevels: Record<string, number> = { memorized: 0, understood: 0, applied: 0, analyzed: 0 }
+  // Rubric level distribution across all completed activities
+  const rubricDistribution: Record<string, number> = {
+    logrado_destacado: 0, logrado: 0, en_proceso: 0, en_inicio: 0,
+  }
+  const allRubricLevels: RubricLevel[] = []
   for (const lesson of lessonDetails) {
     for (const act of lesson.activities) {
-      if (act.understandingLevel && allLevels[act.understandingLevel] !== undefined) {
-        allLevels[act.understandingLevel]++
+      if (act.rubricLevel) {
+        rubricDistribution[act.rubricLevel]++
+        allRubricLevels.push(act.rubricLevel)
       }
     }
   }
+
+  // Overall rubric level
+  const overallRubric = calculateOverallRubric(allRubricLevels)
 
   // Grade trend (per lesson, in order)
   const gradeTrend = lessonDetails
@@ -175,7 +190,8 @@ export async function GET(
       totalLessons: lessonDetails.length,
       avgGrade,
       totalMessages,
-      comprehension: allLevels,
+      overallRubric,
+      rubricDistribution,
       gradeTrend,
     },
     lessons: lessonDetails,

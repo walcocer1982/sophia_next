@@ -220,11 +220,11 @@ SUGERENCIAS DE IMÁGENES (image_suggestions):
 - Las sugerencias guían al profesor para buscar/crear el recurso visual correcto.
 
 PREGUNTAS ABIERTAS vs CERRADAS (open_ended):
-Regla: la progresión es CERRADAS → MIXTAS → ABIERTAS, siguiendo Bloom.
+Evalúa COMPRENSIÓN del concepto, no palabras exactas.
 
 | Tipo actividad | open_ended | Razón |
 |----------------|------------|-------|
-| explanation    | SIEMPRE false | El estudiante acaba de aprender. Preguntas cerradas verifican comprensión sin sobrecargar. |
+| explanation    | SIEMPRE true | Evalúa si el estudiante comprendió el concepto, no si usó palabras exactas. |
 | practice       | false (default) | Preguntas específicas del escenario. Solo "true" si complexity: complex. |
 | reflection     | SIEMPRE true | El estudiante ya practicó. Evalúa razonamiento, no keywords. |
 | closing        | SIEMPRE true | Síntesis personal. No hay respuesta única correcta. |
@@ -246,8 +246,8 @@ FORMATO DE ACTIVIDAD:
       "min_completeness": 60,
       "understanding_level": "memorized|understood|applied|analyzed"
     },
-    "max_attempts": 3,
-    "open_ended": false
+    "max_attempts": 5,
+    "open_ended": true
   },
   "commonMistakes": ["string"]
 }

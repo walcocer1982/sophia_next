@@ -76,9 +76,9 @@ interface SystemPromptWithCache {
  * Controla la extensión de las respuestas del AI
  */
 export const COMPLEXITY_TOKENS: Record<ActivityComplexity, number> = {
-  simple: 400,     // Target: 80-150 palabras
-  moderate: 600,   // Target: 150-250 palabras
-  complex: 850,    // Target: 250-400 palabras
+  simple: 250,     // Target: 40-80 palabras
+  moderate: 400,   // Target: 80-150 palabras
+  complex: 600,    // Target: 150-250 palabras
 }
 
 /**
@@ -233,13 +233,15 @@ DETECCIÓN DE ERRORES DE TIPEO NUMÉRICOS:
 ---
 
 EXTENSIÓN (ESTRICTO):
-- Si el estudiante respondió CORRECTAMENTE: máximo 2-3 oraciones (validación + siguiente pregunta). NO expandas ni repitas lo que ya dijo.
-- ENSEÑANZA de concepto nuevo: máximo 150 palabras
-- SEGUIMIENTO o repregunta: máximo 60-80 palabras (breve y directo)
+- RESPUESTA CORRECTA: máximo 1-2 oraciones (validación breve + siguiente pregunta). NO expandas ni repitas.
+- ENSEÑANZA de concepto nuevo: máximo 80 palabras (3-4 oraciones)
+- SEGUIMIENTO o repregunta: máximo 40 palabras (2 oraciones)
 - UNA pregunta al final
 - Sin emojis
 - Habla como persona real
-- PROHIBIDO dar "clases magistrales" de 200+ palabras antes de preguntar`
+- PROHIBIDO dar "clases magistrales" de 200+ palabras antes de preguntar
+- PROHIBIDO repetir lo que el estudiante ya dijo correctamente
+- Si el estudiante cumplió los criterios de verificación, NO hagas preguntas de profundización adicionales. Cierra y avanza.`
 
   // ═══════════════════════════════════════════════════════════════
   // BLOQUE ESTÁTICO 2: Instrucciones de actividad (CACHEABLE)
@@ -432,7 +434,19 @@ Pregunta: "${nextQuestion}"
 
       switch (responseType) {
         case 'partial':
-          responseGuidance = `RESPUESTA PARCIAL — Va por buen camino.
+          if (attempts >= 3) {
+            // Después de 3+ intentos parciales: dar la respuesta y avanzar
+            responseGuidance = `RESPUESTA PARCIAL TRAS ${attempts} INTENTOS — Ya es suficiente, avanza.
+${matchedStr}
+${missingStr}
+
+CÓMO RESPONDER (máximo 60-80 palabras):
+1. "Bien. [Lo que dijo bien]. Para completar: [lo que faltó explicado brevemente]."
+2. NO hagas más preguntas sobre este tema
+3. Avanza directamente al siguiente tema o actividad
+⚠️ El estudiante ya intentó ${attempts} veces. Explica lo que falta y AVANZA.`
+          } else {
+            responseGuidance = `RESPUESTA PARCIAL — Va por buen camino.
 ${matchedStr}
 ${missingStr}
 
@@ -441,6 +455,7 @@ CÓMO RESPONDER (máximo 60-80 palabras):
 2. UNA pregunta enfocada en lo que falta
 3. NO repitas lo que ya respondió correctamente
 ⛔ NO uses "Perfecto" ni "Exacto" — la respuesta está incompleta`
+          }
           break
         case 'incorrect':
           responseGuidance = `RESPUESTA INCORRECTA — Hay errores conceptuales.
@@ -534,16 +549,29 @@ EJEMPLO DE RESPUESTA CORRECTA:
 - Volver a conceptos de actividades anteriores`
   }
 
-  // Scaffolding según intentos (pistas progresivas)
-  if (attempts >= 1 && attempts < 3) {
-    dynamicPrompt += `\n\nINTENTO ${attempts}: Pistas progresivas - ${attempts === 1 ? 'sutiles' : 'más directas'}`
-  } else if (attempts >= 3) {
-    dynamicPrompt += `\n\nINTENTO ${attempts}: Guía explícita, ofrece avanzar si hay frustración`
-  }
-
-  // Pistas según intentos
-  if (attempts >= 2) {
-    dynamicPrompt += `\n\nINTENTOS: ${attempts}/${maxAttempts}. ${attempts >= maxAttempts ? 'Ofrece avanzar de todos modos.' : 'Da pistas más directas.'}`
+  // Scaffolding docente: progresión de 5 intentos
+  if (attempts >= 1) {
+    const hintStrategies: Record<number, string> = {
+      1: `INTENTO 2/5 — PISTA SUTIL:
+- Reformula la pregunta de otra manera
+- Da una pista indirecta: "Piensa en..." o "Fíjate en..."
+- NO des la respuesta`,
+      2: `INTENTO 3/5 — PISTA DIRECTA:
+- Señala exactamente qué falta: "Te falta considerar..."
+- Da opciones: "¿Es A o B?"
+- Reduce la pregunta a algo más específico`,
+      3: `INTENTO 4/5 — EXPLICA Y PIDE QUE REPITA:
+- Explica el concepto que falta en 2-3 oraciones
+- Pide que el estudiante lo repita con sus propias palabras
+- "Entonces, con eso en mente, ¿cómo responderías?"`,
+      4: `INTENTO 5/5 — DA LA RESPUESTA Y AVANZA:
+- Da la respuesta completa en 2-3 oraciones claras
+- Pregunta: "¿Tiene sentido?" o "¿Queda claro?"
+- Cuando el estudiante confirme, avanza a la siguiente actividad
+- NO hagas más preguntas sobre este tema`,
+    }
+    const hintLevel = Math.min(attempts, 4)
+    dynamicPrompt += `\n\n${hintStrategies[hintLevel]}`
   }
 
   // Instrucciones específicas según clasificación de intención

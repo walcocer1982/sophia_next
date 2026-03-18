@@ -5,11 +5,11 @@ import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, Search, AlertTriangle, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { ArrowLeft, Search, AlertTriangle, Clock, XCircle } from 'lucide-react'
 import Link from 'next/link'
 
 // Types
-interface ActiveStudent {
+interface MonitoredStudent {
   userId: string
   name: string | null
   email: string | null
@@ -23,16 +23,15 @@ interface ActiveStudent {
   percentage: number
   criteriaMatched: string[]
   criteriaMissing: string[]
+  startedAt: string
   lastActivityAt: string
-}
-
-interface InactiveStudent {
-  userId: string
-  name: string | null
-  email: string | null
-  image: string | null
-  lastActivityAt: string
-  hoursInactive: number
+  activeMinutes: number
+  messageCount: number
+  grade: number | null
+  lastActivityLevel: string | null
+  overallLevel: string | null
+  hoursInactive?: number
+  completedAt?: string
 }
 
 interface FunnelActivity {
@@ -54,18 +53,6 @@ interface LessonFunnel {
   funnel: FunnelActivity[]
 }
 
-interface StudentRow {
-  id: string
-  name: string | null
-  email: string | null
-  image: string | null
-  sessionsCompleted: number
-  totalSessions: number
-  avgGrade: number | null
-  lastActivity: string
-  status: 'active' | 'inactive' | 'completed'
-}
-
 interface InactivityAlert {
   userId: string
   name: string | null
@@ -85,12 +72,12 @@ interface CourseData {
     instructor: string
   }
   monitoring: {
-    active: ActiveStudent[]
-    inactive: InactiveStudent[]
+    active: MonitoredStudent[]
+    inactive: MonitoredStudent[]
+    completed: MonitoredStudent[]
   }
   alerts: InactivityAlert[]
   funnels: LessonFunnel[]
-  students: StudentRow[]
 }
 
 export default function CourseDashboardPage() {
@@ -145,12 +132,7 @@ export default function CourseDashboardPage() {
 
   if (!data) return null
 
-  const { course, monitoring, alerts, funnels, students } = data
-
-  const filteredStudents = students.filter(s =>
-    (s.name?.toLowerCase().includes(search.toLowerCase())) ||
-    (s.email?.toLowerCase().includes(search.toLowerCase()))
-  )
+  const { course, monitoring, alerts, funnels } = data
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
@@ -224,106 +206,242 @@ export default function CourseDashboardPage() {
       {/* === REAL-TIME MONITORING === */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
-            </span>
-            Monitoreo en Tiempo Real
-            <span className="text-xs text-gray-400 font-normal ml-2">
-              (actualización cada 15s)
-            </span>
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+              </span>
+              Monitoreo en Tiempo Real
+              <span className="text-xs text-gray-400 font-normal ml-2">
+                (actualización cada 15s)
+              </span>
+            </CardTitle>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar por nombre o email..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {monitoring.active.length === 0 && monitoring.inactive.length === 0 ? (
             <p className="text-sm text-gray-500 py-4 text-center">No hay estudiantes con sesiones activas</p>
-          ) : (
-            <div className="space-y-2">
-              {/* Active students */}
-              {monitoring.active.map(s => (
-                <div
-                  key={s.userId}
-                  className="flex items-center gap-4 p-3 rounded-lg bg-green-50 border border-green-100"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                    </span>
-                  </div>
+          ) : (() => {
+            const filterStudent = (s: MonitoredStudent) =>
+              !search || (s.name?.toLowerCase().includes(search.toLowerCase())) || (s.email?.toLowerCase().includes(search.toLowerCase()))
+            const filteredActive = monitoring.active.filter(filterStudent)
+            const filteredInactive = monitoring.inactive.filter(filterStudent)
+            const filteredCompleted = monitoring.completed.filter(filterStudent)
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm text-gray-900 truncate">
-                        {s.name || s.email}
-                      </span>
-                      {s.activityIndex && s.activityTotal && (
-                        <span className="text-xs text-gray-500">
-                          Act {s.activityIndex}/{s.activityTotal}
+            return filteredActive.length === 0 && filteredInactive.length === 0 && filteredCompleted.length === 0 ? (
+              <p className="text-sm text-gray-500 py-4 text-center">No se encontraron estudiantes</p>
+            ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-gray-500">
+                    <th className="pb-2 font-medium pl-3">Estado</th>
+                    <th className="pb-2 font-medium">Estudiante</th>
+                    <th className="pb-2 font-medium">Actividad</th>
+                    <th className="pb-2 font-medium">Progreso</th>
+                    <th className="pb-2 font-medium">Fecha</th>
+                    <th className="pb-2 font-medium">Ingresó</th>
+                    <th className="pb-2 font-medium">Último msg</th>
+                    <th className="pb-2 font-medium">Tiempo</th>
+                    <th className="pb-2 font-medium">Msgs</th>
+                    <th className="pb-2 font-medium">Nivel</th>
+                    <th className="pb-2 font-medium">Alertas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Active students */}
+                  {filteredActive.map(s => (
+                    <tr key={s.userId} className="border-b border-green-50 bg-green-50/30 hover:bg-green-50">
+                      <td className="py-1.5 pl-3">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
                         </span>
-                      )}
-                    </div>
-                    {s.activityTitle && (
-                      <p className="text-xs text-gray-600 truncate mt-0.5">
-                        {s.lessonTitle} — {s.activityTitle}
-                      </p>
-                    )}
-                  </div>
+                      </td>
+                      <td className="py-1.5">
+                        <Link href={`/dashboard/${courseId}/${s.userId}`} className="hover:text-blue-600">
+                          <p className="font-medium text-gray-900 text-sm">{s.name || s.email}</p>
+                        </Link>
+                      </td>
+                      <td className="py-1.5">
+                        {s.activityIndex && s.activityTotal ? (
+                          <div>
+                            <span className="text-xs font-medium">Act {s.activityIndex}/{s.activityTotal}</span>
+                            {s.activityTitle && (
+                              <p className="text-[10px] text-gray-500 truncate max-w-[150px]">{s.activityTitle}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="py-1.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-green-500 rounded-full" style={{ width: `${s.percentage}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-600">{Math.round(s.percentage)}%</span>
+                        </div>
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-600">
+                        {new Date(s.startedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-600">
+                        {new Date(s.startedAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-600">
+                        {new Date(s.lastActivityAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-600">
+                        {s.activeMinutes} min
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-600">
+                        {s.messageCount}
+                      </td>
+                      <td className="py-1.5">
+                        <RubricBadge level={s.overallLevel} />
+                      </td>
+                      <td className="py-1.5">
+                        {s.attempts >= 3 ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              {s.attempts} intentos
+                            </span>
+                            {s.criteriaMissing.length > 0 && (
+                              <p className="text-[10px] text-red-600 truncate max-w-[120px] mt-0.5">
+                                Falta: {s.criteriaMissing[0]}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-green-600">Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
 
-                  {/* Progress bar */}
-                  <div className="w-20">
-                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-green-500 rounded-full"
-                        style={{ width: `${s.percentage}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-gray-500 text-right mt-0.5">{Math.round(s.percentage)}%</p>
-                  </div>
+                  {/* Inactive students */}
+                  {filteredInactive.map(s => (
+                    <tr key={s.userId} className="border-b border-gray-50 bg-gray-50/30 hover:bg-gray-50">
+                      <td className="py-1.5 pl-3">
+                        <span className="inline-flex rounded-full h-2 w-2 bg-gray-300" />
+                      </td>
+                      <td className="py-1.5">
+                        <Link href={`/dashboard/${courseId}/${s.userId}`} className="hover:text-blue-600">
+                          <p className="font-medium text-gray-500 text-sm">{s.name || s.email}</p>
+                        </Link>
+                      </td>
+                      <td className="py-1.5">
+                        {s.activityIndex && s.activityTotal ? (
+                          <div>
+                            <span className="text-xs text-gray-500">Act {s.activityIndex}/{s.activityTotal}</span>
+                            {s.activityTitle && (
+                              <p className="text-[10px] text-gray-400 truncate max-w-[150px]">{s.activityTitle}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="py-1.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-gray-400 rounded-full" style={{ width: `${s.percentage}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-400">{Math.round(s.percentage)}%</span>
+                        </div>
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-400">
+                        {new Date(s.startedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-400">
+                        {new Date(s.startedAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-400">
+                        {new Date(s.lastActivityAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-400">
+                        {s.activeMinutes} min
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-400">
+                        {s.messageCount}
+                      </td>
+                      <td className="py-1.5">
+                        <RubricBadge level={s.overallLevel} muted />
+                      </td>
+                      <td className="py-1.5">
+                        <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
+                          <Clock className="h-2.5 w-2.5" />
+                          {s.hoursInactive}h inactivo
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
 
-                  {/* Alerts */}
-                  {s.attempts >= 3 && (
-                    <div className="flex items-center gap-1.5 bg-amber-100 text-amber-800 px-2 py-1 rounded text-xs font-medium">
-                      <AlertTriangle className="h-3 w-3" />
-                      {s.attempts} intentos
-                    </div>
-                  )}
-
-                  {s.criteriaMissing.length > 0 && s.attempts >= 2 && (
-                    <div className="hidden lg:block max-w-[200px]">
-                      <p className="text-[10px] text-red-600 truncate">
-                        Falta: {s.criteriaMissing[0]}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Inactive students */}
-              {monitoring.inactive.map(s => (
-                <div
-                  key={s.userId}
-                  className="flex items-center gap-4 p-3 rounded-lg bg-gray-50 border border-gray-100"
-                >
-                  <span className="flex h-2 w-2">
-                    <span className="inline-flex rounded-full h-2 w-2 bg-gray-300" />
-                  </span>
-
-                  <div className="flex-1 min-w-0">
-                    <span className="font-medium text-sm text-gray-500 truncate">
-                      {s.name || s.email}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                    <Clock className="h-3 w-3" />
-                    Inactivo {s.hoursInactive}h
-                  </div>
-                </div>
-              ))}
+                  {/* Completed students */}
+                  {filteredCompleted.map(s => (
+                    <tr key={`completed-${s.userId}-${s.sessionId}`} className="border-b border-blue-50 bg-blue-50/20 hover:bg-blue-50/40">
+                      <td className="py-1.5 pl-3">
+                        <span className="inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                      </td>
+                      <td className="py-1.5">
+                        <Link href={`/dashboard/${courseId}/${s.userId}`} className="hover:text-blue-600">
+                          <p className="font-medium text-gray-700 text-sm">{s.name || s.email}</p>
+                        </Link>
+                      </td>
+                      <td className="py-1.5">
+                        <span className="text-xs text-blue-600 font-medium">Completó</span>
+                        {s.lessonTitle && (
+                          <p className="text-[10px] text-gray-400 truncate max-w-[150px]">{s.lessonTitle}</p>
+                        )}
+                      </td>
+                      <td className="py-1.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-14 h-1.5 bg-blue-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: '100%' }} />
+                          </div>
+                          <span className="text-xs text-blue-600">100%</span>
+                        </div>
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-500">
+                        {new Date(s.startedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-500">
+                        {new Date(s.startedAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-500">
+                        {new Date(s.lastActivityAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-500">
+                        {s.activeMinutes} min
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-500">
+                        {s.messageCount}
+                      </td>
+                      <td className="py-1.5">
+                        <RubricBadge level={s.overallLevel} />
+                      </td>
+                      <td className="py-1.5">
+                        <span className="text-xs text-blue-600">Completado</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
+            )
+          })()}
         </CardContent>
       </Card>
 
@@ -441,116 +559,26 @@ export default function CourseDashboardPage() {
         </Card>
       ))}
 
-      {/* === STUDENT TABLE === */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Estudiantes</CardTitle>
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Buscar por nombre o email..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-9 h-9 text-sm"
-              />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-gray-500">
-                  <th className="pb-2 font-medium">Estudiante</th>
-                  <th className="pb-2 font-medium">Sesiones</th>
-                  <th className="pb-2 font-medium">Nota</th>
-                  <th className="pb-2 font-medium">Última actividad</th>
-                  <th className="pb-2 font-medium">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStudents.map(s => (
-                  <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-3">
-                      <Link
-                        href={`/dashboard/${courseId}/${s.id}`}
-                        className="hover:text-blue-600"
-                      >
-                        <p className="font-medium text-gray-900">{s.name || 'Sin nombre'}</p>
-                        <p className="text-xs text-gray-400">{s.email}</p>
-                      </Link>
-                    </td>
-                    <td className="py-3 text-gray-600">
-                      {s.sessionsCompleted}/{s.totalSessions}
-                    </td>
-                    <td className="py-3">
-                      {s.avgGrade !== null ? (
-                        <span className={`font-medium ${
-                          s.avgGrade >= 80 ? 'text-green-700' :
-                          s.avgGrade >= 60 ? 'text-blue-700' :
-                          s.avgGrade >= 40 ? 'text-amber-700' : 'text-red-700'
-                        }`}>
-                          {s.avgGrade}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    <td className="py-3 text-xs text-gray-500">
-                      {new Date(s.lastActivity).toLocaleString('es-PE', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </td>
-                    <td className="py-3">
-                      <StatusBadge status={s.status} />
-                    </td>
-                  </tr>
-                ))}
-                {filteredStudents.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-gray-400">
-                      No se encontraron estudiantes
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
 
-function StatusBadge({ status }: { status: 'active' | 'inactive' | 'completed' }) {
-  const config = {
-    active: {
-      label: 'Activo',
-      className: 'bg-green-100 text-green-700',
-      icon: <span className="relative flex h-1.5 w-1.5 mr-1"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" /></span>,
-    },
-    inactive: {
-      label: 'Inactivo',
-      className: 'bg-gray-100 text-gray-600',
-      icon: <Clock className="h-3 w-3 mr-1" />,
-    },
-    completed: {
-      label: 'Completó',
-      className: 'bg-blue-100 text-blue-700',
-      icon: <CheckCircle className="h-3 w-3 mr-1" />,
-    },
+function RubricBadge({ level, muted }: { level: string | null; muted?: boolean }) {
+  if (!level) return <span className="text-gray-300 text-xs">—</span>
+
+  const config: Record<string, { label: string; bg: string; text: string }> = {
+    logrado_destacado: { label: 'Destacado', bg: 'bg-emerald-100', text: 'text-emerald-700' },
+    logrado: { label: 'Logrado', bg: 'bg-blue-100', text: 'text-blue-700' },
+    en_proceso: { label: 'En proceso', bg: 'bg-amber-100', text: 'text-amber-700' },
+    en_inicio: { label: 'En inicio', bg: 'bg-red-100', text: 'text-red-600' },
   }
 
-  const { label, className, icon } = config[status]
+  const c = config[level] || config.en_proceso
+  const opacity = muted ? 'opacity-60' : ''
 
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${className}`}>
-      {icon}
-      {label}
+    <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${c.bg} ${c.text} ${opacity}`}>
+      {c.label}
     </span>
   )
 }
