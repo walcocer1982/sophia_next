@@ -35,6 +35,17 @@ export default async function LessonsPage() {
     ? { course: { careerId: user.careerId } }
     : {}
 
+  // Get student's enrollments to look up section schedules
+  const studentEnrollments = session?.user?.id
+    ? await prisma.enrollment.findMany({
+        where: { userId: session.user.id },
+        select: { sectionId: true, section: { select: { courseId: true } } },
+      })
+    : []
+  const enrollmentByCourse = new Map(
+    studentEnrollments.map(e => [e.section.courseId, e.sectionId])
+  )
+
   const lessons = (await prisma.lesson.findMany({
     where: {
       isPublished: true,
@@ -50,6 +61,9 @@ export default async function LessonsPage() {
       slug: true,
       keyPoints: true,
       order: true,
+      courseId: true,
+      availableAt: true,
+      closesAfterHours: true,
       course: {
         select: {
           title: true,
@@ -57,8 +71,20 @@ export default async function LessonsPage() {
           career: { select: { name: true } },
         },
       },
+      sectionSchedules: {
+        select: {
+          sectionId: true,
+          availableAt: true,
+          closesAfterHours: true,
+        },
+      },
     },
-  })) as LessonRow[]
+  })) as (LessonRow & {
+    courseId: string
+    availableAt: Date | null
+    closesAfterHours: number
+    sectionSchedules: Array<{ sectionId: string; availableAt: Date | null; closesAfterHours: number }>
+  })[]
 
   // Fetch user's sessions for progress (non-test only)
   const userSessions = session?.user?.id
@@ -84,20 +110,45 @@ export default async function LessonsPage() {
     }
   }
 
-  // Enrich lessons with status and career name
-  const enrichedLessons = lessons.map((l) => ({
-    id: l.id,
-    title: l.title,
-    slug: l.slug,
-    keyPoints: l.keyPoints,
-    order: l.order,
-    course: {
-      title: l.course.title,
-      slug: l.course.slug,
-      careerName: l.course.career?.name || null,
-    },
-    status: (progressMap.get(l.id) || 'not_started') as 'completed' | 'in_progress' | 'not_started',
-  }))
+  const now = new Date()
+
+  // Enrich lessons with status, career name, and availability
+  const enrichedLessons = lessons.map((l) => {
+    // Use section schedule if student is enrolled in a section for this course
+    const studentSectionId = enrollmentByCourse.get(l.courseId)
+    const sectionSchedule = studentSectionId
+      ? l.sectionSchedules.find(s => s.sectionId === studentSectionId)
+      : null
+
+    const effectiveAvailableAt = sectionSchedule?.availableAt ?? l.availableAt
+    const effectiveClosesAfterHours = sectionSchedule?.closesAfterHours ?? l.closesAfterHours
+
+    const availableDate = effectiveAvailableAt ? new Date(effectiveAvailableAt) : null
+    const isOpen = !availableDate || availableDate <= now
+    const closesAt = availableDate
+      ? new Date(availableDate.getTime() + effectiveClosesAfterHours * 60 * 60 * 1000)
+      : null
+    const isClosed = closesAt ? now > closesAt : false
+    const isAvailable = isOpen && !isClosed
+
+    return {
+      id: l.id,
+      title: l.title,
+      slug: l.slug,
+      keyPoints: l.keyPoints,
+      order: l.order,
+      course: {
+        title: l.course.title,
+        slug: l.course.slug,
+        careerName: l.course.career?.name || null,
+      },
+      status: (progressMap.get(l.id) || 'not_started') as 'completed' | 'in_progress' | 'not_started',
+      isAvailable,
+      isClosed,
+      availableAt: l.availableAt?.toISOString() || null,
+      closesAt: closesAt?.toISOString() || null,
+    }
+  })
 
   // Fetch careers for SUPERADMIN filter
   const careers = isSuperadmin

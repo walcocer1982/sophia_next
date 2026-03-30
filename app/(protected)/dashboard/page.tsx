@@ -4,8 +4,15 @@ import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
-import { Users, CheckCircle, Award, Activity } from 'lucide-react'
+import { Activity, AlertTriangle, CheckCircle, Users } from 'lucide-react'
 import Link from 'next/link'
+
+interface FunnelStep {
+  index: number
+  title: string
+  reached: number
+  percentage: number
+}
 
 interface LessonRow {
   courseId: string
@@ -20,14 +27,17 @@ interface LessonRow {
   completionRate: number
   avgGrade: number | null
   activeNow: number
+  inDifficulty: number
+  completedToday: number
+  funnel: FunnelStep[]
 }
 
 interface DashboardData {
   stats: {
-    totalStudents: number
-    completionRate: number
-    avgGrade: number | null
     activeNow: number
+    inDifficulty: number
+    completedToday: number
+    totalStudents: number
   }
   lessons: LessonRow[]
 }
@@ -37,6 +47,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [expandedLesson, setExpandedLesson] = useState<string | null>(null)
 
   const role = session?.user?.role || 'STUDENT'
   const isSuperadmin = role === 'SUPERADMIN'
@@ -123,29 +134,31 @@ export default function DashboardPage() {
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Estudiantes"
-          value={stats.totalStudents}
-          icon={<Users className="h-5 w-5 text-blue-600" />}
+          title="Activos Ahora"
+          value={stats.activeNow}
+          icon={<Activity className="h-5 w-5 text-green-600" />}
+          bgColor="bg-green-50"
+          highlight={stats.activeNow > 0}
+        />
+        <StatCard
+          title="En Dificultad"
+          value={stats.inDifficulty}
+          icon={<AlertTriangle className="h-5 w-5 text-amber-600" />}
+          bgColor="bg-amber-50"
+          highlight={stats.inDifficulty > 0}
+          description="3+ intentos en actividad actual"
+        />
+        <StatCard
+          title="Completaron Hoy"
+          value={stats.completedToday}
+          icon={<CheckCircle className="h-5 w-5 text-blue-600" />}
           bgColor="bg-blue-50"
         />
         <StatCard
-          title="Tasa de Completación"
-          value={`${stats.completionRate}%`}
-          icon={<CheckCircle className="h-5 w-5 text-green-600" />}
-          bgColor="bg-green-50"
-        />
-        <StatCard
-          title="Nota Promedio"
-          value={stats.avgGrade !== null ? `${stats.avgGrade}/100` : '—'}
-          icon={<Award className="h-5 w-5 text-amber-600" />}
-          bgColor="bg-amber-50"
-        />
-        <StatCard
-          title="Activos Ahora"
-          value={stats.activeNow}
-          icon={<Activity className="h-5 w-5 text-purple-600" />}
+          title="Total Estudiantes"
+          value={stats.totalStudents}
+          icon={<Users className="h-5 w-5 text-purple-600" />}
           bgColor="bg-purple-50"
-          highlight={stats.activeNow > 0}
         />
       </div>
 
@@ -171,8 +184,7 @@ export default function DashboardPage() {
                     <tr className="border-b border-gray-100 bg-gray-50/50">
                       <th className="text-left py-2.5 px-4 font-medium text-gray-500 text-xs uppercase tracking-wide">Sesión / Lección</th>
                       <th className="text-center py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Estudiantes</th>
-                      <th className="text-center py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Completaron</th>
-                      <th className="text-center py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Nota Prom</th>
+                      <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Embudo de Actividades</th>
                       <th className="text-center py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Estado</th>
                     </tr>
                   </thead>
@@ -182,67 +194,93 @@ export default function DashboardPage() {
                         key={lesson.lessonId}
                         className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors"
                       >
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-4">
                           <Link
                             href={`/dashboard/${courseId}`}
-                            className="text-gray-900 hover:text-blue-600 hover:underline font-medium"
+                            className="text-gray-900 hover:text-blue-600 hover:underline font-medium text-sm"
                           >
                             {lesson.lessonTitle}
                           </Link>
                         </td>
-                        <td className="text-center py-3 px-3 text-gray-600">
+                        <td className="text-center py-2.5 px-3 text-gray-600">
                           {lesson.totalStudents}
                         </td>
-                        <td className="text-center py-3 px-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all duration-500 ${
-                                  lesson.completionRate === 100
-                                    ? 'bg-green-500'
-                                    : lesson.completionRate >= 50
-                                      ? 'bg-blue-500'
-                                      : lesson.completionRate > 0
-                                        ? 'bg-amber-500'
-                                        : 'bg-gray-300'
-                                }`}
-                                style={{ width: `${lesson.completionRate}%` }}
-                              />
+                        <td className="py-2.5 px-3">
+                          {lesson.funnel.length > 0 ? (
+                            <div className="space-y-0.5">
+                              {/* Compact funnel: show bars + click to expand */}
+                              {(expandedLesson === lesson.lessonId ? lesson.funnel : lesson.funnel.slice(0, 3)).map(step => (
+                                <div key={step.index} className="flex items-center gap-2">
+                                  <span className="text-[10px] text-gray-400 w-5 shrink-0">#{step.index}</span>
+                                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-[120px]">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        step.percentage >= 70 ? 'bg-blue-500' :
+                                        step.percentage >= 40 ? 'bg-amber-400' :
+                                        'bg-red-400'
+                                      }`}
+                                      style={{ width: `${Math.max(step.percentage, 3)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] text-gray-500 w-14 shrink-0">
+                                    {step.reached}/{lesson.totalStudents}
+                                  </span>
+                                </div>
+                              ))}
+                              {lesson.funnel.length > 3 && (
+                                <button
+                                  onClick={() => setExpandedLesson(
+                                    expandedLesson === lesson.lessonId ? null : lesson.lessonId
+                                  )}
+                                  className="text-[10px] text-blue-500 hover:underline"
+                                >
+                                  {expandedLesson === lesson.lessonId ? 'ver menos' : `+${lesson.funnel.length - 3} más`}
+                                </button>
+                              )}
+                              {/* Completed count */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-green-600 w-5 shrink-0">&#10003;</span>
+                                <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-[120px]">
+                                  <div
+                                    className="h-full rounded-full bg-green-500"
+                                    style={{ width: `${Math.max(lesson.completionRate, 3)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-green-600 font-medium w-14 shrink-0">
+                                  {lesson.completedCount}/{lesson.totalStudents}
+                                </span>
+                              </div>
                             </div>
-                            <span className="text-gray-700 text-xs font-medium min-w-[60px]">
-                              {lesson.completedCount}/{lesson.totalStudents} ({lesson.completionRate}%)
-                            </span>
-                          </div>
-                        </td>
-                        <td className="text-center py-3 px-3">
-                          {lesson.avgGrade !== null ? (
-                            <span className={`font-semibold ${
-                              lesson.avgGrade >= 70
-                                ? 'text-green-700'
-                                : lesson.avgGrade >= 50
-                                  ? 'text-amber-700'
-                                  : 'text-red-600'
-                            }`}>
-                              {lesson.avgGrade}
-                            </span>
                           ) : (
-                            <span className="text-gray-400">—</span>
+                            <span className="text-xs text-gray-400">Sin actividades</span>
                           )}
                         </td>
-                        <td className="text-center py-3 px-3">
-                          {lesson.activeNow > 0 ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-green-700 font-medium bg-green-50 px-2 py-1 rounded-full">
-                              <span className="relative flex h-1.5 w-1.5">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                        <td className="text-center py-2.5 px-3">
+                          <div className="flex flex-col items-center gap-1">
+                            {lesson.activeNow > 0 && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-green-700 font-medium bg-green-50 px-1.5 py-0.5 rounded-full">
+                                <span className="relative flex h-1.5 w-1.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                                </span>
+                                {lesson.activeNow} activo{lesson.activeNow > 1 ? 's' : ''}
                               </span>
-                              {lesson.activeNow} activo{lesson.activeNow > 1 ? 's' : ''}
-                            </span>
-                          ) : lesson.completionRate === 100 ? (
-                            <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">Completado</span>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
+                            )}
+                            {lesson.inDifficulty > 0 && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-medium bg-amber-50 px-1.5 py-0.5 rounded-full">
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                {lesson.inDifficulty} en dificultad
+                              </span>
+                            )}
+                            {lesson.completedToday > 0 && (
+                              <span className="text-[10px] text-blue-600">
+                                {lesson.completedToday} hoy
+                              </span>
+                            )}
+                            {lesson.activeNow === 0 && lesson.inDifficulty === 0 && lesson.completedToday === 0 && (
+                              <span className="text-[10px] text-gray-400">—</span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -272,12 +310,14 @@ function StatCard({
   icon,
   bgColor,
   highlight,
+  description,
 }: {
   title: string
   value: string | number
   icon: React.ReactNode
   bgColor: string
   highlight?: boolean
+  description?: string
 }) {
   return (
     <Card className={`${highlight ? 'ring-2 ring-purple-300' : ''}`}>
@@ -286,6 +326,9 @@ function StatCard({
           <div>
             <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">{title}</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+            {description && (
+              <p className="text-[10px] text-gray-400 mt-0.5">{description}</p>
+            )}
           </div>
           <div className={`p-3 rounded-full ${bgColor}`}>{icon}</div>
         </div>

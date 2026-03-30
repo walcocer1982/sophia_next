@@ -36,10 +36,12 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   // Relaciones
-  career         Career?          @relation(fields: [careerId], references: [id])
-  lessonSessions LessonSession[]
-  accounts       Account[]
-  courses        Course[]
+  career             Career?              @relation(fields: [careerId], references: [id])
+  lessonSessions     LessonSession[]
+  accounts           Account[]
+  courses            Course[]
+  sectionInstructors SectionInstructor[]
+  enrollments        Enrollment[]
 
   @@index([email])
   @@index([googleId])
@@ -100,9 +102,10 @@ model Course {
   deletedAt   DateTime?
 
   // Relaciones
-  user    User?    @relation(fields: [userId], references: [id])
-  career  Career?  @relation(fields: [careerId], references: [id])
-  lessons Lesson[]
+  user     User?     @relation(fields: [userId], references: [id])
+  career   Career?   @relation(fields: [careerId], references: [id])
+  lessons  Lesson[]
+  sections Section[]
 
   @@index([slug])
   @@index([userId])
@@ -117,15 +120,18 @@ model Lesson {
   objective   String   // Objetivo de la lección
   keyPoints   String[] // Puntos clave de la lección
   contentJson Json     // { moments: [...] }
-  order       Int      @default(0)
-  isPublished Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  order       Int       @default(0)
+  isPublished      Boolean   @default(false)
+  availableAt      DateTime? // Fecha/hora desde la cual está disponible para estudiantes
+  closesAfterHours Int       @default(3) // Horas después de availableAt para cerrar la sesión
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relaciones
-  courseId String
-  course   Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  sessions LessonSession[]
+  courseId          String
+  course            Course                  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  sessions          LessonSession[]
+  sectionSchedules  SectionLessonSchedule[]
 
   @@index([slug])
   @@index([courseId])
@@ -148,6 +154,7 @@ model LessonSession {
   summaryText    String?   @db.Text
   lastSummaryAt  DateTime?
   isTest         Boolean   @default(false)
+  sectionId      String?   // Snapshot de la sección al iniciar sesión
   progress       Float     @default(0)
   grade          Float?
   completedAt    DateTime?
@@ -162,6 +169,7 @@ model LessonSession {
   @@unique([userId, lessonId, sessionAttempt])
   @@index([userId])
   @@index([lessonId])
+  @@index([sectionId])
 }
 
 enum ActivityStatus {
@@ -207,4 +215,78 @@ model Message {
   session LessonSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, timestamp])
+}
+
+// ============================================
+// 4. PERIODOS ACADÉMICOS Y SECCIONES
+// ============================================
+
+model AcademicPeriod {
+  id        String   @id @default(cuid())
+  name      String   @unique // "2025-1", "2025-2", "2026-1"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  sections Section[]
+}
+
+model Section {
+  id        String   @id @default(cuid())
+  name      String   // "Salón A", "Salón B"
+  courseId   String
+  periodId  String
+  createdAt DateTime @default(now())
+
+  course      Course                  @relation(fields: [courseId], references: [id])
+  period      AcademicPeriod          @relation(fields: [periodId], references: [id])
+  instructors SectionInstructor[]
+  enrollments Enrollment[]
+  schedules   SectionLessonSchedule[]
+
+  @@unique([courseId, periodId, name])
+  @@index([courseId])
+  @@index([periodId])
+}
+
+model SectionInstructor {
+  id        String   @id @default(cuid())
+  userId    String
+  sectionId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sectionId])
+  @@index([userId])
+  @@index([sectionId])
+}
+
+model Enrollment {
+  id         String   @id @default(cuid())
+  userId     String
+  sectionId  String
+  enrolledAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  section Section @relation(fields: [sectionId], references: [id])
+
+  @@unique([userId, sectionId])
+  @@index([userId])
+  @@index([sectionId])
+}
+
+model SectionLessonSchedule {
+  id               String    @id @default(cuid())
+  sectionId        String
+  lessonId         String
+  availableAt      DateTime?
+  closesAfterHours Int       @default(3)
+
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  lesson  Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, lessonId])
+  @@index([sectionId])
+  @@index([lessonId])
 }

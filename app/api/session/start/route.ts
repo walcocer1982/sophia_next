@@ -58,6 +58,9 @@ export async function POST(request: Request) {
       title: true,
       keyPoints: true,
       contentJson: true,
+      courseId: true,
+      availableAt: true,
+      closesAfterHours: true,
       course: {
         select: {
           title: true,
@@ -68,6 +71,54 @@ export async function POST(request: Request) {
 
   if (!lesson) {
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
+  }
+
+  // 4b. Look up student's section enrollment for this course
+  let studentSectionId: string | null = null
+  if (!isTest) {
+    const enrollment = await prisma.enrollment.findFirst({
+      where: {
+        userId: session.user.id,
+        section: { courseId: lesson.courseId },
+      },
+      select: { sectionId: true },
+    })
+    studentSectionId = enrollment?.sectionId || null
+  }
+
+  // 4c. Check availability using section schedule (fallback to lesson defaults)
+  if (!isTest) {
+    let effectiveAvailableAt = lesson.availableAt
+    let effectiveClosesAfterHours = lesson.closesAfterHours
+
+    if (studentSectionId) {
+      const sectionSchedule = await prisma.sectionLessonSchedule.findUnique({
+        where: { sectionId_lessonId: { sectionId: studentSectionId, lessonId } },
+      })
+      if (sectionSchedule) {
+        effectiveAvailableAt = sectionSchedule.availableAt
+        effectiveClosesAfterHours = sectionSchedule.closesAfterHours
+      }
+    }
+
+    if (effectiveAvailableAt) {
+      const now = new Date()
+      const availableAt = new Date(effectiveAvailableAt)
+      const closesAt = new Date(availableAt.getTime() + effectiveClosesAfterHours * 60 * 60 * 1000)
+
+      if (now < availableAt) {
+        return NextResponse.json(
+          { error: 'Esta lección aún no está disponible' },
+          { status: 400 }
+        )
+      }
+      if (now > closesAt) {
+        return NextResponse.json(
+          { error: 'Esta sesión ya se cerró' },
+          { status: 400 }
+        )
+      }
+    }
   }
 
   // 5. Get first activity from lesson content
@@ -174,6 +225,7 @@ export async function POST(request: Request) {
         startedAt: new Date(),
         lastActivityAt: new Date(),
         activityId: firstActivity.activityId,
+        sectionId: studentSectionId,
       },
     })
 

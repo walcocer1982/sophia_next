@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
+import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
 
@@ -12,10 +13,19 @@ export async function GET() {
   const role = session.user.role || 'ADMIN'
   const userId = session.user.id
 
-  // SUPERADMIN ve todos los cursos, ADMIN solo los suyos
+  // Get courses where user is section instructor
+  const sectionAssignments = role !== 'SUPERADMIN'
+    ? await prisma.sectionInstructor.findMany({
+        where: { userId },
+        select: { section: { select: { courseId: true, id: true } } },
+      })
+    : []
+  const sectionCourseIds = [...new Set(sectionAssignments.map(s => s.section.courseId))]
+
+  // SUPERADMIN: all courses. ADMIN: own courses + courses where section instructor
   const whereClause = role === 'SUPERADMIN'
     ? { deletedAt: null }
-    : { userId, deletedAt: null }
+    : { deletedAt: null, OR: [{ userId }, ...(sectionCourseIds.length > 0 ? [{ id: { in: sectionCourseIds } }] : [])] }
 
   const courses = await prisma.course.findMany({
     where: whereClause,
@@ -33,6 +43,7 @@ export async function GET() {
         select: {
           id: true,
           title: true,
+          contentJson: true,
           sessions: {
             where: { isTest: false },
             select: {
@@ -41,6 +52,11 @@ export async function GET() {
               completedAt: true,
               grade: true,
               lastActivityAt: true,
+              activityId: true,
+              activities: {
+                where: { status: 'COMPLETED' },
+                select: { activityId: true, attempts: true },
+              },
             },
           },
         },
@@ -50,9 +66,17 @@ export async function GET() {
   })
 
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
 
-  // Build lesson-level rows grouped by career > course
-  const lessonRows: Array<{
+  interface FunnelStep {
+    index: number
+    title: string
+    reached: number
+    percentage: number
+  }
+
+  interface LessonRow {
     courseId: string
     courseTitle: string
     careerId: string | null
@@ -65,16 +89,22 @@ export async function GET() {
     completionRate: number
     avgGrade: number | null
     activeNow: number
-  }> = []
+    inDifficulty: number
+    completedToday: number
+    funnel: FunnelStep[]
+  }
 
-  let globalStudents = new Set<string>()
-  let globalCompleted = 0
-  let globalTotal = 0
+  const lessonRows: LessonRow[] = []
+
+  const globalStudents = new Set<string>()
   let globalActiveNow = 0
-  const allGrades: number[] = []
+  let globalInDifficulty = 0
+  let globalCompletedToday = 0
 
   for (const course of courses) {
     for (const lesson of course.lessons) {
+      const contentJson = lesson.contentJson as LessonContent | null
+      const activities = contentJson?.activities || []
       const uniqueStudents = new Set(lesson.sessions.map(s => s.userId))
       const completed = lesson.sessions.filter(s => s.completedAt)
       const grades = completed.filter(s => s.grade !== null).map(s => s.grade as number)
@@ -84,6 +114,41 @@ export async function GET() {
       const activeNow = lesson.sessions.filter(
         s => !s.completedAt && s.lastActivityAt > twoHoursAgo
       ).length
+
+      // Students in difficulty: active with 3+ attempts on current activity
+      const inDifficulty = lesson.sessions.filter(s => {
+        if (s.completedAt || s.lastActivityAt <= twoHoursAgo) return false
+        const currentActProgress = s.activities.find(a => a.activityId === s.activityId)
+        return currentActProgress && currentActProgress.attempts >= 3
+      }).length
+
+      // Completed today
+      const completedToday = lesson.sessions.filter(
+        s => s.completedAt && new Date(s.completedAt) >= todayStart
+      ).length
+
+      // Build activity funnel: how many students reached each activity
+      const funnel: FunnelStep[] = activities.map((act, idx) => {
+        // A student "reached" an activity if they completed it OR are currently on it
+        const reached = lesson.sessions.filter(s => {
+          // Completed the lesson = reached all activities
+          if (s.completedAt) return true
+          // Completed this specific activity
+          if (s.activities.some(a => a.activityId === act.id)) return true
+          // Currently on this activity
+          if (s.activityId === act.id) return true
+          // Currently on a LATER activity (so they passed this one)
+          const currentIdx = activities.findIndex(a => a.id === s.activityId)
+          return currentIdx > idx
+        }).length
+
+        return {
+          index: idx + 1,
+          title: act.teaching?.agent_instruction?.slice(0, 60) || `Actividad ${idx + 1}`,
+          reached,
+          percentage: uniqueStudents.size > 0 ? Math.round((reached / uniqueStudents.size) * 100) : 0,
+        }
+      })
 
       lessonRows.push({
         courseId: course.id,
@@ -100,29 +165,27 @@ export async function GET() {
           : 0,
         avgGrade,
         activeNow,
+        inDifficulty,
+        completedToday,
+        funnel,
       })
 
       // Global stats
       for (const s of lesson.sessions) {
         globalStudents.add(s.userId)
       }
-      globalCompleted += completed.length
-      globalTotal += lesson.sessions.length
       globalActiveNow += activeNow
-      allGrades.push(...grades)
+      globalInDifficulty += inDifficulty
+      globalCompletedToday += completedToday
     }
   }
 
-  const globalAvgGrade = allGrades.length > 0
-    ? Math.round(allGrades.reduce((a, b) => a + b, 0) / allGrades.length)
-    : null
-
   return NextResponse.json({
     stats: {
-      totalStudents: globalStudents.size,
-      completionRate: globalTotal > 0 ? Math.round((globalCompleted / globalTotal) * 100) : 0,
-      avgGrade: globalAvgGrade,
       activeNow: globalActiveNow,
+      inDifficulty: globalInDifficulty,
+      completedToday: globalCompletedToday,
+      totalStudents: globalStudents.size,
     },
     lessons: lessonRows,
   })

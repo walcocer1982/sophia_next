@@ -15,6 +15,10 @@ type LessonWithProgress = {
     careerName: string | null
   }
   status: 'completed' | 'in_progress' | 'not_started'
+  isAvailable: boolean
+  isClosed: boolean
+  availableAt: string | null
+  closesAt: string | null
 }
 
 interface CareerFilterProps {

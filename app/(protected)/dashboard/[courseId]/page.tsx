@@ -77,6 +77,12 @@ interface CourseData {
     completed: MonitoredStudent[]
   }
   alerts: InactivityAlert[]
+  sections: Array<{
+    id: string
+    name: string
+    period: { name: string }
+    _count: { enrollments: number }
+  }>
   funnels: LessonFunnel[]
 }
 
@@ -90,12 +96,16 @@ export default function CourseDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [expandedFunnel, setExpandedFunnel] = useState<string | null>(null)
+  const [selectedSection, setSelectedSection] = useState<string>('')
 
   const role = session?.user?.role || 'STUDENT'
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dashboard/${courseId}`)
+      const url = selectedSection
+        ? `/api/dashboard/${courseId}?sectionId=${selectedSection}`
+        : `/api/dashboard/${courseId}`
+      const res = await fetch(url)
       if (res.ok) {
         setData(await res.json())
       }
@@ -104,7 +114,7 @@ export default function CourseDashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [courseId])
+  }, [courseId, selectedSection])
 
   useEffect(() => {
     if (role === 'STUDENT') {
@@ -116,7 +126,7 @@ export default function CourseDashboardPage() {
     // Polling cada 15s para monitoreo en tiempo real
     const interval = setInterval(fetchData, 15000)
     return () => clearInterval(interval)
-  }, [role, router, fetchData])
+  }, [role, router, fetchData, selectedSection])
 
   if (loading) {
     return (
@@ -217,7 +227,22 @@ export default function CourseDashboardPage() {
                 (actualización cada 15s)
               </span>
             </CardTitle>
-            <div className="relative w-64">
+            <div className="flex items-center gap-2">
+              {data.sections && data.sections.length > 0 && (
+                <select
+                  value={selectedSection}
+                  onChange={(e) => setSelectedSection(e.target.value)}
+                  className="text-xs border border-gray-200 rounded px-2 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="">Todas las secciones</option>
+                  {data.sections.map(sec => (
+                    <option key={sec.id} value={sec.id}>
+                      {sec.period.name} — {sec.name} ({sec._count.enrollments})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Buscar por nombre o email..."
@@ -225,6 +250,7 @@ export default function CourseDashboardPage() {
                 onChange={e => setSearch(e.target.value)}
                 className="pl-9 h-9 text-sm"
               />
+              </div>
             </div>
           </div>
         </CardHeader>

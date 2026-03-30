@@ -72,6 +72,40 @@ export async function GET(
   if (result instanceof NextResponse) return result
 
   const { courseId } = await params
+  const { searchParams } = new URL(request.url)
+  const filterSectionId = searchParams.get('sectionId')
+
+  // Check if user is lead/superadmin or section instructor
+  const isLead = result.user.role === 'SUPERADMIN' || await prisma.course.findFirst({
+    where: { id: courseId, userId: result.user.id },
+  })
+
+  // Get section instructor's section IDs for filtering
+  let allowedStudentIds: Set<string> | null = null
+  if (!isLead) {
+    const mySections = await prisma.sectionInstructor.findMany({
+      where: { userId: result.user.id, section: { courseId } },
+      select: { sectionId: true },
+    })
+    if (mySections.length === 0) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+    }
+    const sectionIds = filterSectionId
+      ? [filterSectionId]
+      : mySections.map(s => s.sectionId)
+    const enrollments = await prisma.enrollment.findMany({
+      where: { sectionId: { in: sectionIds } },
+      select: { userId: true },
+    })
+    allowedStudentIds = new Set(enrollments.map(e => e.userId))
+  } else if (filterSectionId) {
+    // Lead/SUPERADMIN with section filter
+    const enrollments = await prisma.enrollment.findMany({
+      where: { sectionId: filterSectionId },
+      select: { userId: true },
+    })
+    allowedStudentIds = new Set(enrollments.map(e => e.userId))
+  }
 
   // Get course with all published lessons and their sessions
   const course = await prisma.course.findUnique({
@@ -88,6 +122,8 @@ export async function GET(
           id: true,
           title: true,
           contentJson: true,
+          availableAt: true,
+          closesAfterHours: true,
           sessions: {
             where: { isTest: false },
             select: {
@@ -132,7 +168,19 @@ export async function GET(
 
   // === REAL-TIME MONITORING ===
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
-  const allSessions = course.lessons.flatMap(l => l.sessions)
+  const now = new Date()
+  const allSessionsRaw = course.lessons.flatMap(l => {
+    const closesAt = l.availableAt
+      ? new Date(new Date(l.availableAt).getTime() + l.closesAfterHours * 60 * 60 * 1000)
+      : null
+    const isClosed = closesAt ? now > closesAt : false
+    return l.sessions.map(s => ({ ...s, lessonClosesAt: closesAt, lessonIsClosed: isClosed }))
+  })
+
+  // Filter by section if applicable
+  const allSessions = allowedStudentIds
+    ? allSessionsRaw.filter(s => allowedStudentIds!.has(s.user.id))
+    : allSessionsRaw
 
   // Build activity metadata from contentJson (for all lessons)
   const activityMeta: Record<string, { title: string; lessonTitle: string; index: number; total: number }> = {}
@@ -396,6 +444,18 @@ export async function GET(
       }
     })
 
+  // === SECTIONS LIST for filter ===
+  const courseSections = await prisma.section.findMany({
+    where: { courseId },
+    orderBy: [{ period: { name: 'desc' } }, { name: 'asc' }],
+    select: {
+      id: true,
+      name: true,
+      period: { select: { name: true } },
+      _count: { select: { enrollments: true } },
+    },
+  })
+
   return NextResponse.json({
     course: {
       id: course.id,
@@ -403,6 +463,7 @@ export async function GET(
       career: course.career,
       instructor: course.user?.name || 'Sin instructor',
     },
+    sections: courseSections,
     monitoring: {
       active: activeStudents,
       inactive: inactiveStudents,

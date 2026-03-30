@@ -23,6 +23,8 @@ type CourseWithLessons = {
     keyPoints: string[]
     contentJson: unknown
     isPublished: boolean
+    availableAt: Date | null
+    closesAfterHours: number
   }>
 }
 
@@ -55,14 +57,47 @@ export default async function CourseOverviewPage({
           keyPoints: true,
           contentJson: true,
           isPublished: true,
+          availableAt: true,
+          closesAfterHours: true,
         },
       },
     },
   })) as (CourseWithLessons & { userId: string | null }) | null
 
-  if (!course || !isOwnerOrSuperadmin(session, course.userId)) {
+  if (!course) notFound()
+
+  // Check if user is lead instructor, SUPERADMIN, or section instructor
+  const isLeadOrSuper = isOwnerOrSuperadmin(session, course.userId)
+  const sectionInstructor = !isLeadOrSuper
+    ? await prisma.sectionInstructor.findFirst({
+        where: { userId: session.user.id, section: { courseId } },
+        include: { section: { select: { id: true, name: true, period: { select: { name: true } } } } },
+      })
+    : null
+
+  if (!isLeadOrSuper && !sectionInstructor) {
     notFound()
   }
+
+  const isSectionInstructor = !!sectionInstructor && !isLeadOrSuper
+
+  // Get sections for this course (for section instructor publish)
+  const courseSections = isSectionInstructor
+    ? await prisma.section.findMany({
+        where: {
+          courseId,
+          instructors: { some: { userId: session.user.id } },
+        },
+        select: {
+          id: true,
+          name: true,
+          period: { select: { name: true } },
+          schedules: {
+            select: { lessonId: true, availableAt: true, closesAfterHours: true },
+          },
+        },
+      })
+    : []
 
   const designedCount = course.lessons.filter((l) => {
     const json = l.contentJson as { activities?: unknown[] } | null
@@ -159,60 +194,83 @@ export default async function CourseOverviewPage({
 
               {/* Actions */}
               <div className="flex shrink-0 gap-2">
-                <Link href={`/planner/${courseId}/${lesson.id}`}>
-                  <Button
-                    variant={isDesigned ? 'outline' : 'default'}
-                    size="sm"
-                    className="gap-1.5"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Diseño
-                  </Button>
-                </Link>
-                {isDesigned && (
+                {/* Lead instructor / SUPERADMIN: full editing */}
+                {!isSectionInstructor && (
                   <>
-                    <Link href={`/planner/${courseId}/${lesson.id}/verification`}>
+                    <Link href={`/planner/${courseId}/${lesson.id}`}>
                       <Button
-                        variant="outline"
+                        variant={isDesigned ? 'outline' : 'default'}
                         size="sm"
-                        className={`gap-1.5 ${allVerified ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : ''}`}
+                        className="gap-1.5"
                       >
-                        {allVerified ? (
-                          <Check className="h-3.5 w-3.5" />
-                        ) : (
-                          <ClipboardCheck className="h-3.5 w-3.5" />
-                        )}
-                        Verificación
+                        <Pencil className="h-3.5 w-3.5" />
+                        Diseño
                       </Button>
                     </Link>
-                    <Link href={`/planner/${courseId}/${lesson.id}/resources`}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={`gap-1.5 ${hasResources ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : ''}`}
-                      >
-                        {hasResources ? (
-                          <Check className="h-3.5 w-3.5" />
-                        ) : (
-                          <Image className="h-3.5 w-3.5" />
-                        )}
-                        Recursos
-                      </Button>
-                    </Link>
-                    <TestLessonButton
-                      lessonId={lesson.id}
-                      activities={(json?.activities || []).map((a) => ({
-                        id: a.id,
-                        type: a.type,
-                        title: a.teaching?.agent_instruction || '',
-                      }))}
-                    />
-                    <PublishToggle
-                      lessonId={lesson.id}
-                      initialPublished={lesson.isPublished}
-                    />
+                    {isDesigned && (
+                      <>
+                        <Link href={`/planner/${courseId}/${lesson.id}/verification`}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={`gap-1.5 ${allVerified ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : ''}`}
+                          >
+                            {allVerified ? (
+                              <Check className="h-3.5 w-3.5" />
+                            ) : (
+                              <ClipboardCheck className="h-3.5 w-3.5" />
+                            )}
+                            Verificación
+                          </Button>
+                        </Link>
+                        <Link href={`/planner/${courseId}/${lesson.id}/resources`}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={`gap-1.5 ${hasResources ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : ''}`}
+                          >
+                            {hasResources ? (
+                              <Check className="h-3.5 w-3.5" />
+                            ) : (
+                              <Image className="h-3.5 w-3.5" />
+                            )}
+                            Recursos
+                          </Button>
+                        </Link>
+                        <TestLessonButton
+                          lessonId={lesson.id}
+                          activities={(json?.activities || []).map((a) => ({
+                            id: a.id,
+                            type: a.type,
+                            title: a.teaching?.agent_instruction || '',
+                          }))}
+                        />
+                        <PublishToggle
+                          lessonId={lesson.id}
+                          initialPublished={lesson.isPublished}
+                          initialAvailableAt={lesson.availableAt?.toISOString() || null}
+                          initialClosesAfterHours={lesson.closesAfterHours}
+                        />
+                      </>
+                    )}
                   </>
                 )}
+
+                {/* Section instructor: only publish for their section */}
+                {isSectionInstructor && isDesigned && courseSections.map(sec => {
+                  const schedule = sec.schedules.find(s => s.lessonId === lesson.id)
+                  return (
+                    <PublishToggle
+                      key={sec.id}
+                      lessonId={lesson.id}
+                      initialPublished={!!schedule?.availableAt}
+                      initialAvailableAt={schedule?.availableAt?.toISOString() || null}
+                      initialClosesAfterHours={schedule?.closesAfterHours || 3}
+                      sectionId={sec.id}
+                      sectionLabel={`${sec.period.name} ${sec.name}`}
+                    />
+                  )
+                })}
               </div>
             </div>
           )

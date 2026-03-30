@@ -8,7 +8,7 @@ import {
   CardDescription,
   CardTitle,
 } from '@/components/ui/card'
-import { BookOpen, Loader2, CheckCircle2, Play } from 'lucide-react'
+import { BookOpen, Loader2, CheckCircle2, Play, Lock, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface LessonCardProps {
@@ -22,6 +22,10 @@ interface LessonCardProps {
       title: string
       slug: string
     }
+    isAvailable?: boolean
+    isClosed?: boolean
+    availableAt?: string | null
+    closesAt?: string | null
   }
   status?: 'completed' | 'in_progress' | 'not_started'
 }
@@ -30,7 +34,20 @@ export function LessonCard({ lesson, status }: LessonCardProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 
+  const isAvailable = lesson.isAvailable !== false
+  const isClosed = lesson.isClosed === true
+  const isScheduled = !isAvailable && !isClosed && lesson.availableAt
+
   const handleStartLesson = async () => {
+    if (isClosed) {
+      toast.info('Esta sesión ya se cerró')
+      return
+    }
+    if (!isAvailable) {
+      toast.info('Esta lección aún no está disponible')
+      return
+    }
+
     setIsLoading(true)
     try {
       const response = await fetch('/api/session/start', {
@@ -63,15 +80,25 @@ export function LessonCard({ lesson, status }: LessonCardProps) {
 
   return (
     <Card
-      className="h-full transition-all hover:scale-[1.02] cursor-pointer"
+      className={`h-full transition-all ${
+        isAvailable && !isClosed
+          ? 'hover:scale-[1.02] cursor-pointer'
+          : 'opacity-70 cursor-not-allowed'
+      }`}
       onClick={handleStartLesson}
     >
       <CardContent className="p-6">
         <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-          <BookOpen className="h-4 w-4" />
+          {isAvailable ? (
+            <BookOpen className="h-4 w-4" />
+          ) : (
+            <Lock className="h-4 w-4 text-gray-400" />
+          )}
           <span>Lección {lesson.order}</span>
         </div>
-        <CardTitle className="mb-3">{lesson.title}</CardTitle>
+        <CardTitle className={`mb-3 ${!isAvailable ? 'text-gray-400' : ''}`}>
+          {lesson.title}
+        </CardTitle>
         {lesson.keyPoints.length > 0 && (
           <CardDescription className="mb-4">
             <ul className="list-disc list-inside space-y-1">
@@ -84,19 +111,44 @@ export function LessonCard({ lesson, status }: LessonCardProps) {
           </CardDescription>
         )}
         <div className="flex items-center justify-between">
-          {status === 'completed' && (
+          {isClosed && (
+            <span className="flex items-center gap-1 text-xs font-medium text-red-500">
+              <Lock className="h-3.5 w-3.5" />
+              Sesión cerrada
+            </span>
+          )}
+          {isScheduled && lesson.availableAt && (
+            <span className="flex items-center gap-1 text-xs font-medium text-amber-600">
+              <Clock className="h-3.5 w-3.5" />
+              Disponible: {new Date(lesson.availableAt).toLocaleDateString('es-PE', {
+                day: 'numeric',
+                month: 'short',
+              })}{', '}{new Date(lesson.availableAt).toLocaleTimeString('es-PE', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+              })}
+            </span>
+          )}
+          {!isScheduled && !isAvailable && (
+            <span className="flex items-center gap-1 text-xs font-medium text-gray-400">
+              <Lock className="h-3.5 w-3.5" />
+              No disponible
+            </span>
+          )}
+          {isAvailable && status === 'completed' && (
             <span className="flex items-center gap-1 text-xs font-medium text-green-600">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Completada
             </span>
           )}
-          {status === 'in_progress' && (
+          {isAvailable && status === 'in_progress' && (
             <span className="flex items-center gap-1 text-xs font-medium text-blue-600">
               <Play className="h-3.5 w-3.5" />
               En progreso
             </span>
           )}
-          {(!status || status === 'not_started') && <span />}
+          {isAvailable && (!status || status === 'not_started') && <span />}
           {isLoading && (
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
           )}
