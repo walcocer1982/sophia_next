@@ -83,15 +83,33 @@ export default async function PlannerPage() {
   const session = await auth()
   if (!session?.user?.id) redirect('/login')
 
-  const isSuperadmin = session.user.role === 'SUPERADMIN'
+  const role = session.user.role || 'STUDENT'
+  const isSuperadmin = role === 'SUPERADMIN'
+  const isInstructor = role === 'INSTRUCTOR'
+
+  // Students can't access planner
+  if (role === 'STUDENT') redirect('/lessons')
 
   if (isSuperadmin) {
     return <SuperadminPlannerView />
   }
 
-  // ADMIN view: only their own courses
+  // INSTRUCTOR: see courses where they are section instructors
+  // ADMIN: see their own courses
+  let courseFilter: Record<string, unknown>
+  if (isInstructor) {
+    const sectionAssignments = await prisma.sectionInstructor.findMany({
+      where: { userId: session.user.id },
+      select: { section: { select: { courseId: true } } },
+    })
+    const courseIds = [...new Set(sectionAssignments.map(s => s.section.courseId))]
+    courseFilter = { id: { in: courseIds }, deletedAt: null }
+  } else {
+    courseFilter = { userId: session.user.id, deletedAt: null }
+  }
+
   const courses = (await prisma.course.findMany({
-    where: { userId: session.user.id, deletedAt: null },
+    where: courseFilter,
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -114,17 +132,19 @@ export default async function PlannerPage() {
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="mb-1 text-3xl font-bold">Mis Cursos</h1>
+          <h1 className="mb-1 text-3xl font-bold">{isInstructor ? 'Mis Secciones' : 'Mis Cursos'}</h1>
           <p className="text-muted-foreground">
-            Crea y gestiona tus cursos con ayuda de la IA
+            {isInstructor ? 'Gestiona los horarios de tus secciones asignadas' : 'Crea y gestiona tus cursos con ayuda de la IA'}
           </p>
         </div>
-        <Link href="/planner/new">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nuevo Curso
-          </Button>
-        </Link>
+        {!isInstructor && (
+          <Link href="/planner/new">
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nuevo Curso
+            </Button>
+          </Link>
+        )}
       </div>
 
       {courses.length === 0 ? (

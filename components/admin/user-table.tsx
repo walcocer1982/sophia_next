@@ -38,8 +38,9 @@ type CareerOption = {
 
 const ROLE_CONFIG: Record<string, { label: string; className: string }> = {
   SUPERADMIN: { label: 'Super Admin', className: 'bg-red-100 text-red-700 border-red-200' },
-  ADMIN: { label: 'Instructor', className: 'bg-amber-100 text-amber-700 border-amber-200' },
-  STUDENT: { label: 'Estudiante', className: 'bg-blue-100 text-blue-700 border-blue-200' },
+  ADMIN: { label: 'Instructor Líder', className: 'bg-amber-100 text-amber-700 border-amber-200' },
+  INSTRUCTOR: { label: 'Instructor', className: 'bg-blue-100 text-blue-700 border-blue-200' },
+  STUDENT: { label: 'Estudiante', className: 'bg-green-100 text-green-700 border-green-200' },
 }
 
 export function UserTable({
@@ -184,7 +185,8 @@ export function UserTable({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="STUDENT">Estudiante</SelectItem>
-                          <SelectItem value="ADMIN">Instructor</SelectItem>
+                          <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
+                          <SelectItem value="ADMIN">Instructor Líder</SelectItem>
                           <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
                         </SelectContent>
                       </Select>

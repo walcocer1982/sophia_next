@@ -34,14 +34,20 @@ export function Navbar() {
 
   const role = session?.user?.role || 'STUDENT'
   const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN'
+  const isInstructorOrAbove = role === 'INSTRUCTOR' || role === 'ADMIN' || role === 'SUPERADMIN'
   const isSuperadmin = role === 'SUPERADMIN'
 
-  const roleLabel = role === 'SUPERADMIN' ? 'Super Admin' : role === 'ADMIN' ? 'Instructor' : 'Estudiante'
+  const roleLabel = role === 'SUPERADMIN' ? 'Super Admin'
+    : role === 'ADMIN' ? 'Instructor Líder'
+    : role === 'INSTRUCTOR' ? 'Instructor'
+    : 'Estudiante'
   const roleBadgeClass = role === 'SUPERADMIN'
     ? 'bg-red-100 text-red-700 border-red-200'
     : role === 'ADMIN'
       ? 'bg-amber-100 text-amber-700 border-amber-200'
-      : ''
+      : role === 'INSTRUCTOR'
+        ? 'bg-blue-100 text-blue-700 border-blue-200'
+        : ''
 
   return (
     <header className="h-14 border-b  bg-white flex items-center justify-between px-6 sticky top-0 z-50">
@@ -76,7 +82,7 @@ export function Navbar() {
             Clases
           </Link>
         )}
-        {isAdmin && (
+        {isInstructorOrAbove && (
           <>
             <Link
               href="/planner"

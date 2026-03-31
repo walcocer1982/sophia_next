@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 
-const VALID_ROLES = ['STUDENT', 'ADMIN', 'SUPERADMIN'] as const
+const VALID_ROLES = ['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPERADMIN'] as const
 
 export async function POST(request: Request) {
   const session = await auth()

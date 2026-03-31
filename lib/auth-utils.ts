@@ -1,13 +1,19 @@
 import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 
-type RoleCheck = 'ADMIN' | 'SUPERADMIN'
+type RoleCheck = 'INSTRUCTOR' | 'ADMIN' | 'SUPERADMIN'
+
+// Role hierarchy: SUPERADMIN > ADMIN > INSTRUCTOR > STUDENT
+const ROLE_LEVEL: Record<string, number> = {
+  STUDENT: 0,
+  INSTRUCTOR: 1,
+  ADMIN: 2,
+  SUPERADMIN: 3,
+}
 
 /**
- * Verify session has required role. Returns session or error response.
- * Usage: const result = await requireRole('ADMIN')
- *        if (result instanceof NextResponse) return result
- *        const session = result
+ * Verify session has required minimum role. Returns session or error response.
+ * Role hierarchy: SUPERADMIN > ADMIN > INSTRUCTOR > STUDENT
  */
 export async function requireRole(minRole: RoleCheck) {
   const session = await auth()
@@ -15,13 +21,11 @@ export async function requireRole(minRole: RoleCheck) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const role = session.user.role || 'STUDENT'
+  const userRole = session.user.role || 'STUDENT'
+  const userLevel = ROLE_LEVEL[userRole] || 0
+  const requiredLevel = ROLE_LEVEL[minRole] || 0
 
-  if (minRole === 'SUPERADMIN' && role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
-  if (minRole === 'ADMIN' && role !== 'ADMIN' && role !== 'SUPERADMIN') {
+  if (userLevel < requiredLevel) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -30,7 +34,6 @@ export async function requireRole(minRole: RoleCheck) {
 
 /**
  * Check if session user is the resource owner or a SUPERADMIN.
- * Used to relax ownership checks for SUPERADMIN across planner pages/APIs.
  */
 export function isOwnerOrSuperadmin(
   session: { user: { id: string; role?: string } },
