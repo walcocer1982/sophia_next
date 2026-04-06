@@ -60,6 +60,12 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL('/select-career', request.url))
     }
 
+    // Students without enrollment → redirect to section selection
+    const hasEnrollment = session.user?.hasEnrollment
+    if (role === 'STUDENT' && careerId && !hasEnrollment && pathname !== '/select-section' && pathname !== '/select-career') {
+      return NextResponse.redirect(new URL('/select-section', request.url))
+    }
+
     // SUPERADMIN paths → solo SUPERADMIN
     const isSuperadminPath = SUPERADMIN_PATHS.some(
       (path) => pathname === path || pathname.startsWith(`${path}/`)

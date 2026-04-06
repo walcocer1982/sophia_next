@@ -6,6 +6,7 @@ declare module 'next-auth' {
       id: string
       role: string
       careerId?: string | null
+      hasEnrollment?: boolean
       name?: string | null
       email?: string | null
       image?: string | null

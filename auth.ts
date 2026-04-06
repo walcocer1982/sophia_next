@@ -105,12 +105,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.sub = dbUser.id
         token.role = dbUser.role
         token.careerId = dbUser.careerId
+        const enrollmentCount = await prisma.enrollment.count({
+          where: { userId: dbUser.id },
+        })
+        token.hasEnrollment = enrollmentCount > 0
         return token
       }
 
       if (user) {
         token.sub = user.id
-        // Fetch role and careerId for credentials provider
+        // Fetch role, careerId and enrollment for credentials provider
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
           select: { role: true, careerId: true },
@@ -119,18 +123,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.role = dbUser.role
           token.careerId = dbUser.careerId
         }
+        const enrollmentCount = await prisma.enrollment.count({
+          where: { userId: user.id },
+        })
+        token.hasEnrollment = enrollmentCount > 0
         return token
       }
 
-      // On subsequent requests: refresh careerId from DB if missing
-      // This handles the case where a user selects their career after login
-      if (token.sub && !token.careerId) {
+      // On subsequent requests: refresh careerId and hasEnrollment from DB if missing
+      if (token.sub && (!token.careerId || !token.hasEnrollment)) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
           select: { careerId: true },
         })
         if (dbUser?.careerId) {
           token.careerId = dbUser.careerId
+        }
+        if (!token.hasEnrollment) {
+          const enrollmentCount = await prisma.enrollment.count({
+            where: { userId: token.sub },
+          })
+          token.hasEnrollment = enrollmentCount > 0
         }
       }
 
@@ -141,6 +154,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.sub
         session.user.role = (token.role as string) || 'STUDENT'
         session.user.careerId = (token.careerId as string) || null
+        session.user.hasEnrollment = !!token.hasEnrollment
       }
       return session
     },
