@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { UserTable } from '@/components/admin/user-table'
 import { CareerManager } from '@/components/admin/career-manager'
+import { SectionsManager } from '@/components/admin/sections-manager'
+import { AdminTabs } from '@/components/admin/admin-tabs'
 
 type UserRow = {
   id: string
@@ -26,7 +28,7 @@ export default async function AdminPage() {
   if (!session?.user?.id) redirect('/login')
   if (session.user.role !== 'SUPERADMIN') redirect('/lessons')
 
-  const [dbUsers, dbCareers] = await Promise.all([
+  const [dbUsers, dbCareers, periods, courses, sections, instructors] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
       select: {
@@ -48,6 +50,37 @@ export default async function AdminPage() {
         slug: true,
         _count: { select: { users: true, courses: true } },
       },
+    }),
+    prisma.academicPeriod.findMany({
+      orderBy: { name: 'desc' },
+      include: { _count: { select: { sections: true } } },
+    }),
+    prisma.course.findMany({
+      where: { deletedAt: null },
+      orderBy: { title: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        userId: true,
+        career: { select: { name: true } },
+      },
+    }),
+    prisma.section.findMany({
+      where: { course: { deletedAt: null } },
+      orderBy: [{ period: { name: 'desc' } }, { course: { title: 'asc' } }, { name: 'asc' }],
+      include: {
+        period: { select: { id: true, name: true } },
+        course: { select: { id: true, title: true, career: { select: { name: true } } } },
+        instructors: {
+          include: { user: { select: { id: true, name: true, email: true } } },
+        },
+        _count: { select: { enrollments: true } },
+      },
+    }),
+    prisma.user.findMany({
+      where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, email: true },
     }),
   ])
 
@@ -75,13 +108,8 @@ export default async function AdminPage() {
     superadmins: dbUsers.filter((u) => u.role === 'SUPERADMIN').length,
   }
 
-  return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="mb-8">
-        <h1 className="mb-1 text-3xl font-bold">Administración</h1>
-        <p className="text-muted-foreground">Gestión de usuarios, roles y carreras</p>
-      </div>
-
+  const usersContent = (
+    <>
       {/* Stats */}
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-lg border bg-white p-4">
@@ -113,6 +141,27 @@ export default async function AdminPage() {
         <h2 className="mb-4 text-lg font-semibold">Usuarios</h2>
         <UserTable users={users} currentUserId={session.user.id} careers={careers} />
       </div>
+    </>
+  )
+
+  const sectionsContent = (
+    <SectionsManager
+      periods={periods}
+      courses={courses}
+      sections={sections}
+      instructors={instructors}
+      isSuperAdmin={true}
+    />
+  )
+
+  return (
+    <div className="container mx-auto px-4 py-12">
+      <div className="mb-8">
+        <h1 className="mb-1 text-3xl font-bold">Administracion</h1>
+        <p className="text-muted-foreground">Gestion de usuarios, roles, carreras y secciones</p>
+      </div>
+
+      <AdminTabs usersContent={usersContent} sectionsContent={sectionsContent} />
     </div>
   )
 }
