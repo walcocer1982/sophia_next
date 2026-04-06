@@ -12,12 +12,22 @@ import { CoursePlannerPanel } from './course-planner-panel'
 import type { CoursePlannerData, CoursePlannerStep } from '@/types/planner'
 import { COURSE_STEP_LABELS } from '@/types/planner'
 
-export function CoursePlannerLayout() {
+interface CareerOption {
+  id: string
+  name: string
+}
+
+interface CoursePlannerLayoutProps {
+  careers?: CareerOption[]
+}
+
+export function CoursePlannerLayout({ careers = [] }: CoursePlannerLayoutProps) {
   const planner = useCoursePlannerState()
   const router = useRouter()
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [editingSection, setEditingSection] = useState<CoursePlannerStep | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [selectedCareerId, setSelectedCareerId] = useState<string>('all')
   const hasInitialized = useRef(false)
   // Track step change during stream to trigger auto-follow-up
   const pendingStepRef = useRef<CoursePlannerStep | null>(null)
@@ -176,6 +186,7 @@ export function CoursePlannerLayout() {
         body: JSON.stringify({
           titulo: planner.data.titulo,
           capacidad: planner.data.capacidad,
+          careerId: selectedCareerId === 'all' ? null : selectedCareerId,
           aprendizajes: planner.data.aprendizajes,
           temas: planner.data.temas,
         }),
@@ -215,17 +226,30 @@ export function CoursePlannerLayout() {
         {/* Save button when complete */}
         {planner.isComplete && (
           <div className="shrink-0 border-t bg-emerald-50 px-4 py-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <p className="text-sm text-emerald-700">
                 Curso definido: <strong>{planner.data.titulo}</strong> — {planner.data.temas.length} sesiones
               </p>
-              <Button
-                onClick={handleSaveCourse}
-                disabled={isSaving}
-                className="bg-emerald-600 hover:bg-emerald-700"
-              >
-                {isSaving ? 'Guardando...' : 'Guardar Curso'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500 whitespace-nowrap">Carrera:</label>
+                <select
+                  value={selectedCareerId}
+                  onChange={(e) => setSelectedCareerId(e.target.value)}
+                  className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
+                >
+                  <option value="all">Todas las carreras</option>
+                  {careers.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <Button
+                  onClick={handleSaveCourse}
+                  disabled={isSaving}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {isSaving ? 'Guardando...' : 'Guardar Curso'}
+                </Button>
+              </div>
             </div>
           </div>
         )}

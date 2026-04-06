@@ -30,9 +30,9 @@ export default async function LessonsPage() {
   const role = user?.role || 'STUDENT'
   const isSuperadmin = role === 'SUPERADMIN'
 
-  // Filter by career for non-SUPERADMIN
+  // Filter by career for non-SUPERADMIN (include transversal courses with careerId=null)
   const careerFilter = !isSuperadmin && user?.careerId
-    ? { course: { careerId: user.careerId } }
+    ? { course: { OR: [{ careerId: user.careerId }, { careerId: null }] } }
     : {}
 
   // Get student's enrollments to look up section schedules

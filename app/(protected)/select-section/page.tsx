@@ -32,11 +32,11 @@ export default async function SelectSectionPage() {
     },
   })
 
-  // Get available sections for student's career
+  // Get available sections for student's career (include transversal courses)
   const sections = await prisma.section.findMany({
     where: {
       course: {
-        careerId: user.careerId,
+        OR: [{ careerId: user.careerId }, { careerId: null }],
         deletedAt: null,
       },
       period: { isActive: true },

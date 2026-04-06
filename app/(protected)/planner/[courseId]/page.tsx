@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { PublishToggle } from '@/components/planner/publish-toggle'
 import { TestLessonButton } from '@/components/planner/test-lesson-button'
 import { DeleteCourseButton } from '@/components/planner/delete-course-button'
+import { CourseCareerSelector } from '@/components/planner/course-career-selector'
 
 type CourseWithLessons = {
   id: string
@@ -38,7 +39,8 @@ export default async function CourseOverviewPage({
 
   const { courseId } = await params
 
-  const course = (await prisma.course.findFirst({
+  const [course, careers] = await Promise.all([
+    prisma.course.findFirst({
     where: { id: courseId, deletedAt: null },
     select: {
       id: true,
@@ -47,6 +49,7 @@ export default async function CourseOverviewPage({
       instructor: true,
       isPublished: true,
       userId: true,
+      careerId: true,
       lessons: {
         orderBy: { order: 'asc' },
         select: {
@@ -62,7 +65,12 @@ export default async function CourseOverviewPage({
         },
       },
     },
-  })) as (CourseWithLessons & { userId: string | null }) | null
+  }) as Promise<(CourseWithLessons & { userId: string | null; careerId: string | null }) | null>,
+    prisma.career.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    }),
+  ])
 
   if (!course) notFound()
 
@@ -136,10 +144,20 @@ export default async function CourseOverviewPage({
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
+        <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-500">
           <span>{course.lessons.length} sesiones</span>
           <span className="text-gray-300">|</span>
           <span>{designedCount} diseñadas</span>
+          {!isSectionInstructor && (
+            <>
+              <span className="text-gray-300">|</span>
+              <CourseCareerSelector
+                courseId={course.id}
+                currentCareerId={course.careerId}
+                careers={careers}
+              />
+            </>
+          )}
         </div>
       </div>
 

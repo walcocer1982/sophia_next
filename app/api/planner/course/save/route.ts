@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { titulo, capacidad, temas } = parseResult.data
+  const { titulo, capacidad, careerId: explicitCareerId, temas } = parseResult.data
   // aprendizajes are stored implicitly via temas[].objetivo
 
   // Generate unique slug
@@ -52,11 +52,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Auto-assign career from instructor
-    const instructor = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { careerId: true },
-    })
+    // Use explicit careerId if provided, otherwise auto-assign from instructor
+    let finalCareerId: string | null = null
+    if (explicitCareerId !== undefined) {
+      finalCareerId = explicitCareerId
+    } else {
+      const instructor = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { careerId: true },
+      })
+      finalCareerId = instructor?.careerId || null
+    }
 
     const course = await prisma.course.create({
       data: {
@@ -65,7 +71,7 @@ export async function POST(request: Request) {
         capacidad,
         instructor: DEFAULT_INSTRUCTOR,
         userId: session.user.id,
-        careerId: instructor?.careerId || null,
+        careerId: finalCareerId,
         isPublished: false,
         lessons: {
           create: temas.map((tema, index) => {

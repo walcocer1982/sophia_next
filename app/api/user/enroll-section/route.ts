@@ -18,11 +18,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'careerId requerido' }, { status: 400 })
   }
 
-  // Get active sections for courses in this career
+  // Get active sections for courses in this career (include transversal courses)
   const sections = await prisma.section.findMany({
     where: {
       course: {
-        careerId,
+        OR: [{ careerId }, { careerId: null }],
         deletedAt: null,
       },
       period: { isActive: true },

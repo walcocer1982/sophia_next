@@ -167,6 +167,7 @@ export const CoursePlannerChatRequestSchema = z.object({
 export const CourseSaveSchema = z.object({
   titulo: z.string().min(3).max(200),
   capacidad: z.string().min(10).max(2000),
+  careerId: z.string().nullable().optional(),
   aprendizajes: z.array(z.string().min(5)).min(2).max(12),
   temas: z
     .array(
