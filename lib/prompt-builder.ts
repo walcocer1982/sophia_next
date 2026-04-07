@@ -76,9 +76,9 @@ interface SystemPromptWithCache {
  * Controla la extensión de las respuestas del AI
  */
 export const COMPLEXITY_TOKENS: Record<ActivityComplexity, number> = {
-  simple: 250,     // Target: 40-80 palabras
-  moderate: 400,   // Target: 80-150 palabras
-  complex: 600,    // Target: 150-250 palabras
+  simple: 400,     // Target: 80-150 palabras
+  moderate: 600,   // Target: 150-250 palabras
+  complex: 800,    // Target: 250-350 palabras
 }
 
 /**
