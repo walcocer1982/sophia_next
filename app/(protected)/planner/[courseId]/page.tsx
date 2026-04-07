@@ -107,6 +107,15 @@ export default async function CourseOverviewPage({
       })
     : []
 
+  // Get test sessions for this course's lessons
+  const lessonIds = course.lessons.map((l) => l.id)
+  const testSessions = await prisma.lessonSession.findMany({
+    where: { lessonId: { in: lessonIds }, isTest: true },
+    select: { lessonId: true },
+    distinct: ['lessonId'],
+  })
+  const testedLessonIds = new Set(testSessions.map((s) => s.lessonId))
+
   const designedCount = course.lessons.filter((l) => {
     const json = l.contentJson as { activities?: unknown[] } | null
     return json?.activities && json.activities.length > 0
@@ -182,6 +191,15 @@ export default async function CourseOverviewPage({
             (a) => (a.teaching?.images && a.teaching.images.length > 0) || a.teaching?.image?.url
           ) ?? false
           const allVerified = isDesigned && json!.activities!.every((a) => a.verified === true)
+          const isTested = testedLessonIds.has(lesson.id)
+
+          const badges = [
+            { label: 'Diseñada', done: !!isDesigned },
+            { label: 'Verificada', done: !!allVerified },
+            { label: 'Recursos', done: hasResources },
+            { label: 'Probada', done: isTested },
+            { label: 'Publicada', done: lesson.isPublished },
+          ]
 
           return (
             <div
@@ -208,6 +226,22 @@ export default async function CourseOverviewPage({
                 <p className="mt-0.5 truncate text-sm text-gray-500">
                   {lesson.objective}
                 </p>
+                {/* Status badges */}
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {badges.map((b) => (
+                    <span
+                      key={b.label}
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        b.done
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-gray-100 text-gray-400'
+                      }`}
+                    >
+                      {b.done && <Check className="mr-0.5 h-2.5 w-2.5" />}
+                      {b.label}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               {/* Actions */}
