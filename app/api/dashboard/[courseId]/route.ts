@@ -75,14 +75,20 @@ export async function GET(
   const { searchParams } = new URL(request.url)
   const filterSectionId = searchParams.get('sectionId')
 
-  // Check if user is lead/superadmin or section instructor
-  const isLead = result.user.role === 'SUPERADMIN' || await prisma.course.findFirst({
-    where: { id: courseId, userId: result.user.id },
+  // Check if user is lead/superadmin, career-match admin, or section instructor
+  const courseAccess = await prisma.course.findFirst({
+    where: { id: courseId, deletedAt: null },
+    select: { userId: true, careerId: true },
   })
+  if (!courseAccess) {
+    return NextResponse.json({ error: 'Curso no encontrado' }, { status: 404 })
+  }
+  const isLead = result.user.role === 'SUPERADMIN' || courseAccess.userId === result.user.id
+  const isCareerAdmin = !isLead && result.user.role === 'ADMIN' && !!result.user.careerId && result.user.careerId === courseAccess.careerId
 
   // Get section instructor's section IDs for filtering
   let allowedStudentIds: Set<string> | null = null
-  if (!isLead) {
+  if (!isLead && !isCareerAdmin) {
     const mySections = await prisma.sectionInstructor.findMany({
       where: { userId: result.user.id, section: { courseId } },
       select: { sectionId: true },

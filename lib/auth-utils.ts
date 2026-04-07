@@ -41,3 +41,17 @@ export function isOwnerOrSuperadmin(
 ): boolean {
   return session.user.role === 'SUPERADMIN' || resourceUserId === session.user.id
 }
+
+/**
+ * Check if an ADMIN user shares the same career as a course.
+ * Used for career-based access: ADMIN users can publish/view dashboard
+ * for any course in their career, without needing explicit section assignment.
+ */
+export function isAdminSameCareer(
+  session: { user: { id: string; role?: string; careerId?: string | null } },
+  courseCareerId: string | null
+): boolean {
+  if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') return false
+  if (!session.user.careerId || !courseCareerId) return false
+  return session.user.careerId === courseCareerId
+}

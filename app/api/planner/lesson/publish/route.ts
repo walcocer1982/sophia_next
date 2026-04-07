@@ -1,4 +1,4 @@
-import { requireRole, isOwnerOrSuperadmin } from '@/lib/auth-utils'
+import { requireRole, isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     select: {
       id: true,
       courseId: true,
-      course: { select: { userId: true } },
+      course: { select: { userId: true, careerId: true } },
     },
   })
 
@@ -35,9 +35,10 @@ export async function POST(request: Request) {
 
   // === SECTION-SPECIFIC PUBLISH ===
   if (sectionId) {
-    // Verify user is section instructor or lead/superadmin
+    // Verify user is lead/superadmin, career-match admin, or section instructor
     const isLead = isOwnerOrSuperadmin(session, lesson.course.userId)
-    if (!isLead) {
+    const isCareerAdmin = isAdminSameCareer(session, lesson.course.careerId)
+    if (!isLead && !isCareerAdmin) {
       const isSectionInstructor = await prisma.sectionInstructor.findUnique({
         where: { userId_sectionId: { userId: session.user.id, sectionId } },
       })

@@ -22,10 +22,18 @@ export async function GET() {
     : []
   const sectionCourseIds = [...new Set(sectionAssignments.map(s => s.section.courseId))]
 
-  // SUPERADMIN: all courses. ADMIN: own courses + courses where section instructor
+  // SUPERADMIN: all courses. ADMIN: own courses + section instructor courses + same career courses
+  const careerId = session.user.careerId
   const whereClause = role === 'SUPERADMIN'
     ? { deletedAt: null }
-    : { deletedAt: null, OR: [{ userId }, ...(sectionCourseIds.length > 0 ? [{ id: { in: sectionCourseIds } }] : [])] }
+    : {
+        deletedAt: null,
+        OR: [
+          { userId },
+          ...(sectionCourseIds.length > 0 ? [{ id: { in: sectionCourseIds } }] : []),
+          ...(careerId ? [{ careerId }] : []),
+        ],
+      }
 
   const courses = await prisma.course.findMany({
     where: whereClause,

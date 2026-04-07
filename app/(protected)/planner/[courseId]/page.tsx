@@ -1,6 +1,6 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
+import { isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check } from 'lucide-react'
@@ -74,27 +74,30 @@ export default async function CourseOverviewPage({
 
   if (!course) notFound()
 
-  // Check if user is lead instructor, SUPERADMIN, or section instructor
+  // Check if user is lead instructor, SUPERADMIN, career-match ADMIN, or section instructor
   const isLeadOrSuper = isOwnerOrSuperadmin(session, course.userId)
-  const sectionInstructor = !isLeadOrSuper
+  const isCareerAdmin = !isLeadOrSuper && isAdminSameCareer(session, course.careerId)
+  const sectionInstructor = !isLeadOrSuper && !isCareerAdmin
     ? await prisma.sectionInstructor.findFirst({
         where: { userId: session.user.id, section: { courseId } },
         include: { section: { select: { id: true, name: true, period: { select: { name: true } } } } },
       })
     : null
 
-  if (!isLeadOrSuper && !sectionInstructor) {
+  if (!isLeadOrSuper && !isCareerAdmin && !sectionInstructor) {
     notFound()
   }
 
-  const isSectionInstructor = !!sectionInstructor && !isLeadOrSuper
+  // Career admins can publish but not edit design (same as section instructors)
+  const isSectionInstructor = (!!sectionInstructor || isCareerAdmin) && !isLeadOrSuper
 
-  // Get sections for this course (for section instructor publish)
+  // Get sections for this course (for section/career instructor publish)
   const courseSections = isSectionInstructor
     ? await prisma.section.findMany({
         where: {
           courseId,
-          instructors: { some: { userId: session.user.id } },
+          // Career admins see all sections; section instructors see only assigned
+          ...(isCareerAdmin ? {} : { instructors: { some: { userId: session.user.id } } }),
         },
         select: {
           id: true,

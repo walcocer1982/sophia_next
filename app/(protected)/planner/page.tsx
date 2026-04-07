@@ -95,7 +95,7 @@ export default async function PlannerPage() {
   }
 
   // INSTRUCTOR: see courses where they are section instructors
-  // ADMIN: see their own courses
+  // ADMIN: see own courses + same career courses + section instructor courses
   let courseFilter: Record<string, unknown>
   if (isInstructor) {
     const sectionAssignments = await prisma.sectionInstructor.findMany({
@@ -105,7 +105,21 @@ export default async function PlannerPage() {
     const courseIds = [...new Set(sectionAssignments.map(s => s.section.courseId))]
     courseFilter = { id: { in: courseIds }, deletedAt: null }
   } else {
-    courseFilter = { userId: session.user.id, deletedAt: null }
+    // ADMIN: own courses + section instructor + same career
+    const sectionAssignments = await prisma.sectionInstructor.findMany({
+      where: { userId: session.user.id },
+      select: { section: { select: { courseId: true } } },
+    })
+    const sectionCourseIds = [...new Set(sectionAssignments.map(s => s.section.courseId))]
+    const careerId = session.user.careerId
+    courseFilter = {
+      deletedAt: null,
+      OR: [
+        { userId: session.user.id },
+        ...(sectionCourseIds.length > 0 ? [{ id: { in: sectionCourseIds } }] : []),
+        ...(careerId ? [{ careerId }] : []),
+      ],
+    }
   }
 
   const courses = (await prisma.course.findMany({
