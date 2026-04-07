@@ -72,13 +72,15 @@ interface SystemPromptWithCache {
 }
 
 /**
- * Mapeo de complejidad a maxTokens
- * Controla la extensión de las respuestas del AI
+ * Techo de tokens por complejidad (safety ceiling, NOT length control).
+ * La longitud real se controla via instrucciones en el prompt.
+ * El modelo para naturalmente (stop_reason: "end_turn").
+ * Solo pagas por tokens generados, no por el techo.
  */
 export const COMPLEXITY_TOKENS: Record<ActivityComplexity, number> = {
-  simple: 400,     // Target: 80-150 palabras
-  moderate: 600,   // Target: 150-250 palabras
-  complex: 800,    // Target: 250-350 palabras
+  simple: 1024,
+  moderate: 1536,
+  complex: 2048,
 }
 
 /**
