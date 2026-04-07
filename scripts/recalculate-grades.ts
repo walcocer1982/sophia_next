@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma'
+import { isPassing } from '../lib/rubric'
 
 async function recalculateGrades() {
   // Find all completed, non-test lesson sessions
@@ -48,10 +49,11 @@ async function recalculateGrades() {
     const newGrade = Math.round(totalScore / completedActivities.length)
     const oldGrade = session.grade
 
-    if (oldGrade !== newGrade) {
+    const newPassed = isPassing(newGrade)
+    if (oldGrade !== newGrade || session.passed !== newPassed) {
       await prisma.lessonSession.update({
         where: { id: session.id },
-        data: { grade: newGrade },
+        data: { grade: newGrade, passed: newPassed },
       })
       updated++
       console.log(`[UPDATED] ${(session.user.name || session.user.email || 'Unknown').padEnd(25)} | ${session.lesson.title.padEnd(40)} | old: ${String(oldGrade ?? 'null').padStart(4)} -> new: ${String(newGrade).padStart(4)}`)

@@ -1,7 +1,25 @@
 /**
  * 4-level rubric system for activity evaluation
- * Replaces/complements numeric grades with meaningful levels
+ * Aligned to Peruvian grading system (base 20, pass = 13/20 = 65/100)
+ *
+ * | Nivel              | Rango (100) | Equivalente (20) |
+ * |--------------------|-------------|------------------|
+ * | Logrado Destacado  | 85-100      | 18-20            |
+ * | Logrado            | 65-84       | 13-17            |
+ * | En Proceso         | 50-64       | 11-12            |
+ * | En Inicio          | 0-49        | 0-10             |
+ *
+ * Passing grade: 65 (= 13/20)
  */
+
+export const GRADE_THRESHOLDS = {
+  LOGRADO_DESTACADO: 85,
+  LOGRADO: 65,           // Passing grade (13/20)
+  EN_PROCESO: 50,
+  EN_INICIO: 0,
+} as const
+
+export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 65/100 = 13/20
 
 export type RubricLevel = 'logrado_destacado' | 'logrado' | 'en_proceso' | 'en_inicio'
 
@@ -107,6 +125,24 @@ export function calculateOverallRubric(activityLevels: RubricLevel[]): RubricLev
   if (avg >= 2.5) return 'logrado'
   if (avg >= 1.5) return 'en_proceso'
   return 'en_inicio'
+}
+
+/**
+ * Convert numeric grade (0-100) to rubric level
+ * Uses Peruvian grading thresholds
+ */
+export function gradeToRubricLevel(grade: number): RubricLevel {
+  if (grade >= GRADE_THRESHOLDS.LOGRADO_DESTACADO) return 'logrado_destacado'
+  if (grade >= GRADE_THRESHOLDS.LOGRADO) return 'logrado'
+  if (grade >= GRADE_THRESHOLDS.EN_PROCESO) return 'en_proceso'
+  return 'en_inicio'
+}
+
+/**
+ * Check if a grade is passing (>= 65 = 13/20)
+ */
+export function isPassing(grade: number): boolean {
+  return grade >= PASSING_GRADE
 }
 
 /**

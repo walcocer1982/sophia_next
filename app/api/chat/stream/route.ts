@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
 import { buildSystemPrompt, getMaxTokensForActivity } from '@/lib/prompt-builder'
+import { isPassing } from '@/lib/rubric'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { logger, logChatMessage, logError } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
@@ -566,7 +567,7 @@ export async function POST(request: Request) {
               where: { id: lessonSession.id },
               data: {
                 completedAt: new Date(),
-                passed: true,
+                passed: isPassing(grade),
                 progress: 100,
                 grade,
               },
