@@ -176,7 +176,7 @@ export const CourseSaveSchema = z.object({
         objetivo: z.string().min(10).max(500),
       })
     )
-    .min(2)
+    .min(1)
     .max(12),
 })
 
