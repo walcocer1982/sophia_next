@@ -51,8 +51,17 @@ export default async function SelectSectionPage() {
     },
   })
 
-  // If no sections available, go to lessons (backward compat)
-  if (sections.length === 0) redirect('/lessons')
+  // If no sections available, skip enrollment requirement and go to lessons
+  // This also prevents redirect loops when DB has no sections yet
+  if (sections.length === 0) {
+    // Show a message instead of redirecting (prevents loop with proxy)
+    return (
+      <div className="container mx-auto px-4 py-12 text-center">
+        <h1 className="mb-4 text-2xl font-bold">Seleccionar Sección</h1>
+        <p className="text-muted-foreground">No hay secciones disponibles en este momento. Contacta a tu instructor.</p>
+      </div>
+    )
+  }
 
   // Group by period then course
   type SectionItem = typeof sections[number]
