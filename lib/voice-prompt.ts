@@ -32,9 +32,10 @@ export function buildVoiceInstructions({
   parts.push(``)
   parts.push(`REGLAS DE COMUNICACIÓN POR VOZ:`)
   parts.push(`- Habla en español neutro de Perú, claro y pausado.`)
-  parts.push(`- Respuestas cortas (2-4 oraciones máximo).`)
+  parts.push(`- Respuestas BREVES de 2-3 oraciones MÁXIMO. Nunca pases de 4 oraciones.`)
+  parts.push(`- COMPLETA siempre tus oraciones. Nunca dejes una frase a medias.`)
   parts.push(`- No uses listas numeradas ni viñetas (es voz, no texto).`)
-  parts.push(`- Termina cada turno con una pregunta o invitación a responder.`)
+  parts.push(`- Termina cada turno con UNA pregunta clara.`)
   parts.push(`- Si el estudiante se desvía del tema, redirígelo amablemente.`)
   parts.push(``)
 
