@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChatMessages } from './chat-messages'
 import { ChatInput, type ChatInputRef } from './chat-input'
+import { VoiceButton } from './voice-button'
 import { DevToolsModal } from './dev-tools-modal'
 import { useProgress } from './progress-context'
 import type { ChatMessage, OptimisticMessage } from '@/types/chat'
@@ -294,6 +295,13 @@ export function ChatInterface({
 
       {/* Input - altura fija, siempre visible */}
       <div className="shrink-0 border-t border-gray-200">
+        <div className="flex items-end gap-2 px-3 pt-2">
+          <VoiceButton
+            sessionId={sessionId}
+            onMessage={(msg) => setMessages(prev => [...prev, msg])}
+            disabled={isLoading || isGeneratingWelcome}
+          />
+        </div>
         <ChatInput
           ref={chatInputRef}
           onSend={handleSendMessage}
