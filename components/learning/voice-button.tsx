@@ -1,6 +1,6 @@
 'use client'
 
-import { Mic, MicOff, Loader2, PhoneOff } from 'lucide-react'
+import { Mic, Loader2, PhoneOff, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useVoiceChat } from '@/hooks/use-voice-chat'
 import type { OptimisticMessage } from '@/types/chat'
@@ -20,6 +20,7 @@ export function VoiceButton({ sessionId, onMessage, disabled }: VoiceButtonProps
     disconnect,
     startRecording,
     stopRecording,
+    forceReady,
   } = useVoiceChat({
     sessionId,
     onTranscript: (t) => {
@@ -108,6 +109,19 @@ export function VoiceButton({ sessionId, onMessage, disabled }: VoiceButtonProps
       </Button>
 
       <span className="text-xs text-gray-500">{getStatusLabel()}</span>
+
+      {isBusy && (
+        <Button
+          type="button"
+          onClick={forceReady}
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title="Reiniciar (si Sophia se trabó)"
+        >
+          <RotateCw className="h-3.5 w-3.5" />
+        </Button>
+      )}
 
       <Button
         type="button"

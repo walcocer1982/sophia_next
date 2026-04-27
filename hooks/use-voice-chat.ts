@@ -24,7 +24,16 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
   const localStreamRef = useRef<MediaStream | null>(null)
   const audioSenderRef = useRef<RTCRtpSender | null>(null)
   const recordingStartRef = useRef<number>(0)
+  const stuckTimerRef = useRef<NodeJS.Timeout | null>(null)
   const MIN_RECORDING_MS = 1500 // Minimum 1.5 seconds to ensure complete sentence
+  const STUCK_TIMEOUT_MS = 30000 // Reset to ready if stuck in processing/speaking for 30s
+
+  const clearStuckTimer = () => {
+    if (stuckTimerRef.current) {
+      clearTimeout(stuckTimerRef.current)
+      stuckTimerRef.current = null
+    }
+  }
 
   const cleanup = useCallback(() => {
     if (dataChannelRef.current) {
@@ -99,15 +108,23 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
 
       if (data.type === 'response.audio.delta') {
         setState('speaking')
+        // Reset stuck timer on each delta - if no delta for 30s, force ready
+        clearStuckTimer()
+        stuckTimerRef.current = setTimeout(() => {
+          console.warn('Voice stuck timeout, forcing ready state')
+          setState('ready')
+        }, STUCK_TIMEOUT_MS)
       }
 
-      if (data.type === 'response.done') {
+      if (data.type === 'response.done' || data.type === 'response.cancelled') {
+        clearStuckTimer()
         setState('ready')
       }
 
       if (data.type === 'error') {
         console.error('Realtime error:', data)
         setError(data.error?.message || 'Voice error')
+        clearStuckTimer()
         setState('error')
       }
     } catch (e) {
@@ -212,14 +229,24 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
   }, [state, sendEvent])
 
   const disconnect = useCallback(() => {
+    clearStuckTimer()
     cleanup()
   }, [cleanup])
+
+  // Force back to ready state if stuck (without disconnecting)
+  const forceReady = useCallback(() => {
+    clearStuckTimer()
+    sendEvent({ type: 'response.cancel' })
+    setState('ready')
+    setError(null)
+  }, [sendEvent])
 
   useEffect(() => {
     return () => cleanup()
   }, [cleanup])
 
   return {
+    forceReady,
     state,
     error,
     isConnected: state !== 'idle' && state !== 'error',
