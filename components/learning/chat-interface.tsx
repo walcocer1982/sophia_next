@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { ChatMessages } from './chat-messages'
 import { ChatInput, type ChatInputRef } from './chat-input'
 import { VoiceButton } from './voice-button'
+import { TutorMode } from './tutor-mode'
 import { DevToolsModal } from './dev-tools-modal'
 import { useProgress } from './progress-context'
 import type { ChatMessage, OptimisticMessage } from '@/types/chat'
@@ -42,6 +43,15 @@ export function ChatInterface({
   const chatInputRef = useRef<ChatInputRef>(null)
 
   const isDevelopment = process.env.NODE_ENV === 'development'
+  const [viewMode, setViewMode] = useState<'tutor' | 'chat'>('tutor')
+
+  const updateMessageById = (id: string, updater: (m: OptimisticMessage) => OptimisticMessage) => {
+    setMessages(prev => prev.map(m => m.id === id ? updater(m) : m))
+  }
+
+  const addMessage = (msg: OptimisticMessage) => {
+    setMessages(prev => [...prev, msg])
+  }
 
   // Generate welcome message if chat is empty
   useEffect(() => {
@@ -264,6 +274,55 @@ export function ChatInterface({
     }
   }
 
+  // Render Tutor Mode (avatar-first) or Chat Mode (full conversation)
+  if (viewMode === 'tutor') {
+    return (
+      <div className="flex flex-col h-full bg-white">
+        {/* Mode toggle button */}
+        <div className="absolute top-3 right-3 z-10 flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setViewMode('chat')}
+            className="bg-white/90 backdrop-blur"
+          >
+            Modo Chat
+          </Button>
+          {isDevelopment && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowDevTools(true)}
+              className="bg-white/90 backdrop-blur h-8 w-8"
+              title="Dev Tools"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        <TutorMode
+          sessionId={sessionId}
+          lessonTitle={lessonTitle}
+          messages={messages}
+          onAddMessage={addMessage}
+          onUpdateMessage={updateMessageById}
+          onSendText={handleSendMessage}
+          isLoading={isLoading}
+          isGeneratingWelcome={isGeneratingWelcome}
+        />
+
+        {isDevelopment && (
+          <DevToolsModal
+            open={showDevTools}
+            onOpenChange={setShowDevTools}
+            sessionId={sessionId}
+          />
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Header compacto */}
@@ -273,18 +332,26 @@ export function ChatInterface({
             <h1 className="text-lg font-semibold text-gray-900">{lessonTitle}</h1>
           </div>
 
-          {/* Dev Tools Button - Solo en desarrollo */}
-          {isDevelopment && (
+          <div className="flex gap-2">
             <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowDevTools(true)}
-              className="text-gray-500 hover:text-gray-700"
-              title="Dev Tools"
+              variant="outline"
+              size="sm"
+              onClick={() => setViewMode('tutor')}
             >
-              <Settings className="h-5 w-5" />
+              Modo Tutor
             </Button>
-          )}
+            {isDevelopment && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowDevTools(true)}
+                className="text-gray-500 hover:text-gray-700"
+                title="Dev Tools"
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
