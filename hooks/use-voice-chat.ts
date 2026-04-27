@@ -153,7 +153,29 @@ export function useVoiceChat({
         }, STUCK_TIMEOUT_MS)
       }
 
-      if (data.type === 'response.done' || data.type === 'response.cancelled') {
+      // Audio is actually playing on the client (more reliable than response.done)
+      if (data.type === 'output_audio_buffer.started') {
+        setState('speaking')
+      }
+
+      // Audio playback finished on the client (real end of Sophia talking)
+      if (data.type === 'output_audio_buffer.stopped') {
+        clearStuckTimer()
+        if (currentResponseIdRef.current) {
+          onAssistantStreamDone?.(currentResponseIdRef.current)
+          currentResponseIdRef.current = null
+        }
+        setState('ready')
+      }
+
+      // Server finished generating, but audio may still be playing - don't change state yet
+      if (data.type === 'response.done') {
+        // Save transcript here, but state will go to 'ready' only when audio actually stops
+        // Reset stuck timer since response is complete
+        clearStuckTimer()
+      }
+
+      if (data.type === 'response.cancelled') {
         clearStuckTimer()
         if (currentResponseIdRef.current) {
           onAssistantStreamDone?.(currentResponseIdRef.current)
