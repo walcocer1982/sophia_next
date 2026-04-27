@@ -56,8 +56,16 @@ export function TutorMode({
 
       {/* Main: Avatar + Last message */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-6 overflow-hidden">
-        {/* Avatar */}
-        <SophiaAvatar state={avatarState} size={220} />
+        {/* Avatar - responsive: smaller on mobile, larger on desktop */}
+        <div className="hidden lg:block">
+          <SophiaAvatar state={avatarState} size={360} />
+        </div>
+        <div className="hidden md:block lg:hidden">
+          <SophiaAvatar state={avatarState} size={300} />
+        </div>
+        <div className="md:hidden">
+          <SophiaAvatar state={avatarState} size={240} />
+        </div>
 
         {/* Last message bubble */}
         <AnimatePresence mode="wait">
