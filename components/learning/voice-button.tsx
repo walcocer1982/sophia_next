@@ -40,9 +40,9 @@ export function VoiceButton({ sessionId, onMessage, disabled }: VoiceButtonProps
     switch (state) {
       case 'idle': return ''
       case 'connecting': return 'Conectando...'
-      case 'ready': return 'Mantén presionado para hablar'
-      case 'recording': return 'Escuchando...'
-      case 'processing': return 'Procesando...'
+      case 'ready': return 'Click el micrófono para hablar'
+      case 'recording': return 'Habla ahora, luego click para enviar'
+      case 'processing': return 'Procesando tu mensaje...'
       case 'speaking': return 'Sophia está respondiendo...'
       case 'error': return error || 'Error'
     }
