@@ -35,13 +35,22 @@ export function useVoiceChat({
   const audioSenderRef = useRef<RTCRtpSender | null>(null)
   const recordingStartRef = useRef<number>(0)
   const stuckTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null)
   const MIN_RECORDING_MS = 1500 // Minimum 1.5 seconds to ensure complete sentence
   const STUCK_TIMEOUT_MS = 30000 // Reset to ready if stuck in processing/speaking for 30s
+  const IDLE_AFTER_DELTA_MS = 5000 // If no audio delta for 5s, response likely ended
 
   const clearStuckTimer = () => {
     if (stuckTimerRef.current) {
       clearTimeout(stuckTimerRef.current)
       stuckTimerRef.current = null
+    }
+  }
+
+  const clearIdleTimer = () => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current)
+      idleTimerRef.current = null
     }
   }
 
@@ -143,14 +152,25 @@ export function useVoiceChat({
         }
       }
 
-      if (data.type === 'response.audio.delta') {
+      if (data.type === 'response.audio.delta' || data.type === 'response.audio_transcript.delta') {
         setState('speaking')
-        // Reset stuck timer on each delta - if no delta for 30s, force ready
+        // Reset stuck timer on each delta
         clearStuckTimer()
         stuckTimerRef.current = setTimeout(() => {
           console.warn('Voice stuck timeout, forcing ready state')
           setState('ready')
         }, STUCK_TIMEOUT_MS)
+
+        // Reset idle timer - if no new delta for IDLE_AFTER_DELTA_MS, assume response ended
+        clearIdleTimer()
+        idleTimerRef.current = setTimeout(() => {
+          console.warn('No audio delta for 5s, assuming response ended')
+          if (currentResponseIdRef.current) {
+            onAssistantStreamDone?.(currentResponseIdRef.current)
+            currentResponseIdRef.current = null
+          }
+          setState('ready')
+        }, IDLE_AFTER_DELTA_MS)
       }
 
       // Audio is actually playing on the client (more reliable than response.done)
@@ -161,6 +181,7 @@ export function useVoiceChat({
       // Audio playback finished on the client (real end of Sophia talking)
       if (data.type === 'output_audio_buffer.stopped') {
         clearStuckTimer()
+        clearIdleTimer()
         if (currentResponseIdRef.current) {
           onAssistantStreamDone?.(currentResponseIdRef.current)
           currentResponseIdRef.current = null
@@ -170,13 +191,21 @@ export function useVoiceChat({
 
       // Server finished generating, but audio may still be playing - don't change state yet
       if (data.type === 'response.done') {
-        // Save transcript here, but state will go to 'ready' only when audio actually stops
-        // Reset stuck timer since response is complete
         clearStuckTimer()
+        // Fallback: if output_audio_buffer.stopped doesn't fire within 5s, force ready
+        clearIdleTimer()
+        idleTimerRef.current = setTimeout(() => {
+          if (currentResponseIdRef.current) {
+            onAssistantStreamDone?.(currentResponseIdRef.current)
+            currentResponseIdRef.current = null
+          }
+          setState('ready')
+        }, IDLE_AFTER_DELTA_MS)
       }
 
       if (data.type === 'response.cancelled') {
         clearStuckTimer()
+        clearIdleTimer()
         if (currentResponseIdRef.current) {
           onAssistantStreamDone?.(currentResponseIdRef.current)
           currentResponseIdRef.current = null
@@ -299,16 +328,22 @@ export function useVoiceChat({
 
   const disconnect = useCallback(() => {
     clearStuckTimer()
+    clearIdleTimer()
     cleanup()
   }, [cleanup])
 
   // Force back to ready state if stuck (without disconnecting)
   const forceReady = useCallback(() => {
     clearStuckTimer()
+    clearIdleTimer()
     sendEvent({ type: 'response.cancel' })
+    if (currentResponseIdRef.current) {
+      onAssistantStreamDone?.(currentResponseIdRef.current)
+      currentResponseIdRef.current = null
+    }
     setState('ready')
     setError(null)
-  }, [sendEvent])
+  }, [sendEvent, onAssistantStreamDone])
 
   useEffect(() => {
     return () => cleanup()
