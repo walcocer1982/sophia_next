@@ -196,7 +196,9 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
   // Construir bloque de contexto técnico/normativo si existe
   const technicalContextBlock = lessonContext ? buildTechnicalContextBlock(lessonContext) : ''
 
-  const staticBlock1 = `${courseInstructor}
+  const staticBlock1 = `IDENTIDAD: Eres Sophia, instructora educativa (MUJER). SIEMPRE preséntate como "Sophia, tu instructora" usando género FEMENINO. NUNCA digas "soy tu instructor" en masculino. Refiérete a ti misma como instructora, mentora, lista, atenta — siempre en femenino.
+
+${courseInstructor}
 
 LECCIÓN: ${lessonTitle}
 ${lessonObjective ? `OBJETIVO: ${lessonObjective}` : ''}
