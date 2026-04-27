@@ -1,6 +1,6 @@
 'use client'
 
-import { Mic, Loader2, PhoneOff, RotateCw } from 'lucide-react'
+import { Mic, Loader2, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useVoiceChat } from '@/hooks/use-voice-chat'
 import type { OptimisticMessage } from '@/types/chat'
@@ -27,7 +27,6 @@ export function VoiceButton({
     error,
     isConnected,
     connect,
-    disconnect,
     startRecording,
     stopRecording,
     forceReady,
@@ -51,19 +50,6 @@ export function VoiceButton({
     onAssistantStreamDelta: onStreamDelta,
     onAssistantStreamDone: onStreamDone,
   })
-
-  // Status label for the user
-  const getStatusLabel = () => {
-    switch (state) {
-      case 'idle': return ''
-      case 'connecting': return 'Conectando...'
-      case 'ready': return 'Click el micrófono para hablar'
-      case 'recording': return 'Habla ahora, luego click para enviar'
-      case 'processing': return 'Procesando tu mensaje...'
-      case 'speaking': return 'Sophia está respondiendo...'
-      case 'error': return error || 'Error'
-    }
-  }
 
   // Not connected: show "Activate voice" button
   if (!isConnected) {
@@ -124,31 +110,23 @@ export function VoiceButton({
         </span>
       </Button>
 
-      <span className="text-xs text-gray-500">{getStatusLabel()}</span>
+      {/* Show error if any */}
+      {error && <span className="text-xs text-red-600">{error}</span>}
 
+      {/* Reset button only when stuck */}
       {isBusy && (
         <Button
           type="button"
           onClick={forceReady}
           variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          title="Reiniciar (si Sophia se trabó)"
+          size="sm"
+          className="text-xs text-gray-500 hover:text-gray-700"
+          title="Reiniciar si se trabó"
         >
-          <RotateCw className="h-3.5 w-3.5" />
+          <RotateCw className="h-3 w-3 mr-1" />
+          Reiniciar
         </Button>
       )}
-
-      <Button
-        type="button"
-        onClick={disconnect}
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7"
-        title="Desconectar voz"
-      >
-        <PhoneOff className="h-3.5 w-3.5" />
-      </Button>
     </div>
   )
 }
