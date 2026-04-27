@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-type VoiceState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
+type VoiceState = 'idle' | 'connecting' | 'ready' | 'recording' | 'processing' | 'speaking' | 'error'
 
 interface VoiceTranscript {
   role: 'user' | 'assistant'
@@ -22,6 +22,7 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
   const dataChannelRef = useRef<RTCDataChannel | null>(null)
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
+  const audioSenderRef = useRef<RTCRtpSender | null>(null)
 
   const cleanup = useCallback(() => {
     if (dataChannelRef.current) {
@@ -39,6 +40,7 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
     if (audioElementRef.current) {
       audioElementRef.current.srcObject = null
     }
+    audioSenderRef.current = null
     setState('idle')
   }, [])
 
@@ -55,32 +57,35 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
     }
   }, [sessionId, onTranscript])
 
+  const sendEvent = useCallback((event: object) => {
+    const dc = dataChannelRef.current
+    if (dc?.readyState === 'open') {
+      dc.send(JSON.stringify(event))
+    }
+  }, [])
+
   const handleServerEvent = useCallback((event: MessageEvent) => {
     try {
       const data = JSON.parse(event.data)
 
-      // User finished speaking, transcription completed
       if (data.type === 'conversation.item.input_audio_transcription.completed') {
         const transcript = data.transcript?.trim()
         if (transcript) saveMessage('user', transcript)
       }
 
-      // Assistant finished speaking
       if (data.type === 'response.audio_transcript.done') {
         const transcript = data.transcript?.trim()
         if (transcript) saveMessage('assistant', transcript)
       }
 
-      // Visual state updates
-      if (data.type === 'input_audio_buffer.speech_started') {
-        setState('listening')
-      }
       if (data.type === 'response.audio.delta') {
         setState('speaking')
       }
+
       if (data.type === 'response.done') {
-        setState('listening')
+        setState('ready')
       }
+
       if (data.type === 'error') {
         console.error('Realtime error:', data)
         setError(data.error?.message || 'Voice error')
@@ -91,12 +96,11 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
     }
   }, [saveMessage])
 
-  const start = useCallback(async () => {
+  const connect = useCallback(async () => {
     setError(null)
     setState('connecting')
 
     try {
-      // 1. Get ephemeral token from our server
       const tokenRes = await fetch('/api/voice/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -105,11 +109,9 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
       if (!tokenRes.ok) throw new Error('Failed to get voice session token')
       const { client_secret } = await tokenRes.json()
 
-      // 2. Setup WebRTC peer connection
       const pc = new RTCPeerConnection()
       peerRef.current = pc
 
-      // 3. Setup audio element to play remote audio
       let audioEl = audioElementRef.current
       if (!audioEl) {
         audioEl = document.createElement('audio')
@@ -120,17 +122,19 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
         if (audioEl) audioEl.srcObject = e.streams[0]
       }
 
-      // 4. Add local microphone track
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       localStreamRef.current = stream
-      stream.getTracks().forEach(track => pc.addTrack(track, stream))
+      // Start with mic muted (push-to-talk)
+      stream.getAudioTracks().forEach(t => { t.enabled = false })
+      stream.getTracks().forEach(track => {
+        const sender = pc.addTrack(track, stream)
+        if (track.kind === 'audio') audioSenderRef.current = sender
+      })
 
-      // 5. Setup data channel for events
       const dc = pc.createDataChannel('oai-events')
       dataChannelRef.current = dc
       dc.addEventListener('message', handleServerEvent)
 
-      // 6. Create offer and send to OpenAI
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
 
@@ -149,16 +153,36 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
       const answerSdp = await sdpResponse.text()
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
 
-      setState('listening')
+      setState('ready')
     } catch (e) {
-      console.error('Voice start error:', e)
+      console.error('Voice connect error:', e)
       setError((e as Error).message)
       setState('error')
       cleanup()
     }
   }, [sessionId, handleServerEvent, cleanup])
 
-  const stop = useCallback(() => {
+  // Push-to-talk: start recording (unmute mic)
+  const startRecording = useCallback(() => {
+    if (state !== 'ready') return
+    const stream = localStreamRef.current
+    if (!stream) return
+    stream.getAudioTracks().forEach(t => { t.enabled = true })
+    setState('recording')
+  }, [state])
+
+  // Push-to-talk: stop and send (mute mic + commit + ask response)
+  const stopRecording = useCallback(() => {
+    if (state !== 'recording') return
+    const stream = localStreamRef.current
+    if (!stream) return
+    stream.getAudioTracks().forEach(t => { t.enabled = false })
+    setState('processing')
+    sendEvent({ type: 'input_audio_buffer.commit' })
+    sendEvent({ type: 'response.create' })
+  }, [state, sendEvent])
+
+  const disconnect = useCallback(() => {
     cleanup()
   }, [cleanup])
 
@@ -169,8 +193,10 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
   return {
     state,
     error,
-    isActive: state !== 'idle' && state !== 'error',
-    start,
-    stop,
+    isConnected: state !== 'idle' && state !== 'error',
+    connect,
+    disconnect,
+    startRecording,
+    stopRecording,
   }
 }
