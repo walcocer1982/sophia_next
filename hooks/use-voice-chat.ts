@@ -72,7 +72,24 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
 
       if (data.type === 'conversation.item.input_audio_transcription.completed') {
         const transcript = data.transcript?.trim()
-        if (transcript) saveMessage('user', transcript)
+        // Filter known Whisper hallucinations on silence/low audio
+        const hallucinationPatterns = [
+          /subt[íi]tulos? (realizados|por) .*amara/i,
+          /^you you/i,
+          /^thanks for watching/i,
+          /^thank you( for watching)?$/i,
+          /^\.+$/, // Just dots
+        ]
+        const isHallucination = !transcript || hallucinationPatterns.some(p => p.test(transcript))
+        if (isHallucination) {
+          setError('No se entendió tu audio. Habla más fuerte y cerca del micrófono.')
+          setTimeout(() => setError(null), 4000)
+          // Cancel any in-flight response generation
+          sendEvent({ type: 'response.cancel' })
+          setState('ready')
+          return
+        }
+        saveMessage('user', transcript)
       }
 
       if (data.type === 'response.audio_transcript.done') {
