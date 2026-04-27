@@ -299,6 +299,27 @@ export function ChatInterface({
           <VoiceButton
             sessionId={sessionId}
             onMessage={(msg) => setMessages(prev => [...prev, msg])}
+            onStreamStart={(id) => {
+              setMessages(prev => [...prev, {
+                id,
+                sessionId,
+                role: 'assistant',
+                content: '',
+                createdAt: new Date(),
+                status: 'streaming',
+                isOptimistic: true,
+              }])
+            }}
+            onStreamDelta={(id, delta) => {
+              setMessages(prev => prev.map(m =>
+                m.id === id ? { ...m, content: m.content + delta } : m
+              ))
+            }}
+            onStreamDone={(id) => {
+              setMessages(prev => prev.map(m =>
+                m.id === id ? { ...m, status: 'completed', isOptimistic: false } : m
+              ))
+            }}
             disabled={isLoading || isGeneratingWelcome}
           />
         </div>

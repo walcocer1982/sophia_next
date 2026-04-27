@@ -12,9 +12,19 @@ interface VoiceTranscript {
 interface UseVoiceChatArgs {
   sessionId: string
   onTranscript?: (transcript: VoiceTranscript) => void
+  onAssistantStreamStart?: (messageId: string) => void
+  onAssistantStreamDelta?: (messageId: string, delta: string) => void
+  onAssistantStreamDone?: (messageId: string) => void
 }
 
-export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
+export function useVoiceChat({
+  sessionId,
+  onTranscript,
+  onAssistantStreamStart,
+  onAssistantStreamDelta,
+  onAssistantStreamDone,
+}: UseVoiceChatArgs) {
+  const currentResponseIdRef = useRef<string | null>(null)
   const [state, setState] = useState<VoiceState>('idle')
   const [error, setError] = useState<string | null>(null)
 
@@ -84,10 +94,13 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
         // Filter known Whisper hallucinations on silence/low audio
         const hallucinationPatterns = [
           /subt[íi]tulos? (realizados|por) .*amara/i,
+          /m[áa]s informaci[óo]n.*\.(com|org|es)/i, // www.alimmenta.com etc
           /^you you/i,
           /^thanks for watching/i,
           /^thank you( for watching)?$/i,
+          /^suscr[íi]bete/i,
           /^\.+$/, // Just dots
+          /^\s*$/, // Empty or whitespace
         ]
         const isHallucination = !transcript || hallucinationPatterns.some(p => p.test(transcript))
         if (isHallucination) {
@@ -101,9 +114,31 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
         saveMessage('user', transcript)
       }
 
+      // Stream assistant transcript in real-time
+      if (data.type === 'response.audio_transcript.delta') {
+        if (!currentResponseIdRef.current) {
+          currentResponseIdRef.current = `voice-asst-${Date.now()}`
+          onAssistantStreamStart?.(currentResponseIdRef.current)
+        }
+        if (data.delta) {
+          onAssistantStreamDelta?.(currentResponseIdRef.current, data.delta)
+        }
+      }
+
       if (data.type === 'response.audio_transcript.done') {
         const transcript = data.transcript?.trim()
-        if (transcript) saveMessage('assistant', transcript)
+        if (transcript) {
+          // Save to DB but don't re-emit to UI (already streamed)
+          fetch('/api/voice/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, role: 'assistant', content: transcript }),
+          }).catch(e => console.error('Error saving voice message:', e))
+        }
+        if (currentResponseIdRef.current) {
+          onAssistantStreamDone?.(currentResponseIdRef.current)
+          currentResponseIdRef.current = null
+        }
       }
 
       if (data.type === 'response.audio.delta') {
@@ -118,6 +153,10 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
 
       if (data.type === 'response.done' || data.type === 'response.cancelled') {
         clearStuckTimer()
+        if (currentResponseIdRef.current) {
+          onAssistantStreamDone?.(currentResponseIdRef.current)
+          currentResponseIdRef.current = null
+        }
         setState('ready')
       }
 

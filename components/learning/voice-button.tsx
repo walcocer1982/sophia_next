@@ -8,10 +8,20 @@ import type { OptimisticMessage } from '@/types/chat'
 interface VoiceButtonProps {
   sessionId: string
   onMessage?: (message: OptimisticMessage) => void
+  onStreamStart?: (id: string) => void
+  onStreamDelta?: (id: string, delta: string) => void
+  onStreamDone?: (id: string) => void
   disabled?: boolean
 }
 
-export function VoiceButton({ sessionId, onMessage, disabled }: VoiceButtonProps) {
+export function VoiceButton({
+  sessionId,
+  onMessage,
+  onStreamStart,
+  onStreamDelta,
+  onStreamDone,
+  disabled,
+}: VoiceButtonProps) {
   const {
     state,
     error,
@@ -24,16 +34,22 @@ export function VoiceButton({ sessionId, onMessage, disabled }: VoiceButtonProps
   } = useVoiceChat({
     sessionId,
     onTranscript: (t) => {
-      onMessage?.({
-        id: `voice-${Date.now()}-${t.role}`,
-        sessionId,
-        role: t.role,
-        content: t.content,
-        createdAt: new Date(),
-        status: 'completed',
-        isOptimistic: false,
-      })
+      // Only used for user transcripts (assistant uses streaming below)
+      if (t.role === 'user') {
+        onMessage?.({
+          id: `voice-${Date.now()}-user`,
+          sessionId,
+          role: 'user',
+          content: t.content,
+          createdAt: new Date(),
+          status: 'completed',
+          isOptimistic: false,
+        })
+      }
     },
+    onAssistantStreamStart: onStreamStart,
+    onAssistantStreamDelta: onStreamDelta,
+    onAssistantStreamDone: onStreamDone,
   })
 
   // Status label for the user
