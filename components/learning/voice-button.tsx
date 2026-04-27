@@ -74,29 +74,36 @@ export function VoiceButton({ sessionId, onMessage, disabled }: VoiceButtonProps
     )
   }
 
-  // Connected: show push-to-talk button + disconnect
-  const canRecord = state === 'ready'
+  // Connected: tap-to-talk (click to start, click to send)
+  const canStart = state === 'ready'
   const isRecording = state === 'recording'
   const isBusy = state === 'processing' || state === 'speaking'
+
+  const handleMicClick = () => {
+    if (isRecording) {
+      stopRecording()
+    } else if (canStart) {
+      startRecording()
+    }
+  }
 
   return (
     <div className="flex items-center gap-2">
       <Button
         type="button"
-        // Push-to-talk: hold to record, release to send
-        onMouseDown={startRecording}
-        onMouseUp={stopRecording}
-        onMouseLeave={isRecording ? stopRecording : undefined}
-        onTouchStart={(e) => { e.preventDefault(); startRecording() }}
-        onTouchEnd={(e) => { e.preventDefault(); stopRecording() }}
-        disabled={!canRecord && !isRecording}
+        onClick={handleMicClick}
+        disabled={!canStart && !isRecording}
         variant={isRecording ? 'destructive' : 'default'}
         size="sm"
         className={`gap-1.5 select-none ${isRecording ? 'animate-pulse' : ''}`}
       >
         <Mic className="h-4 w-4" />
         <span className="hidden sm:inline">
-          {isRecording ? 'Hablando...' : isBusy ? 'Espera...' : 'Mantén para hablar'}
+          {isRecording
+            ? 'Click para enviar'
+            : isBusy
+              ? 'Espera...'
+              : 'Click para hablar'}
         </span>
       </Button>
 

@@ -61,7 +61,10 @@ export async function POST(request: Request) {
       model: 'gpt-4o-realtime-preview-2024-12-17',
       voice: 'alloy',
       instructions,
-      input_audio_transcription: { model: 'whisper-1' },
+      input_audio_transcription: {
+        model: 'whisper-1',
+        language: 'es', // Force Spanish transcription
+      },
       // Push-to-talk: client manually controls when to commit audio
       turn_detection: null,
     }),

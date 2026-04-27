@@ -23,6 +23,8 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
   const audioSenderRef = useRef<RTCRtpSender | null>(null)
+  const recordingStartRef = useRef<number>(0)
+  const MIN_RECORDING_MS = 1500 // Minimum 1.5 seconds to ensure complete sentence
 
   const cleanup = useCallback(() => {
     if (dataChannelRef.current) {
@@ -168,6 +170,7 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
     const stream = localStreamRef.current
     if (!stream) return
     stream.getAudioTracks().forEach(t => { t.enabled = true })
+    recordingStartRef.current = Date.now()
     setState('recording')
   }, [state])
 
@@ -176,6 +179,15 @@ export function useVoiceChat({ sessionId, onTranscript }: UseVoiceChatArgs) {
     if (state !== 'recording') return
     const stream = localStreamRef.current
     if (!stream) return
+
+    // Enforce minimum recording duration to capture complete sentences
+    const elapsed = Date.now() - recordingStartRef.current
+    if (elapsed < MIN_RECORDING_MS) {
+      setError(`Habla un poco más (mínimo ${Math.ceil(MIN_RECORDING_MS / 1000)}s)`)
+      setTimeout(() => setError(null), 2000)
+      return
+    }
+
     stream.getAudioTracks().forEach(t => { t.enabled = false })
     setState('processing')
     sendEvent({ type: 'input_audio_buffer.commit' })
