@@ -60,6 +60,8 @@ export function useVoiceChat({
     }
     if (audioElementRef.current) {
       audioElementRef.current.srcObject = null
+      audioElementRef.current.remove()
+      audioElementRef.current = null
     }
     audioSenderRef.current = null
     setState('idle')
@@ -191,10 +193,16 @@ export function useVoiceChat({
       if (!audioEl) {
         audioEl = document.createElement('audio')
         audioEl.autoplay = true
+        audioEl.setAttribute('playsinline', '')
+        // Append to body so browsers will play it (required by some autoplay policies)
+        document.body.appendChild(audioEl)
         audioElementRef.current = audioEl
       }
       pc.ontrack = (e) => {
-        if (audioEl) audioEl.srcObject = e.streams[0]
+        if (audioEl) {
+          audioEl.srcObject = e.streams[0]
+          audioEl.play().catch(err => console.warn('Audio play failed:', err))
+        }
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
