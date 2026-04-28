@@ -8,6 +8,7 @@ import { SophiaAvatar } from './sophia-avatar'
 import { VoiceButton } from './voice-button'
 import { ConversationDrawer } from './conversation-drawer'
 import { ChatInput, type ChatInputRef } from './chat-input'
+import { PlayAudioButton } from './play-audio-button'
 import type { OptimisticMessage } from '@/types/chat'
 import { useRef } from 'react'
 
@@ -90,6 +91,12 @@ export function TutorMode({
                   </motion.span>
                 )}
               </p>
+              {/* Play audio button - only show for completed messages (not while streaming) */}
+              {lastAssistantMessage.status !== 'streaming' && lastAssistantMessage.content.length > 10 && (
+                <div className="mt-2 flex justify-end">
+                  <PlayAudioButton text={lastAssistantMessage.content} />
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

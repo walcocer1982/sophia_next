@@ -59,7 +59,8 @@ export async function POST(request: Request) {
     },
     body: JSON.stringify({
       model: 'gpt-4o-realtime-preview-2024-12-17',
-      voice: 'alloy',
+      // 'shimmer' is the most neutral/Latin-friendly female voice
+      voice: 'shimmer',
       modalities: ['text', 'audio'],
       instructions,
       // Allow longer responses (default is 4096, "inf" lets model finish naturally)
