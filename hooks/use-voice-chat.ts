@@ -100,6 +100,19 @@ export function useVoiceChat({
     try {
       const data = JSON.parse(event.data)
 
+      // Log important events for debugging truncation
+      if (
+        data.type === 'response.done' ||
+        data.type === 'response.cancelled' ||
+        data.type === 'error' ||
+        data.type === 'rate_limits.updated'
+      ) {
+        console.log('[Voice]', data.type, data)
+        if (data.type === 'response.done' && data.response?.status_details) {
+          console.warn('[Voice] Response ended:', data.response.status_details)
+        }
+      }
+
       if (data.type === 'conversation.item.input_audio_transcription.completed') {
         const transcript = data.transcript?.trim()
         // Filter known Whisper hallucinations on silence/low audio
@@ -192,6 +205,20 @@ export function useVoiceChat({
       // Server finished generating, but audio may still be playing - don't change state yet
       if (data.type === 'response.done') {
         clearStuckTimer()
+
+        // Detect truncation by content filter (known OpenAI bug with Spanish)
+        const status = data.response?.status
+        const reason = data.response?.status_details?.reason
+        if (status === 'incomplete') {
+          if (reason === 'content_filter') {
+            setError('La respuesta fue cortada por el filtro de contenido. Intenta reformular tu pregunta.')
+            setTimeout(() => setError(null), 6000)
+          } else if (reason === 'max_output_tokens') {
+            setError('La respuesta fue muy larga y se cortó. Pídele a Sophia que sea más breve.')
+            setTimeout(() => setError(null), 6000)
+          }
+        }
+
         // Fallback: if output_audio_buffer.stopped doesn't fire within 5s, force ready
         clearIdleTimer()
         idleTimerRef.current = setTimeout(() => {
@@ -273,7 +300,7 @@ export function useVoiceChat({
       await pc.setLocalDescription(offer)
 
       const sdpResponse = await fetch(
-        'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
+        'https://api.openai.com/v1/realtime?model=gpt-realtime',
         {
           method: 'POST',
           body: offer.sdp,

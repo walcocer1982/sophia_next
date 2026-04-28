@@ -58,7 +58,9 @@ export async function POST(request: Request) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o-realtime-preview-2024-12-17',
+      // Use latest GA model 'gpt-realtime' which has better instruction following
+      // and reduced false-positive content_filter for non-English (Spanish)
+      model: 'gpt-realtime',
       // 'shimmer' is the most neutral/Latin-friendly female voice
       voice: 'shimmer',
       modalities: ['text', 'audio'],
