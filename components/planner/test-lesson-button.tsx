@@ -84,28 +84,39 @@ export function TestLessonButton({
           Elige desde qué actividad iniciar la prueba
         </p>
 
-        <div className="mb-4 max-h-64 space-y-1.5 overflow-y-auto">
-          {activities.map((activity, idx) => (
-            <button
-              key={activity.id}
-              onClick={() => setSelectedId(activity.id)}
-              className={`flex w-full items-center gap-3 rounded-md border p-3 text-left text-sm transition-colors ${
-                selectedId === activity.id
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">
-                {idx + 1}
-              </span>
-              <div className="min-w-0">
-                <span className="font-medium">{activity.title}</span>
-                <span className="ml-2 text-xs text-gray-400">
-                  {typeLabel[activity.type] || activity.type}
+        <div className="mb-4 max-h-72 space-y-1.5 overflow-y-auto">
+          {activities.map((activity, idx) => {
+            const preview = activity.title
+              ? activity.title.split(/[.!?]/)[0].slice(0, 80) + (activity.title.length > 80 ? '...' : '')
+              : ''
+            return (
+              <button
+                key={activity.id}
+                onClick={() => setSelectedId(activity.id)}
+                className={`flex w-full items-start gap-3 rounded-md border p-3 text-left text-sm transition-colors ${
+                  selectedId === activity.id
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">
+                  {idx + 1}
                 </span>
-              </div>
-            </button>
-          ))}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="font-medium text-gray-800">
+                      {typeLabel[activity.type] || activity.type}
+                    </span>
+                  </div>
+                  {preview && (
+                    <p className="text-xs text-gray-500 line-clamp-2">
+                      {preview}
+                    </p>
+                  )}
+                </div>
+              </button>
+            )
+          })}
         </div>
 
         <div className="flex gap-2">
