@@ -81,7 +81,7 @@ export function TestLessonButton({
       >
         <h3 className="mb-1 text-lg font-semibold">Probar sesión</h3>
         <p className="mb-4 text-sm text-gray-500">
-          Elige desde qué actividad iniciar la prueba
+          Click en una actividad para empezar desde ahí, o usa el botón inferior para empezar desde el principio.
         </p>
 
         <div className="mb-4 max-h-72 space-y-1.5 overflow-y-auto">
@@ -140,7 +140,9 @@ export function TestLessonButton({
             ) : (
               <Play className="h-4 w-4" />
             )}
-            {selectedId ? 'Iniciar desde aquí' : 'Iniciar desde el inicio'}
+            {selectedId
+              ? `Iniciar desde Actividad ${activities.findIndex(a => a.id === selectedId) + 1}`
+              : 'Iniciar desde el principio'}
           </Button>
         </div>
       </div>
