@@ -70,8 +70,10 @@ export async function POST(request: Request) {
       input_audio_transcription: {
         model: 'whisper-1',
         language: 'es', // Force Spanish transcription
-        // Prompt helps Whisper focus on the lesson topic and reduces hallucinations
-        prompt: `Transcripción de un estudiante hablando en español sobre ${lessonSession.lesson.title}. Contexto educativo de procesos metalúrgicos y minería.`,
+        // Keep the Whisper prompt VERY short (under ~40 chars). Long prompts
+        // get hallucinated verbatim into the transcription on quiet/short
+        // audio. Use compact vocabulary cues only.
+        prompt: 'Minería, jumbo, desatado, flotación, lixiviación.',
       },
       // Push-to-talk: client manually controls when to commit audio
       turn_detection: null,
