@@ -22,6 +22,7 @@ interface AssessmentInfo {
   lessonObjective: string
   keyPoints: string[]
   galleryImages: { url: string; description: string }[]
+  videoUrl?: string | null
 }
 
 type Stage = 'register' | 'session' | 'finished'
@@ -254,6 +255,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                 lessonObjective={assessment.lessonObjective}
                 keyPoints={assessment.keyPoints}
                 galleryImages={assessment.galleryImages}
+                videoUrl={assessment.videoUrl}
                 timeLimitMin={assessment.timeLimitMin}
                 onFinished={handleSessionFinished}
               />

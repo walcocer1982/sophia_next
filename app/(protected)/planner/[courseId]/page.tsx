@@ -23,6 +23,7 @@ type CourseWithLessons = {
     order: number
     keyPoints: string[]
     contentJson: unknown
+    videoUrl: string | null
     isPublished: boolean
     availableAt: Date | null
     closesAfterHours: number
@@ -59,6 +60,7 @@ export default async function CourseOverviewPage({
           order: true,
           keyPoints: true,
           contentJson: true,
+          videoUrl: true,
           isPublished: true,
           availableAt: true,
           closesAfterHours: true,
@@ -190,9 +192,11 @@ export default async function CourseOverviewPage({
           }> } | null
           const isDesigned =
             json?.activities && json.activities.length > 0
-          const hasResources = json?.activities?.some(
-            (a) => (a.teaching?.images && a.teaching.images.length > 0) || a.teaching?.image?.url
-          ) ?? false
+          const hasResources =
+            !!lesson.videoUrl ||
+            (json?.activities?.some(
+              (a) => (a.teaching?.images && a.teaching.images.length > 0) || a.teaching?.image?.url
+            ) ?? false)
           const allVerified = isDesigned && json!.activities!.every((a) => a.verified === true)
           const isTested = testedLessonIds.has(lesson.id)
 

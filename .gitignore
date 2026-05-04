@@ -51,3 +51,9 @@ FLOWS.md
 next-env.d.ts
 
 .vercel
+
+# Local-only media sources (uploaded to Cloudinary, too large for git)
+Informacion/videos/
+
+# Claude harness internal
+.claude/scheduled_tasks.lock

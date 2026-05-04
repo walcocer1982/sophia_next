@@ -20,6 +20,7 @@ interface LearningLayoutProps {
   objective: string
   keyPoints: string[]
   allImages: ActivityImageWithId[]
+  videoUrl?: string | null
   initialProgress: {
     current: number
     total: number
@@ -39,6 +40,7 @@ export function LearningLayout({
   objective,
   keyPoints,
   allImages,
+  videoUrl,
   initialProgress,
   testMode,
 }: LearningLayoutProps) {
@@ -51,6 +53,7 @@ export function LearningLayout({
         objective={objective}
         keyPoints={keyPoints}
         allImages={allImages}
+        videoUrl={videoUrl}
         testMode={testMode}
       >
         {children}
@@ -67,6 +70,7 @@ function LearningLayoutInner({
   objective,
   keyPoints,
   allImages,
+  videoUrl,
   testMode,
 }: Omit<LearningLayoutProps, 'initialProgress'>) {
   const [leftCollapsed, setLeftCollapsed] = useState(false)
@@ -126,9 +130,10 @@ function LearningLayoutInner({
         {children}
       </main>
 
-      {/* Right Panel (Images) */}
+      {/* Right Panel (Images or Sophia video) */}
       <ImagePanel
         images={currentImages}
+        videoUrl={videoUrl}
         isCollapsed={rightCollapsed}
         onToggle={() => setRightCollapsed(!rightCollapsed)}
       />

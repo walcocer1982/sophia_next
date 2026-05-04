@@ -27,6 +27,7 @@ interface AssessmentSessionProps {
   lessonObjective: string
   keyPoints: string[]
   galleryImages: { url: string; description: string }[]
+  videoUrl?: string | null
   timeLimitMin: number
   onFinished: (data: FinishedData) => void
 }
@@ -41,6 +42,7 @@ export function AssessmentSession({
   lessonObjective,
   keyPoints,
   galleryImages,
+  videoUrl,
   timeLimitMin,
   onFinished,
 }: AssessmentSessionProps) {
@@ -440,14 +442,26 @@ export function AssessmentSession({
           </AnimatePresence>
         </main>
 
-        {/* RIGHT: Gallery */}
+        {/* RIGHT: Sophia animated video (replaces image gallery) */}
         <aside className="col-span-3 bg-[#0d1f3c]/60 backdrop-blur border border-white/10 rounded-xl p-3 overflow-hidden flex flex-col gap-2 min-h-0">
           <div className="flex items-center gap-2 pb-1.5 border-b border-cyan-400/30 shrink-0">
             <ImageIcon className="h-3.5 w-3.5 text-cyan-400" />
-            <h3 className="text-xs font-semibold text-white">Recursos Visuales</h3>
+            <h3 className="text-xs font-semibold text-white">Sophia</h3>
           </div>
-          {galleryImages.length === 0 ? (
-            <p className="text-xs text-slate-500 text-center py-8">Sin imágenes para esta lección</p>
+          {videoUrl ? (
+            <div className="rounded-lg overflow-hidden bg-black aspect-video">
+              <video
+                src={videoUrl}
+                className="w-full h-full object-cover"
+                autoPlay
+                loop
+                muted
+                playsInline
+                controls
+              />
+            </div>
+          ) : galleryImages.length === 0 ? (
+            <p className="text-xs text-slate-500 text-center py-8">Sin recursos para esta lección</p>
           ) : (
             <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-0">
               {galleryImages.map((img, i) => (

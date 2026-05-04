@@ -122,6 +122,7 @@ model Lesson {
   objective   String   // Objetivo de la lección
   keyPoints   String[] // Puntos clave de la lección
   contentJson Json     // { moments: [...] }
+  videoUrl    String?   // URL del video animado de Sophia (panel lateral durante la clase)
   order       Int       @default(0)
   isPublished      Boolean   @default(false)
   availableAt      DateTime? // Fecha/hora desde la cual está disponible para estudiantes

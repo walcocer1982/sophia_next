@@ -28,6 +28,7 @@ export default async function EvalPage({
           objective: true,
           keyPoints: true,
           contentJson: true,
+          videoUrl: true,
         },
       },
     },
@@ -63,6 +64,7 @@ export default async function EvalPage({
         lessonObjective: assessment.lesson.objective,
         keyPoints: assessment.lesson.keyPoints,
         galleryImages,
+        videoUrl: assessment.lesson.videoUrl,
       }}
     />
   )

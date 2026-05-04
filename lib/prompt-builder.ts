@@ -359,13 +359,19 @@ VERIFICACIÓN FLEXIBLE:
 
     const imageEntries = validImages.map((img, i) => {
       const showDirective = showDirectives[img.showWhen || 'on_reference']
-      return `  ${i + 1}. "${img.description}" — ${showDirective}`
+      return `  [${i + 1}] "${img.description}" — ${showDirective}`
     }).join('\n')
 
     imageBlock = `
-IMÁGENES DE APOYO (${validImages.length}):
+IMÁGENES DE APOYO (${validImages.length}) — visibles en el panel del estudiante:
 ${imageEntries}
-${typeDirective}
+
+REGLA CRÍTICA — INTEGRAR IMÁGENES EN LA CONVERSACIÓN:
+- Refiérete a las imágenes EN MOMENTOS CLAVE de tu explicación, no las dejes solo en el panel.
+- Usa frases naturales como: "Mira la imagen 1, donde se ve...", "Fíjate en la imagen del jumbo...", "Como muestra la foto...", "Si observas el diagrama...".
+- Conecta cada imagen con el concepto exacto que estás enseñando o la pregunta que harás después.
+- Cuando hagas una pregunta basada en la imagen, INVITA al estudiante a observarla: "Observa la imagen 2 y dime, ¿qué tipo de perforación ves?".
+- ${typeDirective}
 - Usa SOLO las descripciones proporcionadas, no inventes detalles sobre las imágenes.`
   }
 

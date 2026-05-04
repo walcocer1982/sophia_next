@@ -122,6 +122,7 @@ export default async function ChatPage({
       objective={lessonSession.lesson.objective || ''}
       keyPoints={keyPoints}
       allImages={allImages}
+      videoUrl={lessonSession.lesson.videoUrl}
       initialProgress={{
         current: completedCount + 1,
         total: totalActivities,
