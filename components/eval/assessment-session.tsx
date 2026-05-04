@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { Clock } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { Clock, LogOut } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { TutorMode } from '../learning/tutor-mode'
-import type { ChatMessage, OptimisticMessage } from '@/types/chat'
+import type { OptimisticMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { ProgressProvider } from '../learning/progress-context'
 
@@ -38,14 +39,40 @@ export function AssessmentSession({
   const [welcomeLoading, setWelcomeLoading] = useState(true)
   const welcomeRequested = useRef(false)
   const finishedRef = useRef(false)
+  const welcomeAudioPlayedRef = useRef(false)
+
+  // Auto-play TTS of a quick greeting so Sophia "speaks" immediately
+  const playWelcomeAudio = useCallback(async (text: string) => {
+    if (welcomeAudioPlayedRef.current) return
+    welcomeAudioPlayedRef.current = true
+    try {
+      const res = await fetch('/api/voice/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audio.play().catch(e => console.warn('Welcome audio autoplay blocked:', e))
+      audio.onended = () => URL.revokeObjectURL(url)
+    } catch (e) {
+      console.warn('TTS welcome failed:', e)
+    }
+  }, [])
+
 
   // Generate welcome message on mount
+  // Strategy: collect FULL text + prepare audio in parallel, then reveal both at once
   useEffect(() => {
     if (welcomeRequested.current) return
     welcomeRequested.current = true
 
     const generate = async () => {
       const welcomeId = `welcome-${Date.now()}`
+
+      // Show empty placeholder (skeleton/loader) — text NOT yet visible
       setMessages([{
         id: welcomeId,
         sessionId,
@@ -65,18 +92,77 @@ export function AssessmentSession({
         })
         if (!res.ok || !res.body) throw new Error('No se pudo generar el mensaje de bienvenida')
 
+        // Collect full text without showing it yet
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
-        let content = ''
+        let fullContent = ''
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
-          content += decoder.decode(value, { stream: true })
-          setMessages(prev => prev.map(m => m.id === welcomeId ? { ...m, content } : m))
+          fullContent += decoder.decode(value, { stream: true })
         }
-        setMessages(prev => prev.map(m =>
-          m.id === welcomeId ? { ...m, status: 'completed', isOptimistic: false } : m
-        ))
+
+        if (fullContent.trim().length === 0) {
+          setWelcomeLoading(false)
+          return
+        }
+
+        // Clean markdown for TTS
+        const cleanText = fullContent
+          .replace(/\*\*([^*]+)\*\*/g, '$1')
+          .replace(/\*([^*]+)\*/g, '$1')
+          .replace(/__([^_]+)__/g, '$1')
+          .replace(/_([^_]+)_/g, '$1')
+          .replace(/`([^`]+)`/g, '$1')
+          .replace(/#{1,6}\s+/g, '')
+          .replace(/^\s*[\d]+[.\)]\s*/gm, '')
+          .replace(/^\s*[-*•]\s+/gm, '')
+          .replace(/\n{2,}/g, '. ')
+          .replace(/\n/g, ' ')
+          .replace(/\s+/g, ' ')
+          .replace(/\s+\./g, '.')
+          .replace(/\.+/g, '.')
+          .trim()
+
+        // Fetch audio FIRST, before revealing text
+        try {
+          const ttsRes = await fetch('/api/voice/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: cleanText }),
+          })
+          if (ttsRes.ok) {
+            const blob = await ttsRes.blob()
+            const url = URL.createObjectURL(blob)
+            const audio = new Audio()
+            audio.preload = 'auto'
+            audio.src = url
+            audio.onended = () => URL.revokeObjectURL(url)
+            welcomeAudioPlayedRef.current = true
+            // Wait until audio is fully buffered before playing to avoid cut-off start
+            await new Promise<void>((resolve) => {
+              audio.oncanplaythrough = () => resolve()
+              audio.onerror = () => resolve()
+              audio.load()
+              // Safety timeout in case event doesn't fire
+              setTimeout(() => resolve(), 1500)
+            })
+            // Reveal text and start audio AT THE SAME TIME
+            setMessages(prev => prev.map(m =>
+              m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
+            ))
+            audio.play().catch(e => console.warn('Welcome audio autoplay blocked:', e))
+          } else {
+            // TTS failed — just show text
+            setMessages(prev => prev.map(m =>
+              m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
+            ))
+          }
+        } catch {
+          setMessages(prev => prev.map(m =>
+            m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
+          ))
+        }
       } catch {
         // ignore — user can still interact
       } finally {
@@ -193,6 +279,11 @@ export function AssessmentSession({
   const timeLabel = `${minutes}:${seconds.toString().padStart(2, '0')}`
   const lowTime = secondsLeft <= 60
 
+  const handleFinishEarly = async () => {
+    if (!confirm('¿Estás seguro de que quieres terminar la evaluación ahora? No podrás continuar después.')) return
+    await finishAssessment()
+  }
+
   return (
     <div className="w-full h-full max-w-5xl mx-auto flex flex-col">
       {/* Bar with timer */}
@@ -201,9 +292,21 @@ export function AssessmentSession({
           <span className="text-gray-500">Participante:</span>{' '}
           <strong>{participantName}</strong>
         </div>
-        <div className={`flex items-center gap-2 font-mono text-lg font-semibold ${lowTime ? 'text-red-600 animate-pulse' : 'text-gray-700'}`}>
-          <Clock className="h-5 w-5" />
-          {timeLabel}
+        <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-2 font-mono text-lg font-semibold ${lowTime ? 'text-red-600 animate-pulse' : 'text-gray-700'}`}>
+            <Clock className="h-5 w-5" />
+            {timeLabel}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={handleFinishEarly}
+            className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            <LogOut className="h-4 w-4" />
+            Terminar
+          </Button>
         </div>
       </div>
 
@@ -221,6 +324,7 @@ export function AssessmentSession({
             onSendText={handleSendMessage}
             isLoading={isLoading}
             isGeneratingWelcome={welcomeLoading}
+            autoStartVoice
           />
         </ProgressProvider>
       </div>

@@ -115,7 +115,11 @@ export function useVoiceChat({
 
       if (data.type === 'conversation.item.input_audio_transcription.completed') {
         const transcript = data.transcript?.trim()
-        // Filter known Whisper hallucinations on silence/low audio
+        // Filter known Whisper hallucinations on silence/low audio.
+        // IMPORTANT: We do NOT cancel Sophia's response here, because the response
+        // is generated directly from the AUDIO, not from this transcript.
+        // Whisper may hallucinate the text even when the audio is clear and Sophia
+        // is responding correctly to it.
         const hallucinationPatterns = [
           /subt[íi]tulos? (realizados|por) .*amara/i,
           /m[áa]s informaci[óo]n.*\.(com|org|es)/i, // www.alimmenta.com etc
@@ -128,11 +132,8 @@ export function useVoiceChat({
         ]
         const isHallucination = !transcript || hallucinationPatterns.some(p => p.test(transcript))
         if (isHallucination) {
-          setError('No se entendió tu audio. Habla más fuerte y cerca del micrófono.')
-          setTimeout(() => setError(null), 4000)
-          // Cancel any in-flight response generation
-          sendEvent({ type: 'response.cancel' })
-          setState('ready')
+          // Don't save and don't show error — Sophia's response is still valid (it comes from audio)
+          console.warn('[Voice] Whisper hallucination detected, skipping transcript save:', transcript)
           return
         }
         saveMessage('user', transcript)

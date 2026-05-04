@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { Mic, Loader2, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useVoiceChat } from '@/hooks/use-voice-chat'
@@ -12,6 +13,7 @@ interface VoiceButtonProps {
   onStreamDelta?: (id: string, delta: string) => void
   onStreamDone?: (id: string) => void
   disabled?: boolean
+  autoStart?: boolean // Auto-activate voice on mount (kiosko mode)
 }
 
 export function VoiceButton({
@@ -21,6 +23,7 @@ export function VoiceButton({
   onStreamDelta,
   onStreamDone,
   disabled,
+  autoStart = false,
 }: VoiceButtonProps) {
   const {
     state,
@@ -50,6 +53,17 @@ export function VoiceButton({
     onAssistantStreamDelta: onStreamDelta,
     onAssistantStreamDone: onStreamDone,
   })
+
+  // Auto-start voice on mount if requested (kiosko mode)
+  const autoStartedRef = useRef(false)
+  useEffect(() => {
+    if (autoStart && !autoStartedRef.current && !isConnected && !disabled) {
+      autoStartedRef.current = true
+      // Small delay to allow welcome message to render first
+      const timer = setTimeout(() => connect(), 800)
+      return () => clearTimeout(timer)
+    }
+  }, [autoStart, isConnected, disabled, connect])
 
   // Not connected: show "Activate voice" button
   if (!isConnected) {

@@ -1,4 +1,4 @@
-import { auth } from '@/auth'
+import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 
@@ -8,8 +8,8 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const session = await getAuthOrGuest()
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -18,7 +18,7 @@ export async function GET(
   const lessonSession = await prisma.lessonSession.findFirst({
     where: {
       id: id,
-      userId: session.user.id,
+      userId: session.userId,
     },
     include: {
       messages: {

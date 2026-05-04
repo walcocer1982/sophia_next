@@ -3,9 +3,11 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { gradeTo20 } from '@/lib/assessment-utils'
 import { isPassing } from '@/lib/rubric'
+import { verifyActivityCompletion } from '@/lib/activity-verification'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 /**
  * POST /api/eval/finish
@@ -56,14 +58,115 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 })
   }
 
-  // Calculate grade based only on EVALUATIVE activities completed
   const contentJson = session.lesson.contentJson as unknown as LessonContent
+
+  // Get all messages from this session for post-hoc evaluation
+  const messages = await prisma.message.findMany({
+    where: { sessionId: session.id },
+    orderBy: { timestamp: 'asc' },
+    select: { role: true, content: true },
+  })
+
+  // POST-HOC EVALUATION: For each evaluative activity in the lesson,
+  // analyze the user's messages to determine if the activity was completed.
+  // This is necessary because voice mode doesn't go through chat/stream's
+  // automatic verification logic.
+  const userMessages = messages.filter(m => m.role === 'user')
+  const conversationHistory = messages.map(m => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+  }))
+
+  // Combine all user responses into one string per activity attempt
+  const allUserText = userMessages.map(m => m.content).join('\n')
+
+  for (const activity of contentJson.activities) {
+    if (activity.verification?.is_evaluative === false) continue
+
+    // Skip if already has progress (text mode already evaluated)
+    const existingProgress = session.activities.find(a => a.activityId === activity.id)
+    if (existingProgress?.status === 'COMPLETED') continue
+
+    if (allUserText.length < 5) continue // No real input
+
+    try {
+      const result = await verifyActivityCompletion(
+        allUserText,
+        activity,
+        conversationHistory
+      )
+
+      // Save as ActivityProgress
+      await prisma.activityProgress.upsert({
+        where: {
+          lessonSessionId_activityId: {
+            lessonSessionId: session.id,
+            activityId: activity.id,
+          },
+        },
+        create: {
+          lessonSessionId: session.id,
+          activityId: activity.id,
+          status: 'COMPLETED',
+          attempts: 1,
+          completedAt: new Date(),
+          passedCriteria: result.completed,
+          aiFeedback: result.feedback || null,
+          evidenceData: {
+            attempts: [{
+              studentResponse: allUserText.slice(0, 1000),
+              analysis: {
+                ready_to_advance: result.ready_to_advance,
+                completed: result.completed,
+                criteriaMatched: result.criteriaMatched,
+                criteriaMissing: result.criteriaMissing,
+                understanding_level: result.understanding_level,
+                response_type: result.response_type,
+                completeness_percentage: result.completeness_percentage,
+              },
+              timestamp: new Date().toISOString(),
+            }],
+          },
+        },
+        update: {
+          status: 'COMPLETED',
+          completedAt: new Date(),
+          passedCriteria: result.completed,
+          aiFeedback: result.feedback || null,
+          evidenceData: {
+            attempts: [{
+              studentResponse: allUserText.slice(0, 1000),
+              analysis: {
+                ready_to_advance: result.ready_to_advance,
+                completed: result.completed,
+                criteriaMatched: result.criteriaMatched,
+                criteriaMissing: result.criteriaMissing,
+                understanding_level: result.understanding_level,
+                response_type: result.response_type,
+                completeness_percentage: result.completeness_percentage,
+              },
+              timestamp: new Date().toISOString(),
+            }],
+          },
+        },
+      })
+    } catch (e) {
+      console.error('Post-hoc verification error for activity', activity.id, e)
+    }
+  }
+
+  // Re-fetch session activities after post-hoc evaluation
+  const updatedActivities = await prisma.activityProgress.findMany({
+    where: { lessonSessionId: session.id, status: 'COMPLETED' },
+  })
+
+  // Calculate grade based only on EVALUATIVE activities completed
   const activityEvaluativeMap = new Map<string, boolean>()
   for (const a of contentJson.activities) {
     activityEvaluativeMap.set(a.id, a.verification?.is_evaluative !== false)
   }
 
-  const evaluativeActivities = session.activities.filter(ap =>
+  const evaluativeActivities = updatedActivities.filter(ap =>
     activityEvaluativeMap.get(ap.activityId) !== false
   )
 

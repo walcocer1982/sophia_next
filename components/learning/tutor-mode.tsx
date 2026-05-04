@@ -23,6 +23,8 @@ interface TutorModeProps {
   onSendText: (text: string) => Promise<void>
   isLoading: boolean
   isGeneratingWelcome: boolean
+  autoStartVoice?: boolean
+  headerExtra?: React.ReactNode // Extra content for the header (e.g., "Terminar" button)
 }
 
 export function TutorMode({
@@ -34,6 +36,8 @@ export function TutorMode({
   onSendText,
   isLoading,
   isGeneratingWelcome,
+  autoStartVoice = false,
+  headerExtra,
 }: TutorModeProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [avatarState, setAvatarState] = useState<AvatarState>('idle')
@@ -51,8 +55,9 @@ export function TutorMode({
   return (
     <div className="flex h-full flex-col bg-gradient-to-b from-slate-50 to-slate-100 relative">
       {/* Header */}
-      <div className="shrink-0 border-b bg-white px-4 py-3">
+      <div className="shrink-0 border-b bg-white px-4 py-3 flex items-center justify-between gap-3">
         <h1 className="text-base font-semibold text-gray-800 truncate">{lessonTitle}</h1>
+        {headerExtra}
       </div>
 
       {/* Main: Avatar + Last message */}
@@ -70,7 +75,36 @@ export function TutorMode({
 
         {/* Last message bubble */}
         <AnimatePresence mode="wait">
-          {lastAssistantMessage && lastAssistantMessage.content && (
+          {isGeneratingWelcome && !lastAssistantMessage?.content ? (
+            <motion.div
+              key="loader"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="max-w-2xl w-full bg-white rounded-2xl shadow-md p-4 sm:p-5"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex gap-1">
+                  <motion.span
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity, delay: 0 }}
+                    className="block w-2 h-2 rounded-full bg-blue-400"
+                  />
+                  <motion.span
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity, delay: 0.15 }}
+                    className="block w-2 h-2 rounded-full bg-blue-400"
+                  />
+                  <motion.span
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity, delay: 0.3 }}
+                    className="block w-2 h-2 rounded-full bg-blue-400"
+                  />
+                </div>
+                <span className="text-sm text-gray-500">Sophia se está preparando...</span>
+              </div>
+            </motion.div>
+          ) : lastAssistantMessage && lastAssistantMessage.content ? (
             <motion.div
               key={lastAssistantMessage.id}
               initial={{ opacity: 0, y: 10 }}
@@ -98,7 +132,7 @@ export function TutorMode({
                 </div>
               )}
             </motion.div>
-          )}
+          ) : null}
         </AnimatePresence>
 
         {/* History link */}
@@ -118,6 +152,7 @@ export function TutorMode({
         <div className="flex items-center justify-center gap-3 flex-wrap">
           <VoiceButton
             sessionId={sessionId}
+            autoStart={autoStartVoice}
             onMessage={onAddMessage}
             onStreamStart={(id) => {
               setAvatarState('speaking')

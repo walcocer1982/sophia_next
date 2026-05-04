@@ -46,12 +46,19 @@ export async function POST(request: Request) {
             },
           },
         },
+        assessmentParticipant: {
+          select: { firstName: true },
+        },
       },
     })
 
     if (!lessonSession) {
       return new Response('Session not found', { status: 404 })
     }
+
+    // If this is a guest assessment participant, get only the FIRST given name (no compound)
+    const rawFirstName = lessonSession.assessmentParticipant?.firstName || null
+    const participantFirstName = rawFirstName?.trim().split(/\s+/)[0] || null
 
     // Obtener contenido de la lección
     const contentJson = await getLessonContent(lessonSession.lesson.id) as LessonContent
@@ -99,28 +106,40 @@ export async function POST(request: Request) {
     })
 
     // Instrucción para mensaje de bienvenida - Presenta el tema e invita a aprender
-    const welcomeInstruction = `PRIMER MENSAJE DE LA LECCIÓN.
+    const greetingLine = participantFirstName
+      ? `"Hola ${participantFirstName}, soy Sophia, tu instructora para esta lección sobre..."`
+      : `"Hola, soy Sophia, tu instructora para esta lección sobre..."`
 
-IDENTIDAD: Eres Sophia, instructora educativa (mujer). SIEMPRE preséntate como "Sophia, tu instructora" — usa género femenino. NUNCA digas "soy tu instructor" (masculino).
+    const welcomeInstruction = `PRIMER MENSAJE DE LA LECCIÓN — CONVERSACIONAL PARA VOZ.
 
-TAREA: Genera el mensaje de bienvenida para la lección "${lessonTitle}".
+IDENTIDAD: Eres Sophia, instructora educativa (mujer).
 
-ESTRUCTURA OBLIGATORIA (en este orden):
-1. Saludo breve y presentación (1 oración) — di "Hola, soy Sophia, tu instructora para esta lección sobre..."
-2. Menciona el OBJETIVO de aprendizaje de la lección
-3. Lista los PUNTOS CLAVE que van a cubrir (usa los del sistema)
-4. Invita al estudiante a comenzar: pregunta si tiene experiencia previa con el tema o si está listo para empezar
+${participantFirstName ? `NOMBRE DEL ESTUDIANTE: "${participantFirstName}". Salúdalo por su primer nombre.` : ''}
 
-ESTILO:
-- Tono conversacional pero estructurado
-- Sin emojis
-- Sin "Bienvenido" formal
-- Sin exclamaciones exageradas
-- Género femenino en TODA referencia a ti misma (instructora, lista, atenta, etc.)
+TAREA: Genera un mensaje de bienvenida CONVERSACIONAL para la lección "${lessonTitle}".
 
-IMPORTANTE: NO hagas la pregunta de verificación todavía. Primero debes ENSEÑAR el contenido de la primera actividad. La bienvenida solo presenta el tema e invita a empezar.
+REGLAS CRÍTICAS DE FORMATO (este texto se va a leer en VOZ ALTA):
+- TEXTO PLANO. NO uses asteriscos (**), guiones (-), numeración (1. 2. 3.), ni markdown.
+- NO uses "Objetivo:" ni "Puntos clave:" como títulos sueltos. Intégralos en oraciones naturales.
+- NO uses listas estructuradas. Habla de forma fluida y natural.
+- Tono cálido, amigable, como una conversación entre amigos.
 
-Genera el mensaje ahora.`
+EJEMPLO CORRECTO:
+"Hola Walther, soy Sophia. Hoy vamos a hablar sobre perforación subterránea en minas peruanas. Nuestro objetivo es que al final puedas identificar los principales métodos de perforación, los equipos que se usan en minas como Antamina y Cerro Lindo, y las normas de seguridad peruanas. Cuéntame, ¿has trabajado antes con este tema o lo estás explorando por primera vez?"
+
+EJEMPLO INCORRECTO (NO HAGAS ESTO):
+"Hola Walther. **Objetivo de aprendizaje:** Identificar los métodos. **Puntos clave:** 1. Métodos 2. Tipos 3. Normativa..."
+
+LARGO TOTAL: 3-5 oraciones. NO más.
+
+ESTRUCTURA NATURAL:
+1. Saludo + presentación (1 oración) - di ${greetingLine}
+2. Menciona qué van a aprender hoy de forma fluida (1-2 oraciones)
+3. Pregunta sobre experiencia previa para conectar (1 oración)
+
+NO asumas el género del estudiante. Usa formas neutras.
+
+Genera el mensaje ahora, sin formato, conversacional.`
 
     // Stream response from Claude con bloques cacheables
     const stream = await anthropic.messages.stream({

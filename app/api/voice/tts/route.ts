@@ -36,10 +36,11 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'tts-1',
-        voice: 'shimmer', // Same voice as Realtime for consistency
+        model: 'gpt-4o-mini-tts',
+        voice: 'shimmer',
         input: trimmedText,
-        speed: 1.0,
+        // Voice instructions only supported by gpt-4o-mini-tts
+        instructions: 'Habla en español latinoamericano con acento peruano neutro. Tono cálido, amigable y natural, como una instructora joven hablando con un estudiante. Ritmo pausado y claro. Pronuncia "z" y "ce/ci" como "s" (seseo). NUNCA uses acento de España. NUNCA suenes robotizada.',
         response_format: 'mp3',
       }),
     })
