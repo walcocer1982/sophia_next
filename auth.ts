@@ -55,15 +55,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user, account }) {
       if (user && account?.provider === 'google') {
+        // Normalize to lowercase: Google sends lowercase but the DB may have
+        // a manually-created admin with mixed case. Without this, upsert misses
+        // the existing record and creates a duplicate STUDENT account.
+        const normalizedEmail = user.email!.toLowerCase()
         const dbUser = await prisma.user.upsert({
-          where: { email: user.email! },
+          where: { email: normalizedEmail },
           update: {
             name: user.name,
             image: user.image,
             googleId: account.providerAccountId,
           },
           create: {
-            email: user.email!,
+            email: normalizedEmail,
             name: user.name,
             image: user.image,
             googleId: account.providerAccountId,
