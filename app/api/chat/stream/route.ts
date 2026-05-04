@@ -531,37 +531,54 @@ export async function POST(request: Request) {
                 status: 'COMPLETED',
               },
               select: {
+                activityId: true,
                 attempts: true,
                 tangentCount: true,
                 evidenceData: true,
               },
             })
 
+            // Identify which activities are evaluative (counts for grade)
+            // Activities with verification.is_evaluative === false are skipped
+            const activityEvaluativeMap = new Map<string, boolean>()
+            for (const a of contentJson.activities) {
+              activityEvaluativeMap.set(a.id, a.verification?.is_evaluative !== false)
+            }
+
             // Scoring: comprensión (70%) + eficiencia (30%)
-            // Comprensión = nivel demostrado al final de la actividad
-            // Eficiencia = penalización gradual por intentos y tangentes
             const comprehensionScores: Record<string, number> = {
               memorized: 40, understood: 70, applied: 85, analyzed: 100,
             }
             // Penalización gradual: más suave que antes, mínimo ×0.75
             const attemptPenalty = [1.0, 0.95, 0.90, 0.85, 0.80, 0.75] // 1st-6th+
 
+            // Only evaluate activities marked as evaluative
+            const evaluativeActivities = allActivities.filter(ap =>
+              activityEvaluativeMap.get(ap.activityId) !== false
+            )
+
             let totalScore = 0
-            for (const ap of allActivities) {
+            for (const ap of evaluativeActivities) {
               const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
               const lastAttempt = evidence?.attempts?.at(-1)
               const level = lastAttempt?.analysis?.understanding_level || 'memorized'
               const comprehension = comprehensionScores[level] || 40
               const efficiency = attemptPenalty[Math.min(ap.attempts - 1, 5)]
               const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
-              // Comprensión pesa 70%, eficiencia por intentos pesa 30%
               const activityScore = (comprehension * 0.7) + (comprehension * 0.3 * efficiency * tangentPenalty)
               totalScore += activityScore
             }
 
-            const grade = allActivities.length > 0
-              ? Math.round(totalScore / allActivities.length)
+            const grade = evaluativeActivities.length > 0
+              ? Math.round(totalScore / evaluativeActivities.length)
               : 0
+
+            logger.info('chat.stream.grade_calculated', {
+              sessionId,
+              totalActivitiesCompleted: allActivities.length,
+              evaluativeActivitiesCount: evaluativeActivities.length,
+              grade,
+            })
 
             await prisma.lessonSession.update({
               where: { id: lessonSession.id },

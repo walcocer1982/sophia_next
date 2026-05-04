@@ -267,6 +267,8 @@ EXTENSIÓN (ESTRICTO):
   const successCriteria = verification.success_criteria?.must_include || (verification as { criteria?: string[] }).criteria || []
   const minCompleteness = verification.success_criteria?.min_completeness ?? 60
   const isOpenEnded = verification.open_ended === true
+  // Default true for backwards compatibility - existing activities without flag are evaluative
+  const isEvaluative = verification.is_evaluative !== false
 
   // Guidance for question approach by activity type
   const questionTypeGuidance: Record<string, string> = {
@@ -290,7 +292,19 @@ EXTENSIÓN (ESTRICTO):
   }
   const questionGuidance = questionTypeGuidance[activityType] || questionTypeGuidance.explanation
 
-  const verificationBlock = isOpenEnded
+  const verificationBlock = !isEvaluative
+    ? `INTERACCIÓN NO EVALUATIVA - Pregunta de participación: "${verification.question}"
+
+${questionGuidance}
+
+REGLAS — NO ES EVALUACIÓN:
+- Esta pregunta NO cuenta para la nota.
+- Es solo para fomentar participación, transición o engagement.
+- Acepta CUALQUIER respuesta razonable del estudiante y avanza inmediatamente.
+- NO apliques criterios estrictos, NO cuentes intentos.
+- Si responde algo coherente con el tema, da reconocimiento breve y continúa.
+- Si no responde bien, simplemente continúa sin penalizar.`
+    : isOpenEnded
     ? `VERIFICACIÓN - Pregunta ABIERTA: "${verification.question}"
 Aspectos a observar (guías, no criterios estrictos): ${successCriteria.join(' | ')}
 Máximo intentos: ${maxAttempts}
