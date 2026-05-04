@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2, RotateCw } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
@@ -19,6 +19,9 @@ interface AssessmentInfo {
   collectEmail: boolean
   collectDni: boolean
   lessonTitle: string
+  lessonObjective: string
+  keyPoints: string[]
+  galleryImages: { url: string; description: string }[]
 }
 
 type Stage = 'register' | 'session' | 'finished'
@@ -99,27 +102,44 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
 
   if (!assessment.isActive) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-[#0a1628] p-4">
         <div className="text-center max-w-md">
-          <h1 className="text-2xl font-bold text-gray-700 mb-2">Evaluación cerrada</h1>
-          <p className="text-gray-500">Esta evaluación ya no está disponible.</p>
+          <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={120} height={120} className="mx-auto mb-6 rounded-lg" />
+          <h1 className="text-2xl font-bold text-white mb-2">Evaluación cerrada</h1>
+          <p className="text-slate-400">Esta evaluación ya no está disponible.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex flex-col">
+    <div className="min-h-screen bg-[#0a1628] flex flex-col relative overflow-hidden">
+      {/* Subtle grid background */}
+      <div
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }}
+      />
+      {/* Glow accents */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-yellow-400/5 rounded-full blur-[120px] pointer-events-none" />
+
       {/* Header */}
-      <header className="border-b bg-white px-6 py-3 flex items-center justify-between shrink-0">
+      <header className="relative z-10 border-b border-white/5 bg-[#0a1628]/80 backdrop-blur-md px-6 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <Image src="/sophia-avatar.png" alt="Sophia" width={36} height={36} className="rounded-full" />
-          <div>
-            <h1 className="text-sm font-semibold">Sophia · Evaluación</h1>
-            <p className="text-xs text-gray-500">{assessment.title}</p>
+          <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={40} height={40} className="rounded-md" />
+          <div className="hidden sm:block h-6 w-px bg-white/10" />
+          <div className="flex items-center gap-2">
+            <Image src="/sophia-avatar.png" alt="Sophia" width={32} height={32} className="rounded-full ring-2 ring-white/10" />
+            <div>
+              <h1 className="text-sm font-semibold text-white">Sophia · Evaluación</h1>
+              <p className="text-xs text-slate-400">{assessment.title}</p>
+            </div>
           </div>
         </div>
-        <div className="text-xs text-gray-500">Código: <span className="font-mono font-semibold">{assessment.code}</span></div>
+        <div className="text-xs text-slate-400">Código: <span className="font-mono font-semibold text-white">{assessment.code}</span></div>
       </header>
 
       {/* Content */}
@@ -131,81 +151,91 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="w-full max-w-md bg-white border rounded-2xl shadow-lg p-8"
+              className="relative w-full max-w-md"
             >
-              <h2 className="text-2xl font-bold text-gray-800 mb-1">Bienvenido</h2>
-              <p className="text-sm text-gray-500 mb-6">
-                Tema: <span className="font-medium text-gray-700">{assessment.lessonTitle}</span>
-              </p>
+              {/* Glow border effect */}
+              <div className="absolute -inset-0.5 bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-2xl opacity-30 blur-md" />
 
-              <form onSubmit={handleStart} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="firstName">Nombre *</label>
-                  <Input
-                    id="firstName"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Juan"
-                    required
-                    autoFocus
-                  />
+              <div className="relative bg-[#0d1f3c]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-8">
+                <div className="text-center mb-6">
+                  <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={80} height={80} className="mx-auto mb-4 rounded-xl" />
+                  <h2 className="text-3xl font-bold text-white mb-1">Bienvenido</h2>
+                  <p className="text-sm text-cyan-400/80 font-medium">{assessment.lessonTitle}</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="lastName">Apellido *</label>
-                  <Input
-                    id="lastName"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Pérez"
-                    required
-                  />
-                </div>
-                {assessment.collectDni && (
+
+                <form onSubmit={handleStart} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="dni">DNI *</label>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="firstName">Nombre *</label>
                     <Input
-                      id="dni"
-                      value={dni}
-                      onChange={(e) => setDni(e.target.value)}
-                      placeholder="12345678"
-                      maxLength={20}
+                      id="firstName"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="Juan"
                       required
+                      autoFocus
+                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
                     />
                   </div>
-                )}
-                {assessment.collectEmail && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="email">Correo (opcional)</label>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="lastName">Apellido *</label>
                     <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="tu@correo.com"
+                      id="lastName"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Pérez"
+                      required
+                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
                     />
                   </div>
-                )}
-
-                <div className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-md p-3">
-                  Tendrás <strong>{assessment.timeLimitMin} minutos</strong> para completar la evaluación.
-                  Recibirás un puntaje sobre 20 al finalizar.
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full h-11 text-base"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      Iniciando...
-                    </>
-                  ) : (
-                    'Iniciar evaluación'
+                  {assessment.collectDni && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="dni">DNI *</label>
+                      <Input
+                        id="dni"
+                        value={dni}
+                        onChange={(e) => setDni(e.target.value)}
+                        placeholder="12345678"
+                        maxLength={20}
+                        required
+                        className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
+                      />
+                    </div>
                   )}
-                </Button>
-              </form>
+                  {assessment.collectEmail && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="email">Correo (opcional)</label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="tu@correo.com"
+                        className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
+                      />
+                    </div>
+                  )}
+
+                  <div className="text-xs text-slate-400 bg-cyan-500/5 border border-cyan-400/20 rounded-lg p-3">
+                    Tendrás <strong className="text-cyan-300">{assessment.timeLimitMin} minutos</strong> para completar la evaluación.
+                    Recibirás un puntaje sobre <strong className="text-cyan-300">20</strong> al finalizar.
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full h-12 text-base font-semibold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 shadow-lg shadow-cyan-500/30"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Iniciando...
+                      </>
+                    ) : (
+                      'Iniciar evaluación'
+                    )}
+                  </Button>
+                </form>
+              </div>
             </motion.div>
           )}
 
@@ -221,6 +251,9 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                 participantId={participantId}
                 participantName={participantName}
                 lessonTitle={assessment.lessonTitle}
+                lessonObjective={assessment.lessonObjective}
+                keyPoints={assessment.keyPoints}
+                galleryImages={assessment.galleryImages}
                 timeLimitMin={assessment.timeLimitMin}
                 onFinished={handleSessionFinished}
               />
