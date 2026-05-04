@@ -63,7 +63,7 @@ export function SophiaAvatar({ state, size = 240 }: SophiaAvatarProps) {
 
       {/* Avatar image */}
       <motion.div
-        className="relative rounded-full overflow-hidden bg-white shadow-xl"
+        className="relative rounded-full overflow-hidden bg-[#0a1628] shadow-xl"
         style={{ width: size * 0.85, height: size * 0.85 }}
         animate={avatarAnimation}
         transition={{ duration: animationDuration, repeat: Infinity, ease: 'easeInOut' }}
@@ -72,7 +72,7 @@ export function SophiaAvatar({ state, size = 240 }: SophiaAvatarProps) {
           src="/cetemin-logo.jpg"
           alt="CETEMIN"
           fill
-          className="object-contain p-3"
+          className="object-cover scale-110"
           priority
         />
       </motion.div>

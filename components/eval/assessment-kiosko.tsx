@@ -133,7 +133,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
           <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={40} height={40} className="rounded-md" />
           <div className="hidden sm:block h-6 w-px bg-white/10" />
           <div className="flex items-center gap-2">
-            <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={32} height={32} className="rounded-full ring-2 ring-white/10 bg-white object-contain p-0.5" />
+            <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={32} height={32} className="rounded-full ring-2 ring-white/10 object-cover scale-110" />
             <div>
               <h1 className="text-sm font-semibold text-white">Sophia · Evaluación</h1>
               <p className="text-xs text-slate-400">{assessment.title}</p>
