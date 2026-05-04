@@ -69,10 +69,10 @@ export function SophiaAvatar({ state, size = 240 }: SophiaAvatarProps) {
         transition={{ duration: animationDuration, repeat: Infinity, ease: 'easeInOut' }}
       >
         <Image
-          src="/sophia-avatar.png"
-          alt="Sophia"
+          src="/cetemin-logo.jpg"
+          alt="CETEMIN"
           fill
-          className="object-cover"
+          className="object-contain p-3"
           priority
         />
       </motion.div>
