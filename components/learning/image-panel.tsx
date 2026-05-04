@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Images, ZoomIn, ZoomOut, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +25,7 @@ export function ImagePanel({
 }: ImagePanelProps) {
   const [selectedImage, setSelectedImage] = useState<ActivityImage | null>(null)
   const [zoomLevel, setZoomLevel] = useState(1)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.25, 3))
   const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.25, 0.5))
@@ -36,6 +37,17 @@ export function ImagePanel({
   // When the lesson has a Sophia animated video, it takes over the panel
   // and replaces the image gallery — the video is decorative, not lesson content.
   const hasVideo = !!videoUrl
+
+  // Force autoplay: some browsers throttle the autoplay attribute when set
+  // declaratively. Calling .play() after mount with the element already muted
+  // satisfies the autoplay policy reliably.
+  useEffect(() => {
+    if (hasVideo && videoRef.current) {
+      videoRef.current.play().catch(() => {
+        // Ignore — user interaction will start it via the controls.
+      })
+    }
+  }, [hasVideo, videoUrl])
 
   return (
     <>
@@ -59,15 +71,15 @@ export function ImagePanel({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {hasVideo ? (
-            <div className="aspect-video rounded-lg overflow-hidden bg-black">
+            <div className="rounded-lg overflow-hidden bg-black flex items-center justify-center">
               <video
+                ref={videoRef}
                 src={videoUrl!}
-                className="w-full h-full object-cover"
+                className="w-full h-auto block max-h-[70vh] object-contain"
                 autoPlay
                 loop
                 muted
                 playsInline
-                controls
               />
             </div>
           ) : images.length > 0 ? (

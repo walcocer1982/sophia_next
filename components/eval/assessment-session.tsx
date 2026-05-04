@@ -57,6 +57,15 @@ export function AssessmentSession({
   const finishedRef = useRef(false)
   const welcomeAudioPlayedRef = useRef(false)
   const chatInputRef = useRef<ChatInputRef>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  // Force the Sophia animation to autoplay reliably even if the browser
+  // throttles the declarative autoplay attribute.
+  useEffect(() => {
+    if (videoUrl && videoRef.current) {
+      videoRef.current.play().catch(() => {})
+    }
+  }, [videoUrl])
 
   const lastAssistantMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -449,15 +458,15 @@ export function AssessmentSession({
             <h3 className="text-xs font-semibold text-white">Sophia</h3>
           </div>
           {videoUrl ? (
-            <div className="rounded-lg overflow-hidden bg-black aspect-video">
+            <div className="rounded-lg overflow-hidden bg-black flex items-center justify-center min-h-0">
               <video
+                ref={videoRef}
                 src={videoUrl}
-                className="w-full h-full object-cover"
+                className="w-full h-auto block max-h-full object-contain"
                 autoPlay
                 loop
                 muted
                 playsInline
-                controls
               />
             </div>
           ) : galleryImages.length === 0 ? (
