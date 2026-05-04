@@ -1,4 +1,4 @@
-import { auth } from '@/auth'
+import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 
@@ -10,8 +10,8 @@ export const runtime = 'nodejs'
  * Called by the client after each completed user/assistant turn from the Realtime API.
  */
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const session = await getAuthOrGuest()
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
   // Verify session belongs to user
   const lessonSession = await prisma.lessonSession.findFirst({
-    where: { id: sessionId, userId: session.user.id },
+    where: { id: sessionId, userId: session.userId },
     select: { id: true },
   })
 

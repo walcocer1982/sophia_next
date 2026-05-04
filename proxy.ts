@@ -17,6 +17,7 @@ import type { NextRequest } from 'next/server'
 const PUBLIC_PATHS = [
   '/',        // Landing page
   '/login',   // Página de login
+  '/eval',    // Modo evaluación anónima (kiosko)
 ]
 
 // Rutas que requieren rol ADMIN o SUPERADMIN

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PublishToggle } from '@/components/planner/publish-toggle'
 import { TestLessonButton } from '@/components/planner/test-lesson-button'
@@ -300,6 +300,12 @@ export default async function CourseOverviewPage({
                             title: a.teaching?.agent_instruction || '',
                           }))}
                         />
+                        <Link href={`/planner/${courseId}/${lesson.id}/assessments`}>
+                          <Button variant="outline" size="sm" className="gap-1.5">
+                            <Users className="h-3.5 w-3.5" />
+                            Evaluaciones
+                          </Button>
+                        </Link>
                         <PublishToggle
                           lessonId={lesson.id}
                           initialPublished={lesson.isPublished}

@@ -1,4 +1,4 @@
-import { auth } from '@/auth'
+import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
@@ -19,17 +19,17 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const session = await getAuthOrGuest()
+  if (!session) {
     return new Response('Unauthorized', { status: 401 })
   }
 
   // Rate limiting: 10 mensajes por minuto
-  const rateLimit = checkRateLimit(session.user.id, 10, 60)
+  const rateLimit = checkRateLimit(session.userId, 10, 60)
   if (!rateLimit.allowed) {
     const resetIn = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
     logger.warn('rate_limit.exceeded', {
-      userId: session.user.id,
+      userId: session.userId,
       resetIn,
     })
     return new Response(
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   const lessonSession = await prisma.lessonSession.findFirst({
     where: {
       id: sessionId,
-      userId: session.user.id,
+      userId: session.userId,
       endedAt: null,
     },
     include: {
@@ -244,7 +244,7 @@ export async function POST(request: Request) {
   if (!moderation.is_safe) {
     logger.warn('chat.stream.moderation_blocked', {
       sessionId,
-      userId: session.user.id,
+      userId: session.userId,
       severity: moderation.severity,
       violations: moderation.violations,
     })
@@ -750,7 +750,7 @@ export async function POST(request: Request) {
         logError(
           error as Error,
           'chat.stream.error',
-          { sessionId, userId: session.user?.id }
+          { sessionId, userId: session.userId }
         )
         const errorData = JSON.stringify({
           type: 'error',

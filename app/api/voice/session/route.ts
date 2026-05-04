@@ -1,4 +1,4 @@
-import { auth } from '@/auth'
+import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { buildVoiceInstructions } from '@/lib/voice-prompt'
@@ -13,8 +13,8 @@ export const runtime = 'nodejs'
  * Client uses this token to connect via WebRTC directly to OpenAI.
  */
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const session = await getAuthOrGuest()
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
   // Get lesson context for the voice instructions
   const lessonSession = await prisma.lessonSession.findFirst({
-    where: { id: sessionId, userId: session.user.id },
+    where: { id: sessionId, userId: session.userId },
     include: {
       lesson: true,
       activities: { where: { status: 'IN_PROGRESS' }, take: 1 },

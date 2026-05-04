@@ -43,6 +43,7 @@ model User {
   courses            Course[]
   sectionInstructors SectionInstructor[]
   enrollments        Enrollment[]
+  assessmentsCreated Assessment[]
 
   @@index([email])
   @@index([googleId])
@@ -133,6 +134,7 @@ model Lesson {
   course            Course                  @relation(fields: [courseId], references: [id], onDelete: Cascade)
   sessions          LessonSession[]
   sectionSchedules  SectionLessonSchedule[]
+  assessments       Assessment[]
 
   @@index([slug])
   @@index([courseId])
@@ -166,6 +168,7 @@ model LessonSession {
   lesson     Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   messages   Message[]
   activities ActivityProgress[]
+  assessmentParticipant AssessmentParticipant?
 
   @@unique([userId, lessonId, sessionAttempt])
   @@index([userId])
@@ -290,4 +293,50 @@ model SectionLessonSchedule {
   @@unique([sectionId, lessonId])
   @@index([sectionId])
   @@index([lessonId])
+}
+
+// ============================================
+// 5. EVALUACIONES ANÓNIMAS (MODO EVENTO/KIOSKO)
+// ============================================
+
+model Assessment {
+  id              String    @id @default(cuid())
+  code            String    @unique  // Código corto único: "AB12CD"
+  title           String
+  lessonId        String
+  createdById     String              // Admin que la creó (Paola)
+  isActive        Boolean   @default(true)
+  timeLimitMin    Int       @default(10)  // Minutos por participante
+  collectEmail    Boolean   @default(false) // Solicitar email opcional
+  collectDni      Boolean   @default(true)  // Solicitar DNI
+  createdAt       DateTime  @default(now())
+  closedAt        DateTime?
+  expiresAt       DateTime? // Cuándo se borran los datos temporales
+
+  lesson       Lesson                  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  createdBy    User                    @relation(fields: [createdById], references: [id])
+  participants AssessmentParticipant[]
+
+  @@index([code])
+  @@index([createdById])
+}
+
+model AssessmentParticipant {
+  id              String    @id @default(cuid())
+  assessmentId    String
+  firstName       String
+  lastName        String
+  dni             String?
+  email           String?
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  grade           Float?    // 0-100, después se convierte a 0-20
+  gradeOver20     Float?    // Nota final sobre 20
+  passed          Boolean   @default(false)
+  sessionId       String?   @unique // Link to the LessonSession of this participant
+
+  assessment Assessment    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  session    LessonSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([assessmentId])
 }

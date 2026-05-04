@@ -1,4 +1,4 @@
-import { auth } from '@/auth'
+import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { logger } from '@/lib/logger'
@@ -14,8 +14,8 @@ export const runtime = 'nodejs'
  * Genera mensaje de bienvenida con streaming para una sesión de lección
  */
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const session = await getAuthOrGuest()
+  if (!session) {
     return new Response('Unauthorized', { status: 401 })
   }
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const lessonSession = await prisma.lessonSession.findFirst({
       where: {
         id: sessionId,
-        userId: session.user.id,
+        userId: session.userId,
       },
       include: {
         lesson: {
@@ -169,7 +169,7 @@ Genera el mensaje ahora.`
           if (existingWelcome) {
             logger.warn('chat.welcome.already_exists', {
               sessionId,
-              userId: session.user?.id,
+              userId: session.userId,
             })
             controller.close()
             return
@@ -188,7 +188,7 @@ Genera el mensaje ahora.`
 
           logger.info('chat.welcome.generated', {
             sessionId,
-            userId: session.user?.id,
+            userId: session.userId,
             inputTokens,
             outputTokens,
           })
@@ -197,7 +197,7 @@ Genera el mensaje ahora.`
         } catch (error) {
           logger.error('chat.welcome.error', {
             sessionId,
-            userId: session.user?.id,
+            userId: session.userId,
             error: error instanceof Error ? error.message : 'Unknown error',
           })
           controller.error(error)
@@ -214,7 +214,7 @@ Genera el mensaje ahora.`
     })
   } catch (error) {
     logger.error('chat.welcome.request.error', {
-      userId: session?.user?.id,
+      userId: session?.userId,
       error: error instanceof Error ? error.message : 'Unknown error',
     })
     return new Response('Internal server error', { status: 500 })
