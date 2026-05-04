@@ -58,7 +58,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Normalize to lowercase: Google sends lowercase but the DB may have
         // a manually-created admin with mixed case. Without this, upsert misses
         // the existing record and creates a duplicate STUDENT account.
-        const normalizedEmail = user.email!.toLowerCase()
+        if (!user.email) {
+          console.error('[Auth] Google sign-in without email — aborting')
+          return token
+        }
+        const normalizedEmail = user.email.toLowerCase()
         const dbUser = await prisma.user.upsert({
           where: { email: normalizedEmail },
           update: {
