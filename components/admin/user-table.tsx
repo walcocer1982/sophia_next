@@ -18,8 +18,11 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { Search } from 'lucide-react'
+import { Search, EyeOff, Eye } from 'lucide-react'
+
+const isGuestEmail = (email: string) => email.endsWith('@assessment.local')
 
 type UserRow = {
   id: string
@@ -55,13 +58,20 @@ export function UserTable({
   const [users, setUsers] = useState(initialUsers)
   const [search, setSearch] = useState('')
   const [updating, setUpdating] = useState<string | null>(null)
+  const [showGuests, setShowGuests] = useState(false)
 
-  const filtered = users.filter(
-    (u) =>
-      u.name?.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.careerName?.toLowerCase().includes(search.toLowerCase())
-  )
+  const guestCount = users.filter((u) => isGuestEmail(u.email)).length
+
+  const filtered = users.filter((u) => {
+    if (!showGuests && isGuestEmail(u.email)) return false
+    const q = search.toLowerCase()
+    return (
+      u.name?.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q) ||
+      u.careerName?.toLowerCase().includes(q) ||
+      q === ''
+    )
+  })
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     setUpdating(userId)
@@ -116,14 +126,28 @@ export function UserTable({
 
   return (
     <div className="space-y-4">
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <Input
-          placeholder="Buscar por nombre, email o carrera..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            placeholder="Buscar por nombre, email o carrera..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {guestCount > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowGuests((v) => !v)}
+            className="gap-1.5"
+          >
+            {showGuests ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {showGuests ? 'Ocultar' : 'Mostrar'} participantes anónimos ({guestCount})
+          </Button>
+        )}
       </div>
 
       <div className="rounded-lg border">
@@ -150,12 +174,16 @@ export function UserTable({
               filtered.map((user) => {
                 const config = ROLE_CONFIG[user.role] || ROLE_CONFIG.STUDENT
                 const isCurrentUser = user.id === currentUserId
+                const isGuest = isGuestEmail(user.email)
                 return (
-                  <TableRow key={user.id}>
+                  <TableRow key={user.id} className={isGuest ? 'bg-gray-50/60' : ''}>
                     <TableCell className="font-medium">
                       {user.name || 'Sin nombre'}
                       {isCurrentUser && (
                         <span className="ml-2 text-xs text-gray-400">(tú)</span>
+                      )}
+                      {isGuest && (
+                        <span className="ml-2 text-[10px] text-gray-400 uppercase tracking-wider">anónimo</span>
                       )}
                     </TableCell>
                     <TableCell className="text-gray-600">{user.email}</TableCell>
@@ -178,7 +206,7 @@ export function UserTable({
                       <Select
                         value={user.role}
                         onValueChange={(val) => handleRoleChange(user.id, val)}
-                        disabled={isCurrentUser || updating === user.id}
+                        disabled={isCurrentUser || isGuest || updating === user.id}
                       >
                         <SelectTrigger className="h-8 text-xs">
                           <SelectValue />
@@ -195,7 +223,7 @@ export function UserTable({
                       <Select
                         value={user.careerId || 'none'}
                         onValueChange={(val) => handleCareerChange(user.id, val)}
-                        disabled={updating === user.id}
+                        disabled={isGuest || updating === user.id}
                       >
                         <SelectTrigger className="h-8 text-xs">
                           <SelectValue placeholder="Sin carrera" />

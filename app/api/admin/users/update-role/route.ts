@@ -36,6 +36,22 @@ export async function POST(request: Request) {
     )
   }
 
+  // Block role changes on guest/anonymous kiosko users — they exist only as
+  // shells for AssessmentParticipant rows and must stay STUDENT.
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  })
+  if (target?.email?.endsWith('@assessment.local')) {
+    return NextResponse.json(
+      {
+        error:
+          'No se puede cambiar el rol de un participante anónimo de evaluación.',
+      },
+      { status: 400 }
+    )
+  }
+
   const user = await prisma.user.update({
     where: { id: userId },
     data: { role: newRole as typeof VALID_ROLES[number] },
