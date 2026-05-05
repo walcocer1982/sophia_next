@@ -138,13 +138,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return token
       }
 
-      // On subsequent requests: refresh careerId and hasEnrollment from DB if missing
-      if (token.sub && (!token.careerId || !token.hasEnrollment)) {
+      // On subsequent requests: refresh role, careerId and hasEnrollment from DB.
+      // Refreshing role is critical — a user upgraded from STUDENT to ADMIN in DB
+      // would otherwise keep STUDENT in their JWT until logout, silently hiding
+      // admin-only UI (planner action buttons, dashboard, etc.).
+      if (token.sub) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
-          select: { careerId: true },
+          select: { role: true, careerId: true },
         })
-        if (dbUser?.careerId) {
+        if (dbUser) {
+          token.role = dbUser.role
           token.careerId = dbUser.careerId
         }
         if (!token.hasEnrollment) {
