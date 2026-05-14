@@ -24,6 +24,7 @@ interface TutorModeProps {
   isLoading: boolean
   isGeneratingWelcome: boolean
   autoStartVoice?: boolean
+  voiceEnabled?: boolean
   headerExtra?: React.ReactNode // Extra content for the header (e.g., "Terminar" button)
 }
 
@@ -37,6 +38,7 @@ export function TutorMode({
   isLoading,
   isGeneratingWelcome,
   autoStartVoice = false,
+  voiceEnabled = true,
   headerExtra,
 }: TutorModeProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -150,31 +152,33 @@ export function TutorMode({
       {/* Controls */}
       <div className="shrink-0 border-t bg-white p-3">
         <div className="flex items-center justify-center gap-3 flex-wrap">
-          <VoiceButton
-            sessionId={sessionId}
-            autoStart={autoStartVoice}
-            onMessage={onAddMessage}
-            onStreamStart={(id) => {
-              setAvatarState('speaking')
-              onAddMessage({
-                id,
-                sessionId,
-                role: 'assistant',
-                content: '',
-                createdAt: new Date(),
-                status: 'streaming',
-                isOptimistic: true,
-              })
-            }}
-            onStreamDelta={(id, delta) => {
-              onUpdateMessage(id, (m) => ({ ...m, content: m.content + delta }))
-            }}
-            onStreamDone={(id) => {
-              setAvatarState('idle')
-              onUpdateMessage(id, (m) => ({ ...m, status: 'completed', isOptimistic: false }))
-            }}
-            disabled={isLoading || isGeneratingWelcome}
-          />
+          {voiceEnabled && (
+            <VoiceButton
+              sessionId={sessionId}
+              autoStart={autoStartVoice}
+              onMessage={onAddMessage}
+              onStreamStart={(id) => {
+                setAvatarState('speaking')
+                onAddMessage({
+                  id,
+                  sessionId,
+                  role: 'assistant',
+                  content: '',
+                  createdAt: new Date(),
+                  status: 'streaming',
+                  isOptimistic: true,
+                })
+              }}
+              onStreamDelta={(id, delta) => {
+                onUpdateMessage(id, (m) => ({ ...m, content: m.content + delta }))
+              }}
+              onStreamDone={(id) => {
+                setAvatarState('idle')
+                onUpdateMessage(id, (m) => ({ ...m, status: 'completed', isOptimistic: false }))
+              }}
+              disabled={isLoading || isGeneratingWelcome}
+            />
+          )}
 
           <Button
             variant="outline"

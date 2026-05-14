@@ -17,12 +17,14 @@ interface ChatInterfaceProps {
   sessionId: string
   initialMessages: ChatMessage[]
   lessonTitle: string
+  voiceEnabled?: boolean
 }
 
 export function ChatInterface({
   sessionId,
   initialMessages,
   lessonTitle,
+  voiceEnabled = true,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<OptimisticMessage[]>(
     initialMessages.map((msg) => ({
@@ -310,6 +312,7 @@ export function ChatInterface({
           onSendText={handleSendMessage}
           isLoading={isLoading}
           isGeneratingWelcome={isGeneratingWelcome}
+          voiceEnabled={voiceEnabled}
         />
 
         {isDevelopment && (
@@ -362,34 +365,36 @@ export function ChatInterface({
 
       {/* Input - altura fija, siempre visible */}
       <div className="shrink-0 border-t border-gray-200">
-        <div className="flex items-end gap-2 px-3 pt-2">
-          <VoiceButton
-            sessionId={sessionId}
-            onMessage={(msg) => setMessages(prev => [...prev, msg])}
-            onStreamStart={(id) => {
-              setMessages(prev => [...prev, {
-                id,
-                sessionId,
-                role: 'assistant',
-                content: '',
-                createdAt: new Date(),
-                status: 'streaming',
-                isOptimistic: true,
-              }])
-            }}
-            onStreamDelta={(id, delta) => {
-              setMessages(prev => prev.map(m =>
-                m.id === id ? { ...m, content: m.content + delta } : m
-              ))
-            }}
-            onStreamDone={(id) => {
-              setMessages(prev => prev.map(m =>
-                m.id === id ? { ...m, status: 'completed', isOptimistic: false } : m
-              ))
-            }}
-            disabled={isLoading || isGeneratingWelcome}
-          />
-        </div>
+        {voiceEnabled && (
+          <div className="flex items-end gap-2 px-3 pt-2">
+            <VoiceButton
+              sessionId={sessionId}
+              onMessage={(msg) => setMessages(prev => [...prev, msg])}
+              onStreamStart={(id) => {
+                setMessages(prev => [...prev, {
+                  id,
+                  sessionId,
+                  role: 'assistant',
+                  content: '',
+                  createdAt: new Date(),
+                  status: 'streaming',
+                  isOptimistic: true,
+                }])
+              }}
+              onStreamDelta={(id, delta) => {
+                setMessages(prev => prev.map(m =>
+                  m.id === id ? { ...m, content: m.content + delta } : m
+                ))
+              }}
+              onStreamDone={(id) => {
+                setMessages(prev => prev.map(m =>
+                  m.id === id ? { ...m, status: 'completed', isOptimistic: false } : m
+                ))
+              }}
+              disabled={isLoading || isGeneratingWelcome}
+            />
+          </div>
+        )}
         <ChatInput
           ref={chatInputRef}
           onSend={handleSendMessage}

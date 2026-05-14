@@ -51,6 +51,7 @@ export default async function ChatPage({
             select: {
               id: true,
               instructor: true,
+              voiceEnabled: true,
             },
           },
         },
@@ -134,6 +135,7 @@ export default async function ChatPage({
         sessionId={lessonSession.id}
         initialMessages={transformedMessages}
         lessonTitle={lessonSession.lesson.title}
+        voiceEnabled={lessonSession.lesson.course?.voiceEnabled ?? true}
       />
     </LearningLayout>
   )

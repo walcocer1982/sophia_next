@@ -23,6 +23,7 @@ interface AssessmentInfo {
   keyPoints: string[]
   galleryImages: { url: string; description: string }[]
   videoUrl?: string | null
+  voiceEnabled?: boolean
 }
 
 type Stage = 'register' | 'session' | 'finished'
@@ -256,6 +257,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                 keyPoints={assessment.keyPoints}
                 galleryImages={assessment.galleryImages}
                 videoUrl={assessment.videoUrl}
+                voiceEnabled={assessment.voiceEnabled ?? true}
                 timeLimitMin={assessment.timeLimitMin}
                 onFinished={handleSessionFinished}
               />

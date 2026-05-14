@@ -29,6 +29,7 @@ export default async function EvalPage({
           keyPoints: true,
           contentJson: true,
           videoUrl: true,
+          course: { select: { voiceEnabled: true } },
         },
       },
     },
@@ -65,6 +66,7 @@ export default async function EvalPage({
         keyPoints: assessment.lesson.keyPoints,
         galleryImages,
         videoUrl: assessment.lesson.videoUrl,
+        voiceEnabled: assessment.lesson.course?.voiceEnabled ?? true,
       }}
     />
   )

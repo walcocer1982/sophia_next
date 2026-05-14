@@ -28,6 +28,7 @@ interface AssessmentSessionProps {
   keyPoints: string[]
   galleryImages: { url: string; description: string }[]
   videoUrl?: string | null
+  voiceEnabled?: boolean
   timeLimitMin: number
   onFinished: (data: FinishedData) => void
 }
@@ -43,6 +44,7 @@ export function AssessmentSession({
   keyPoints,
   galleryImages,
   videoUrl,
+  voiceEnabled = true,
   timeLimitMin,
   onFinished,
 }: AssessmentSessionProps) {
@@ -50,7 +52,7 @@ export function AssessmentSession({
   const [messages, setMessages] = useState<OptimisticMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [welcomeLoading, setWelcomeLoading] = useState(true)
-  const [showTextInput, setShowTextInput] = useState(false)
+  const [showTextInput, setShowTextInput] = useState(!voiceEnabled)
   const [avatarState, setAvatarState] = useState<AvatarState>('idle')
   const [lightboxImage, setLightboxImage] = useState<{ url: string; description: string } | null>(null)
   const welcomeRequested = useRef(false)
@@ -74,8 +76,9 @@ export function AssessmentSession({
     return null
   }, [messages])
 
-  // Auto-play TTS callback
+  // Auto-play TTS callback (only when voice is enabled for this course)
   const playWelcomeAudio = useCallback(async (text: string) => {
+    if (!voiceEnabled) return
     if (welcomeAudioPlayedRef.current) return
     welcomeAudioPlayedRef.current = true
     try {
@@ -93,7 +96,7 @@ export function AssessmentSession({
     } catch (e) {
       console.warn('TTS welcome failed:', e)
     }
-  }, [])
+  }, [voiceEnabled])
 
   // Generate welcome
   useEffect(() => {
@@ -396,26 +399,28 @@ export function AssessmentSession({
 
           {/* Controls */}
           <div className="shrink-0 mt-3 pt-3 border-t border-white/10 flex items-center justify-center gap-2">
-            <VoiceButton
-              sessionId={sessionId}
-              autoStart
-              disabled={isLoading || welcomeLoading}
-              onMessage={(m) => setMessages(prev => [...prev, m])}
-              onStreamStart={(id) => {
-                setAvatarState('speaking')
-                setMessages(prev => [...prev, {
-                  id, sessionId, role: 'assistant', content: '',
-                  createdAt: new Date(), status: 'streaming', isOptimistic: true,
-                }])
-              }}
-              onStreamDelta={(id, delta) => {
-                setMessages(prev => prev.map(m => m.id === id ? { ...m, content: m.content + delta } : m))
-              }}
-              onStreamDone={(id) => {
-                setAvatarState('idle')
-                setMessages(prev => prev.map(m => m.id === id ? { ...m, status: 'completed', isOptimistic: false } : m))
-              }}
-            />
+            {voiceEnabled && (
+              <VoiceButton
+                sessionId={sessionId}
+                autoStart
+                disabled={isLoading || welcomeLoading}
+                onMessage={(m) => setMessages(prev => [...prev, m])}
+                onStreamStart={(id) => {
+                  setAvatarState('speaking')
+                  setMessages(prev => [...prev, {
+                    id, sessionId, role: 'assistant', content: '',
+                    createdAt: new Date(), status: 'streaming', isOptimistic: true,
+                  }])
+                }}
+                onStreamDelta={(id, delta) => {
+                  setMessages(prev => prev.map(m => m.id === id ? { ...m, content: m.content + delta } : m))
+                }}
+                onStreamDone={(id) => {
+                  setAvatarState('idle')
+                  setMessages(prev => prev.map(m => m.id === id ? { ...m, status: 'completed', isOptimistic: false } : m))
+                }}
+              />
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -423,7 +428,7 @@ export function AssessmentSession({
               className="gap-1.5 bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white"
             >
               <Type className="h-4 w-4" />
-              <span className="hidden sm:inline">{showTextInput ? 'Ocultar' : 'Escribir'}</span>
+              <span className="hidden sm:inline">{voiceEnabled ? (showTextInput ? 'Ocultar' : 'Escribir') : 'Escribir'}</span>
             </Button>
           </div>
 

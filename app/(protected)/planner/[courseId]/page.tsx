@@ -9,6 +9,7 @@ import { PublishToggle } from '@/components/planner/publish-toggle'
 import { TestLessonButton } from '@/components/planner/test-lesson-button'
 import { DeleteCourseButton } from '@/components/planner/delete-course-button'
 import { CourseCareerSelector } from '@/components/planner/course-career-selector'
+import { CourseVoiceToggle } from '@/components/planner/course-voice-toggle'
 
 type CourseWithLessons = {
   id: string
@@ -16,6 +17,7 @@ type CourseWithLessons = {
   capacidad: string | null
   instructor: string
   isPublished: boolean
+  voiceEnabled: boolean
   lessons: Array<{
     id: string
     title: string
@@ -49,6 +51,7 @@ export default async function CourseOverviewPage({
       capacidad: true,
       instructor: true,
       isPublished: true,
+      voiceEnabled: true,
       userId: true,
       careerId: true,
       lessons: {
@@ -153,6 +156,12 @@ export default async function CourseOverviewPage({
               <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-600">
                 Borrador
               </span>
+            )}
+            {!isSectionInstructor && (
+              <CourseVoiceToggle
+                courseId={course.id}
+                initialVoiceEnabled={course.voiceEnabled}
+              />
             )}
             <DeleteCourseButton courseId={course.id} courseTitle={course.title} />
           </div>
