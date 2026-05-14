@@ -81,6 +81,7 @@ export interface Verification {
   success_criteria: SuccessCriteria  // Criterios estructurados (reemplaza criteria[])
   max_attempts?: number         // Máximo intentos antes de ofrecer avanzar (default: 3)
   open_ended?: boolean          // Pregunta abierta: evalúa calidad de razonamiento, no keywords específicos
+  is_evaluative?: boolean       // Si false: solo participación, no cuenta para nota. Default: true
 }
 
 /**

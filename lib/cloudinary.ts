@@ -32,4 +32,30 @@ export async function uploadImage(
   })
 }
 
+/**
+ * Upload a video file to Cloudinary using chunked upload (upload_large).
+ * Required for files >50 MB; upload_stream times out on large videos.
+ */
+export async function uploadVideoFromPath(
+  filePath: string,
+  folder: string
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_large(
+      filePath,
+      {
+        folder,
+        resource_type: 'video',
+        chunk_size: 6_000_000,
+        timeout: 600_000,
+      },
+      (error, result) => {
+        if (error) return reject(error)
+        if (!result) return reject(new Error('No result from Cloudinary'))
+        resolve(result.secure_url)
+      }
+    )
+  })
+}
+
 export { cloudinary }

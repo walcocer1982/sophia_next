@@ -55,15 +55,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user, account }) {
       if (user && account?.provider === 'google') {
+        // Normalize to lowercase: Google sends lowercase but the DB may have
+        // a manually-created admin with mixed case. Without this, upsert misses
+        // the existing record and creates a duplicate STUDENT account.
+        if (!user.email) {
+          console.error('[Auth] Google sign-in without email — aborting')
+          return token
+        }
+        const normalizedEmail = user.email.toLowerCase()
         const dbUser = await prisma.user.upsert({
-          where: { email: user.email! },
+          where: { email: normalizedEmail },
           update: {
             name: user.name,
             image: user.image,
             googleId: account.providerAccountId,
           },
           create: {
-            email: user.email!,
+            email: normalizedEmail,
             name: user.name,
             image: user.image,
             googleId: account.providerAccountId,
@@ -130,13 +138,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return token
       }
 
-      // On subsequent requests: refresh careerId and hasEnrollment from DB if missing
-      if (token.sub && (!token.careerId || !token.hasEnrollment)) {
+      // On subsequent requests: refresh role, careerId and hasEnrollment from DB.
+      // Refreshing role is critical — a user upgraded from STUDENT to ADMIN in DB
+      // would otherwise keep STUDENT in their JWT until logout, silently hiding
+      // admin-only UI (planner action buttons, dashboard, etc.).
+      if (token.sub) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
-          select: { careerId: true },
+          select: { role: true, careerId: true },
         })
-        if (dbUser?.careerId) {
+        if (dbUser) {
+          token.role = dbUser.role
           token.careerId = dbUser.careerId
         }
         if (!token.hasEnrollment) {

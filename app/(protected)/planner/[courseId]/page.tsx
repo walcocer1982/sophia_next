@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PublishToggle } from '@/components/planner/publish-toggle'
 import { TestLessonButton } from '@/components/planner/test-lesson-button'
@@ -23,6 +23,7 @@ type CourseWithLessons = {
     order: number
     keyPoints: string[]
     contentJson: unknown
+    videoUrl: string | null
     isPublished: boolean
     availableAt: Date | null
     closesAfterHours: number
@@ -59,6 +60,7 @@ export default async function CourseOverviewPage({
           order: true,
           keyPoints: true,
           contentJson: true,
+          videoUrl: true,
           isPublished: true,
           availableAt: true,
           closesAfterHours: true,
@@ -190,9 +192,11 @@ export default async function CourseOverviewPage({
           }> } | null
           const isDesigned =
             json?.activities && json.activities.length > 0
-          const hasResources = json?.activities?.some(
-            (a) => (a.teaching?.images && a.teaching.images.length > 0) || a.teaching?.image?.url
-          ) ?? false
+          const hasResources =
+            !!lesson.videoUrl ||
+            (json?.activities?.some(
+              (a) => (a.teaching?.images && a.teaching.images.length > 0) || a.teaching?.image?.url
+            ) ?? false)
           const allVerified = isDesigned && json!.activities!.every((a) => a.verified === true)
           const isTested = testedLessonIds.has(lesson.id)
 
@@ -300,6 +304,12 @@ export default async function CourseOverviewPage({
                             title: a.teaching?.agent_instruction || '',
                           }))}
                         />
+                        <Link href={`/planner/${courseId}/${lesson.id}/assessments`}>
+                          <Button variant="outline" size="sm" className="gap-1.5">
+                            <Users className="h-3.5 w-3.5" />
+                            Evaluaciones
+                          </Button>
+                        </Link>
                         <PublishToggle
                           lessonId={lesson.id}
                           initialPublished={lesson.isPublished}

@@ -15,9 +15,10 @@ function slugify(text: string): string {
     .substring(0, 80)
 }
 
-const DEFAULT_INSTRUCTOR = `Eres un instructor experto y paciente.
+const DEFAULT_INSTRUCTOR = `Eres Sophia, una instructora experta y paciente (mujer).
 Usas analogías simples y ejemplos del mundo real.
-Hablas de manera conversacional, como un mentor amigable.
+Hablas de manera conversacional, como una mentora amigable.
+Siempre te refieres a ti misma en género femenino.
 Nunca usas emojis ni exclamaciones exageradas.`
 
 export async function POST(request: Request) {

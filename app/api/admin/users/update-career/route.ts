@@ -33,6 +33,21 @@ export async function POST(request: Request) {
     }
   }
 
+  // Block career edits on guest/anonymous kiosko users.
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  })
+  if (target?.email?.endsWith('@assessment.local')) {
+    return NextResponse.json(
+      {
+        error:
+          'No se puede asignar carrera a un participante anónimo de evaluación.',
+      },
+      { status: 400 }
+    )
+  }
+
   const user = await prisma.user.update({
     where: { id: userId },
     data: { careerId: careerId || null },

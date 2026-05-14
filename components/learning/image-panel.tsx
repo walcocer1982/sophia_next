@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Images, ZoomIn, ZoomOut, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -12,17 +12,20 @@ export interface ActivityImage {
 
 interface ImagePanelProps {
   images: ActivityImage[]
+  videoUrl?: string | null
   isCollapsed: boolean
   onToggle: () => void
 }
 
 export function ImagePanel({
   images,
+  videoUrl,
   isCollapsed,
   onToggle,
 }: ImagePanelProps) {
   const [selectedImage, setSelectedImage] = useState<ActivityImage | null>(null)
   const [zoomLevel, setZoomLevel] = useState(1)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.25, 3))
   const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.25, 0.5))
@@ -30,6 +33,21 @@ export function ImagePanel({
     setSelectedImage(null)
     setZoomLevel(1)
   }
+
+  // When the lesson has a Sophia animated video, it takes over the panel
+  // and replaces the image gallery — the video is decorative, not lesson content.
+  const hasVideo = !!videoUrl
+
+  // Force autoplay: some browsers throttle the autoplay attribute when set
+  // declaratively. Calling .play() after mount with the element already muted
+  // satisfies the autoplay policy reliably.
+  useEffect(() => {
+    if (hasVideo && videoRef.current) {
+      videoRef.current.play().catch(() => {
+        // Ignore — user interaction will start it via the controls.
+      })
+    }
+  }, [hasVideo, videoUrl])
 
   return (
     <>
@@ -47,12 +65,24 @@ export function ImagePanel({
           >
             <ChevronRight className="h-5 w-5" />
           </button>
-          <h2 className="text-sm font-semibold text-gray-900">Recursos Visuales</h2>
+          <h2 className="text-sm font-semibold text-gray-900">{hasVideo ? 'Sophia' : 'Recursos Visuales'}</h2>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          {images.length > 0 ? (
+          {hasVideo ? (
+            <div className="rounded-lg overflow-hidden bg-black flex items-center justify-center">
+              <video
+                ref={videoRef}
+                src={videoUrl!}
+                className="w-full h-auto block max-h-[70vh] object-contain"
+                autoPlay
+                loop
+                muted
+                playsInline
+              />
+            </div>
+          ) : images.length > 0 ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-teal-600">
                 <Images className="h-4 w-4 text-teal-600" />
@@ -95,7 +125,7 @@ export function ImagePanel({
         </div>
 
         {/* Footer hint */}
-        {images.length > 0 && (
+        {!hasVideo && images.length > 0 && (
           <div className="p-3 border-t border-gray-100">
             <p className="text-xs text-gray-400 text-center">
               Click en una imagen para ampliar

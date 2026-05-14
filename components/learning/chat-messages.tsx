@@ -13,11 +13,25 @@ interface ChatMessagesProps {
 
 export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const messageCountRef = useRef(messages.length)
+  const messageCountRef = useRef(0)
+  const hasInitiallyScrolledRef = useRef(false)
 
-  // Auto-scroll only when a new message is added (not on content updates during streaming)
+  // Initial scroll to bottom on mount (when loading existing chat history)
   useEffect(() => {
-    if (messages.length !== messageCountRef.current) {
+    if (!hasInitiallyScrolledRef.current && messages.length > 0) {
+      hasInitiallyScrolledRef.current = true
+      messageCountRef.current = messages.length
+      // Use 'instant' for initial load to avoid jarring smooth scroll
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+    }
+  }, [messages.length])
+
+  // Auto-scroll when a new message is added (not on content updates during streaming)
+  useEffect(() => {
+    if (
+      hasInitiallyScrolledRef.current &&
+      messages.length !== messageCountRef.current
+    ) {
       messageCountRef.current = messages.length
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }

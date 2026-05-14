@@ -1,4 +1,4 @@
-import { auth } from '@/auth'
+import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
@@ -19,17 +19,17 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const session = await getAuthOrGuest()
+  if (!session) {
     return new Response('Unauthorized', { status: 401 })
   }
 
   // Rate limiting: 10 mensajes por minuto
-  const rateLimit = checkRateLimit(session.user.id, 10, 60)
+  const rateLimit = checkRateLimit(session.userId, 10, 60)
   if (!rateLimit.allowed) {
     const resetIn = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
     logger.warn('rate_limit.exceeded', {
-      userId: session.user.id,
+      userId: session.userId,
       resetIn,
     })
     return new Response(
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   const lessonSession = await prisma.lessonSession.findFirst({
     where: {
       id: sessionId,
-      userId: session.user.id,
+      userId: session.userId,
       endedAt: null,
     },
     include: {
@@ -244,7 +244,7 @@ export async function POST(request: Request) {
   if (!moderation.is_safe) {
     logger.warn('chat.stream.moderation_blocked', {
       sessionId,
-      userId: session.user.id,
+      userId: session.userId,
       severity: moderation.severity,
       violations: moderation.violations,
     })
@@ -531,37 +531,54 @@ export async function POST(request: Request) {
                 status: 'COMPLETED',
               },
               select: {
+                activityId: true,
                 attempts: true,
                 tangentCount: true,
                 evidenceData: true,
               },
             })
 
+            // Identify which activities are evaluative (counts for grade)
+            // Activities with verification.is_evaluative === false are skipped
+            const activityEvaluativeMap = new Map<string, boolean>()
+            for (const a of contentJson.activities) {
+              activityEvaluativeMap.set(a.id, a.verification?.is_evaluative !== false)
+            }
+
             // Scoring: comprensión (70%) + eficiencia (30%)
-            // Comprensión = nivel demostrado al final de la actividad
-            // Eficiencia = penalización gradual por intentos y tangentes
             const comprehensionScores: Record<string, number> = {
               memorized: 40, understood: 70, applied: 85, analyzed: 100,
             }
             // Penalización gradual: más suave que antes, mínimo ×0.75
             const attemptPenalty = [1.0, 0.95, 0.90, 0.85, 0.80, 0.75] // 1st-6th+
 
+            // Only evaluate activities marked as evaluative
+            const evaluativeActivities = allActivities.filter(ap =>
+              activityEvaluativeMap.get(ap.activityId) !== false
+            )
+
             let totalScore = 0
-            for (const ap of allActivities) {
+            for (const ap of evaluativeActivities) {
               const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
               const lastAttempt = evidence?.attempts?.at(-1)
               const level = lastAttempt?.analysis?.understanding_level || 'memorized'
               const comprehension = comprehensionScores[level] || 40
               const efficiency = attemptPenalty[Math.min(ap.attempts - 1, 5)]
               const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
-              // Comprensión pesa 70%, eficiencia por intentos pesa 30%
               const activityScore = (comprehension * 0.7) + (comprehension * 0.3 * efficiency * tangentPenalty)
               totalScore += activityScore
             }
 
-            const grade = allActivities.length > 0
-              ? Math.round(totalScore / allActivities.length)
+            const grade = evaluativeActivities.length > 0
+              ? Math.round(totalScore / evaluativeActivities.length)
               : 0
+
+            logger.info('chat.stream.grade_calculated', {
+              sessionId,
+              totalActivitiesCompleted: allActivities.length,
+              evaluativeActivitiesCount: evaluativeActivities.length,
+              grade,
+            })
 
             await prisma.lessonSession.update({
               where: { id: lessonSession.id },
@@ -733,7 +750,7 @@ export async function POST(request: Request) {
         logError(
           error as Error,
           'chat.stream.error',
-          { sessionId, userId: session.user?.id }
+          { sessionId, userId: session.userId }
         )
         const errorData = JSON.stringify({
           type: 'error',

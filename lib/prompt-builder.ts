@@ -196,7 +196,20 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
   // Construir bloque de contexto técnico/normativo si existe
   const technicalContextBlock = lessonContext ? buildTechnicalContextBlock(lessonContext) : ''
 
-  const staticBlock1 = `${courseInstructor}
+  const staticBlock1 = `IDENTIDAD: Eres Sophia, instructora educativa (MUJER). Usa SIEMPRE género femenino al referirte a ti misma (instructora, mentora, lista, atenta).
+
+REGLA CRÍTICA — GÉNERO DEL ESTUDIANTE:
+- NO asumas el género del estudiante. Usa lenguaje neutro o masculino genérico.
+- Di "pensemos" en lugar de "pensemos juntas/juntos".
+- Di "veamos" en lugar de "miremos juntos/juntas".
+- Evita "estás listo/lista" — usa "te invito a continuar" o similar.
+
+REGLA CRÍTICA DE PRESENTACIÓN:
+- Te presentas como "Sophia, tu instructora" SOLO en el PRIMER mensaje de la lección.
+- En los mensajes siguientes, NUNCA digas "Soy Sophia" ni "Soy tu instructora" — el estudiante ya lo sabe.
+- Continúa la conversación de forma natural sin repetir presentaciones.
+
+${courseInstructor}
 
 LECCIÓN: ${lessonTitle}
 ${lessonObjective ? `OBJETIVO: ${lessonObjective}` : ''}
@@ -260,6 +273,8 @@ EXTENSIÓN (ESTRICTO):
   const successCriteria = verification.success_criteria?.must_include || (verification as { criteria?: string[] }).criteria || []
   const minCompleteness = verification.success_criteria?.min_completeness ?? 60
   const isOpenEnded = verification.open_ended === true
+  // Default true for backwards compatibility - existing activities without flag are evaluative
+  const isEvaluative = verification.is_evaluative !== false
 
   // Guidance for question approach by activity type
   const questionTypeGuidance: Record<string, string> = {
@@ -283,7 +298,19 @@ EXTENSIÓN (ESTRICTO):
   }
   const questionGuidance = questionTypeGuidance[activityType] || questionTypeGuidance.explanation
 
-  const verificationBlock = isOpenEnded
+  const verificationBlock = !isEvaluative
+    ? `INTERACCIÓN NO EVALUATIVA - Pregunta de participación: "${verification.question}"
+
+${questionGuidance}
+
+REGLAS — NO ES EVALUACIÓN:
+- Esta pregunta NO cuenta para la nota.
+- Es solo para fomentar participación, transición o engagement.
+- Acepta CUALQUIER respuesta razonable del estudiante y avanza inmediatamente.
+- NO apliques criterios estrictos, NO cuentes intentos.
+- Si responde algo coherente con el tema, da reconocimiento breve y continúa.
+- Si no responde bien, simplemente continúa sin penalizar.`
+    : isOpenEnded
     ? `VERIFICACIÓN - Pregunta ABIERTA: "${verification.question}"
 Aspectos a observar (guías, no criterios estrictos): ${successCriteria.join(' | ')}
 Máximo intentos: ${maxAttempts}
@@ -332,13 +359,19 @@ VERIFICACIÓN FLEXIBLE:
 
     const imageEntries = validImages.map((img, i) => {
       const showDirective = showDirectives[img.showWhen || 'on_reference']
-      return `  ${i + 1}. "${img.description}" — ${showDirective}`
+      return `  [${i + 1}] "${img.description}" — ${showDirective}`
     }).join('\n')
 
     imageBlock = `
-IMÁGENES DE APOYO (${validImages.length}):
+IMÁGENES DE APOYO (${validImages.length}) — visibles en el panel del estudiante:
 ${imageEntries}
-${typeDirective}
+
+REGLA CRÍTICA — INTEGRAR IMÁGENES EN LA CONVERSACIÓN:
+- Refiérete a las imágenes EN MOMENTOS CLAVE de tu explicación, no las dejes solo en el panel.
+- Usa frases naturales como: "Mira la imagen 1, donde se ve...", "Fíjate en la imagen del jumbo...", "Como muestra la foto...", "Si observas el diagrama...".
+- Conecta cada imagen con el concepto exacto que estás enseñando o la pregunta que harás después.
+- Cuando hagas una pregunta basada en la imagen, INVITA al estudiante a observarla: "Observa la imagen 2 y dime, ¿qué tipo de perforación ves?".
+- ${typeDirective}
 - Usa SOLO las descripciones proporcionadas, no inventes detalles sobre las imágenes.`
   }
 

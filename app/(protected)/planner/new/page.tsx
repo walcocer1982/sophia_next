@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { CoursePlannerLayout } from '@/components/planner/course-planner-layout'
 
+export const dynamic = 'force-dynamic'
+
 export default async function NewCoursePage() {
   const careers = await prisma.career.findMany({
     orderBy: { name: 'asc' },

@@ -1,4 +1,4 @@
-import { auth } from '@/auth'
+import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
 import { parseContentJson, getTotalActivities, getActivityPosition, getNextActivity } from '@/lib/lesson-parser'
 import { logger } from '@/lib/logger'
@@ -11,8 +11,8 @@ export const runtime = 'nodejs'
  * Obtener progreso actual de una sesión de lección
  */
 export async function GET(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const session = await getAuthOrGuest()
+  if (!session) {
     return new Response('Unauthorized', { status: 401 })
   }
 
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const lessonSession = await prisma.lessonSession.findFirst({
       where: {
         id: sessionId,
-        userId: session.user.id,
+        userId: session.userId,
       },
       include: {
         lesson: {
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
 
     logger.info('activity.progress.fetched', {
       sessionId,
-      userId: session.user.id,
+      userId: session.userId,
       completedCount,
       totalActivities,
       currentPosition,
@@ -96,7 +96,7 @@ export async function GET(request: Request) {
   } catch (error) {
     logger.error('activity.progress.error', {
       sessionId,
-      userId: session.user.id,
+      userId: session.userId,
       error: error instanceof Error ? error.message : 'Unknown error',
     })
     return Response.json({ error: 'Internal server error' }, { status: 500 })
