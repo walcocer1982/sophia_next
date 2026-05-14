@@ -141,8 +141,8 @@ export function TestLessonButton({
               <Play className="h-4 w-4" />
             )}
             {selectedId
-              ? `Iniciar desde Actividad ${activities.findIndex(a => a.id === selectedId) + 1}`
-              : 'Iniciar desde el principio'}
+              ? `Probar desde Actividad ${activities.findIndex(a => a.id === selectedId) + 1}`
+              : 'Probar desde el inicio'}
           </Button>
         </div>
       </div>
