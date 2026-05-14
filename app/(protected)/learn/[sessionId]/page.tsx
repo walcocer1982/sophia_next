@@ -136,6 +136,12 @@ export default async function ChatPage({
         initialMessages={transformedMessages}
         lessonTitle={lessonSession.lesson.title}
         voiceEnabled={lessonSession.lesson.course?.voiceEnabled ?? true}
+        allowPaste={
+          session.user.role === 'ADMIN' ||
+          session.user.role === 'SUPERADMIN' ||
+          session.user.role === 'INSTRUCTOR' ||
+          lessonSession.isTest === true
+        }
       />
     </LearningLayout>
   )

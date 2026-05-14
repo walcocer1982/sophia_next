@@ -25,6 +25,7 @@ interface TutorModeProps {
   isGeneratingWelcome: boolean
   autoStartVoice?: boolean
   voiceEnabled?: boolean
+  allowPaste?: boolean
   headerExtra?: React.ReactNode // Extra content for the header (e.g., "Terminar" button)
 }
 
@@ -39,6 +40,7 @@ export function TutorMode({
   isGeneratingWelcome,
   autoStartVoice = false,
   voiceEnabled = true,
+  allowPaste = false,
   headerExtra,
 }: TutorModeProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -208,6 +210,7 @@ export function TutorMode({
                 isGeneratingWelcome={isGeneratingWelcome}
                 isThinking={isLoading}
                 isStreaming={false}
+                allowPaste={allowPaste}
               />
             </motion.div>
           )}

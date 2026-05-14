@@ -19,6 +19,13 @@ interface ChatInputProps {
   isGeneratingWelcome?: boolean
   isThinking?: boolean
   isStreaming?: boolean
+  /**
+   * When true, paste is allowed regardless of the global env var
+   * NEXT_PUBLIC_ALLOW_PASTE_INPUT. Set to true for admin/instructor
+   * surfaces (planner chat, test sessions) where the paste-blocker is
+   * an anti-cheat measure that shouldn't apply.
+   */
+  allowPaste?: boolean
 }
 
 export interface ChatInputRef {
@@ -26,7 +33,7 @@ export interface ChatInputRef {
 }
 
 export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
-  ({ onSend, onStop, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming }, ref) => {
+  ({ onSend, onStop, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming, allowPaste }, ref) => {
   const [message, setMessage] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -65,16 +72,18 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
   }
 
   const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    // Permitir paste si la variable de entorno está activada
-    const allowPaste =
+    // Admin/instructor surfaces explicitly allow paste (planner, test sessions).
+    if (allowPaste) {
+      return
+    }
+    // Otherwise honor the global env-var override.
+    const envAllowPaste =
       process.env.NEXT_PUBLIC_ALLOW_PASTE_INPUT === 'true' ||
       process.env.NEXT_PUBLIC_ALLOW_PASTE_INPUT === '1'
-
-    if (allowPaste) {
-      return // Permitir el comportamiento por defecto del paste
+    if (envAllowPaste) {
+      return
     }
-
-    // Bloquear paste por defecto
+    // Student default: paste blocked (anti-cheat in learn flows).
     e.preventDefault()
     console.log('[SECURITY] Intento de pegar bloqueado - usa tus propias palabras')
   }

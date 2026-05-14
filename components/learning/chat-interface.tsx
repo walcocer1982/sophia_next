@@ -18,6 +18,7 @@ interface ChatInterfaceProps {
   initialMessages: ChatMessage[]
   lessonTitle: string
   voiceEnabled?: boolean
+  allowPaste?: boolean
 }
 
 export function ChatInterface({
@@ -25,6 +26,7 @@ export function ChatInterface({
   initialMessages,
   lessonTitle,
   voiceEnabled = true,
+  allowPaste = false,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<OptimisticMessage[]>(
     initialMessages.map((msg) => ({
@@ -313,6 +315,7 @@ export function ChatInterface({
           isLoading={isLoading}
           isGeneratingWelcome={isGeneratingWelcome}
           voiceEnabled={voiceEnabled}
+          allowPaste={allowPaste}
         />
 
         {isDevelopment && (
@@ -402,6 +405,7 @@ export function ChatInterface({
           isGeneratingWelcome={isGeneratingWelcome}
           isThinking={isLoading}
           isStreaming={false}
+          allowPaste={allowPaste}
         />
       </div>
 

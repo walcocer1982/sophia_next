@@ -93,6 +93,7 @@ export function PlannerChat({
           disabled={isLoading}
           placeholder="Escribe tu respuesta..."
           isStreaming={isLoading}
+          allowPaste
         />
       </div>
     </div>
