@@ -1,3 +1,5 @@
+import type { PlannerAttachment } from '@/types/planner'
+
 export interface StreamEvent {
   type: 'content' | 'done' | 'error' | 'activity_completed'
   text?: string
@@ -34,13 +36,18 @@ export async function streamChatResponse(
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (error: Error) => void,
-  onActivityCompleted?: (data: ActivityProgressEvent) => void
+  onActivityCompleted?: (data: ActivityProgressEvent) => void,
+  attachments?: PlannerAttachment[]
 ) {
   try {
     const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, message }),
+      body: JSON.stringify({
+        sessionId,
+        message,
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      }),
       credentials: 'include',
     })
 

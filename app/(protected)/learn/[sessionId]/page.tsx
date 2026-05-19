@@ -53,6 +53,7 @@ export default async function ChatPage({
               instructor: true,
               voiceEnabled: true,
               allowPaste: true,
+              allowImagePaste: true,
             },
           },
         },
@@ -144,6 +145,7 @@ export default async function ChatPage({
           lessonSession.isTest === true ||
           lessonSession.lesson.course?.allowPaste === true
         }
+        allowAttachments={lessonSession.lesson.course?.allowImagePaste === true}
       />
     </LearningLayout>
   )

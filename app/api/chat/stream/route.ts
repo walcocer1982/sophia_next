@@ -13,6 +13,7 @@ import { moderateContent, getInterventionMessage } from '@/lib/services/moderati
 import { classifyIntent } from '@/lib/services/intent-classification'
 import { compressMessagesForAPI } from '@/lib/message-summarizer'
 import { generateLessonReport } from '@/lib/lesson-report'
+import { processPlannerAttachments } from '@/lib/planner/attachments'
 import type { LessonContent } from '@/types/lesson'
 import type { Message, Prisma } from '@prisma/client'
 
@@ -70,7 +71,15 @@ export async function POST(request: Request) {
     )
   }
 
-  const { sessionId, message } = await request.json()
+  const {
+    sessionId,
+    message,
+    attachments,
+  } = (await request.json()) as {
+    sessionId: string
+    message: string
+    attachments?: Array<{ name: string; mimeType: string; dataBase64: string }>
+  }
 
   // 1. Validate session and fetch full contentJson with course data
   const lessonSession = await prisma.lessonSession.findFirst({
@@ -360,6 +369,28 @@ export async function POST(request: Request) {
   let inputTokens = 0
   let outputTokens = 0
 
+  // Si el estudiante adjuntó archivos (imágenes / PDF), los convertimos en
+  // bloques nativos de Claude para inyectarlos en el último mensaje del usuario.
+  // Cualquier nota textual (formatos no soportados, etc.) se anexa al mensaje.
+  const { blocks: attachmentBlocks, notes: attachmentNotes } =
+    attachments && attachments.length > 0
+      ? await processPlannerAttachments(attachments)
+      : { blocks: [], notes: [] }
+
+  const userMessageContent: string | Array<{ type: 'text'; text: string } | typeof attachmentBlocks[number]> =
+    attachmentBlocks.length > 0
+      ? [
+          {
+            type: 'text' as const,
+            text:
+              attachmentNotes.length > 0
+                ? `${message}\n\n${attachmentNotes.join('\n\n')}`
+                : message,
+          },
+          ...attachmentBlocks,
+        ]
+      : message
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -378,7 +409,7 @@ export async function POST(request: Request) {
             ...compressedHistory,  // Historial comprimido (preguntas visibles)
             {
               role: 'user',
-              content: message,
+              content: userMessageContent,
             },
           ],
         })

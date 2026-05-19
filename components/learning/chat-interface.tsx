@@ -8,6 +8,7 @@ import { TutorMode } from './tutor-mode'
 import { DevToolsModal } from './dev-tools-modal'
 import { useProgress } from './progress-context'
 import type { ChatMessage, OptimisticMessage } from '@/types/chat'
+import type { PlannerAttachment } from '@/types/planner'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { toast } from 'sonner'
 import { Settings } from 'lucide-react'
@@ -19,6 +20,7 @@ interface ChatInterfaceProps {
   lessonTitle: string
   voiceEnabled?: boolean
   allowPaste?: boolean
+  allowAttachments?: boolean
 }
 
 export function ChatInterface({
@@ -27,6 +29,7 @@ export function ChatInterface({
   lessonTitle,
   voiceEnabled = true,
   allowPaste = false,
+  allowAttachments = false,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<OptimisticMessage[]>(
     initialMessages.map((msg) => ({
@@ -161,8 +164,8 @@ export function ChatInterface({
     }
   }
 
-  const handleSendMessage = async (content: string) => {
-    if (!content.trim() || isLoading) return
+  const handleSendMessage = async (content: string, attachments?: PlannerAttachment[]) => {
+    if ((!content.trim() && (!attachments || attachments.length === 0)) || isLoading) return
 
     setIsLoading(true)
 
@@ -267,7 +270,8 @@ export function ChatInterface({
               description: 'Avanzando a la siguiente...',
             })
           }
-        }
+        },
+        attachments
       )
     } catch (error) {
       console.error('Error sending message:', error)
@@ -406,6 +410,7 @@ export function ChatInterface({
           isThinking={isLoading}
           isStreaming={false}
           allowPaste={allowPaste}
+          allowAttachments={allowAttachments}
         />
       </div>
 
