@@ -65,17 +65,26 @@ export function TutorMode({
       </div>
 
       {/* Main: Avatar + Last message */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-6 overflow-hidden">
-        {/* Avatar - responsive: smaller on mobile, larger on desktop */}
-        <div className="hidden lg:block">
-          <SophiaAvatar state={avatarState} size={360} />
-        </div>
-        <div className="hidden md:block lg:hidden">
-          <SophiaAvatar state={avatarState} size={300} />
-        </div>
-        <div className="md:hidden">
-          <SophiaAvatar state={avatarState} size={240} />
-        </div>
+      <div className={`flex-1 flex flex-col items-center px-4 py-6 gap-6 overflow-y-auto ${showTextInput ? 'justify-start' : 'justify-center'}`}>
+        {/* Avatar - responsive; shrinks when the text input is open so the
+            message bubble is never covered by the controls panel */}
+        {showTextInput ? (
+          <div className="shrink-0">
+            <SophiaAvatar state={avatarState} size={120} />
+          </div>
+        ) : (
+          <>
+            <div className="hidden lg:block">
+              <SophiaAvatar state={avatarState} size={360} />
+            </div>
+            <div className="hidden md:block lg:hidden">
+              <SophiaAvatar state={avatarState} size={300} />
+            </div>
+            <div className="md:hidden">
+              <SophiaAvatar state={avatarState} size={240} />
+            </div>
+          </>
+        )}
 
         {/* Last message bubble */}
         <AnimatePresence mode="wait">
