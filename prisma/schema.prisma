@@ -169,6 +169,10 @@ model LessonSession {
   activityId     String?   // Referencia a contentJson.activities[].id
   summaryText    String?   @db.Text
   lastSummaryAt  DateTime?
+  // Propuesta de proyecto acordada con el estudiante en la sesión-bisagra
+  // (cursos de metodología CODE basados en proyecto personal del estudiante).
+  // Una vez fijada, se inyecta como contexto en las actividades posteriores.
+  projectBrief   Json?
   isTest         Boolean   @default(false)
   sectionId      String?   // Snapshot de la sección al iniciar sesión
   progress       Float     @default(0)

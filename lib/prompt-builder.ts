@@ -14,6 +14,7 @@ interface PromptBuilderContext {
   nextActivity?: Activity  // Siguiente actividad (cuando ready_to_advance = true)
   lastUserMessage?: string  // Último mensaje del estudiante (para detectar "no sé")
   methodology?: 'REFLECTIVE' | 'CODE'  // Metodología del curso (default REFLECTIVE)
+  projectBrief?: unknown               // Propuesta acordada en la sesión-bisagra (CODE personalizado)
 }
 
 /**
@@ -170,6 +171,7 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
     nextActivity,
     lastUserMessage = '',
     methodology = 'REFLECTIVE',
+    projectBrief,
   } = context
   const isCodeMethodology = methodology === 'CODE'
 
@@ -294,7 +296,20 @@ EXTENSIÓN:
 - Confirmación tras completar: 1 oración + siguiente paso.
 - Sin emojis. Habla como persona real.`
 
-  const effectiveStaticBlock1 = isCodeMethodology ? codeStaticBlock1 : staticBlock1
+  // Inyección condicional del proyecto acordado (cursos CODE basados en proyecto).
+  // Si y solo si la metodología es CODE y existe un brief en la sesión, se anexa
+  // al bloque estático 1 como contexto vivo del proyecto del estudiante. Para
+  // cursos sin brief queda byte-idéntico al CODE actual.
+  const projectBriefBlock =
+    isCodeMethodology && projectBrief
+      ? `\n\nPROYECTO ACORDADO DEL ESTUDIANTE:
+${JSON.stringify(projectBrief, null, 2)}
+
+Refiérete a las entidades concretas del proyecto (servicios, módulos, columnas, ejemplos) cuando instruyas cada paso. Identifica cada servicio con un emoji (📧 Gmail, 💬 WhatsApp, 📊 Sheets, 🧠 Gemini, ⚙️ Make, 📁 Drive, 🤖 Slack, 📞 Telegram, etc.) — esta es una excepción autorizada a la regla general "sin emojis".`
+      : ''
+
+  const effectiveStaticBlock1 =
+    (isCodeMethodology ? codeStaticBlock1 : staticBlock1) + projectBriefBlock
 
   // ═══════════════════════════════════════════════════════════════
   // BLOQUE ESTÁTICO 2: Instrucciones de actividad (CACHEABLE)

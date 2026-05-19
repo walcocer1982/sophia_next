@@ -14,10 +14,29 @@ import { classifyIntent } from '@/lib/services/intent-classification'
 import { compressMessagesForAPI } from '@/lib/message-summarizer'
 import { generateLessonReport } from '@/lib/lesson-report'
 import type { LessonContent } from '@/types/lesson'
-import type { Message } from '@prisma/client'
+import type { Message, Prisma } from '@prisma/client'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
+
+// Marcador del "brief" acordado en la sesión-bisagra de cursos basados en
+// proyecto (CODE personalizado). Sophia lo emite cuando el estudiante confirma
+// la propuesta estructurada; el contenido entre los marcadores es JSON.
+const PROJECT_BRIEF_REGEX =
+  /---PROJECT_BRIEF---\s*([\s\S]*?)\s*---END_PROJECT_BRIEF---/
+
+function extractProjectBrief(text: string): { brief: unknown | null; cleaned: string } {
+  const match = text.match(PROJECT_BRIEF_REGEX)
+  if (!match) return { brief: null, cleaned: text }
+  try {
+    const brief = JSON.parse(match[1].trim())
+    const cleaned = text.replace(PROJECT_BRIEF_REGEX, '').trim()
+    return { brief, cleaned }
+  } catch {
+    // JSON inválido — preservamos el mensaje original y no guardamos brief
+    return { brief: null, cleaned: text }
+  }
+}
 
 export async function POST(request: Request) {
   const session = await getAuthOrGuest()
@@ -330,6 +349,7 @@ export async function POST(request: Request) {
     nextActivity: nextActivityData || undefined,
     lastUserMessage: message,  // Para detectar "no sé" y extraer escenario
     methodology: lessonSession.lesson.course?.methodology ?? 'REFLECTIVE',
+    projectBrief: lessonSession.projectBrief ?? undefined,
   })
 
   // ═══════════════════════════════════════════════════════════════
@@ -388,6 +408,11 @@ export async function POST(request: Request) {
         const userTimestamp = new Date()
         const assistantTimestamp = new Date(userTimestamp.getTime() + 1) // +1ms para garantizar orden
 
+        // Si Sophia emitió un PROJECT_BRIEF (cursos basados en proyecto),
+        // extrae el JSON y limpia el marcador del mensaje persistido.
+        const { brief: projectBrief, cleaned: cleanedAssistantContent } =
+          extractProjectBrief(fullResponse)
+
         await prisma.$transaction([
           prisma.message.create({
             data: {
@@ -402,7 +427,7 @@ export async function POST(request: Request) {
             data: {
               sessionId: lessonSession.id,
               role: 'assistant',
-              content: fullResponse,
+              content: cleanedAssistantContent,
               inputTokens,
               outputTokens,
               activityId: currentActivity.id,
@@ -411,9 +436,21 @@ export async function POST(request: Request) {
           }),
           prisma.lessonSession.update({
             where: { id: sessionId },
-            data: { lastActivityAt: assistantTimestamp },
+            data: {
+              lastActivityAt: assistantTimestamp,
+              ...(projectBrief !== null
+                ? { projectBrief: projectBrief as Prisma.InputJsonValue }
+                : {}),
+            },
           }),
         ])
+
+        if (projectBrief !== null) {
+          logger.info('chat.stream.project_brief_saved', {
+            sessionId,
+            userId: session.userId,
+          })
+        }
 
         // Log chat message
         logChatMessage(sessionId, 'assistant', fullResponse.length, {
