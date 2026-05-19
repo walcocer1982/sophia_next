@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth-utils'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { PlannerChatRequestSchema, GeneratedStructureSchema } from '@/lib/planner/validation'
 import { buildPlannerSystemPrompt } from '@/lib/planner/conversational-prompts'
+import { processPlannerAttachments, type PlannerContentBlock } from '@/lib/planner/attachments'
 import { PLANNER_STEPS } from '@/types/planner'
 import type { PlannerStep, PlannerData } from '@/types/planner'
 import { NextResponse } from 'next/server'
@@ -105,11 +106,14 @@ export async function POST(request: Request) {
     )
   }
 
-  const { message, step, plannerData, courseContext, history } = parseResult.data
+  const { message, step, plannerData, courseContext, history, attachments } = parseResult.data
   const systemPrompt = buildPlannerSystemPrompt(step, plannerData, courseContext)
 
   // Construir mensajes para Claude
-  const claudeMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  const claudeMessages: Array<{
+    role: 'user' | 'assistant'
+    content: string | PlannerContentBlock[]
+  }> = []
 
   // Agregar historial reciente (últimos 10 pares)
   const recentHistory = history.slice(-10)
@@ -139,7 +143,17 @@ export async function POST(request: Request) {
   } else {
     userContent = message
   }
-  claudeMessages.push({ role: 'user', content: userContent })
+
+  if (attachments && attachments.length > 0) {
+    const { blocks, notes } = await processPlannerAttachments(attachments)
+    const text = notes.length > 0 ? `${userContent}\n\n${notes.join('\n\n')}` : userContent
+    claudeMessages.push({
+      role: 'user',
+      content: [{ type: 'text', text }, ...blocks],
+    })
+  } else {
+    claudeMessages.push({ role: 'user', content: userContent })
+  }
 
   const maxTokens = step === 'ESTRUCTURA' ? 8192 : 2048
   const encoder = new TextEncoder()

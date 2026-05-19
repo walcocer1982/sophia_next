@@ -9,7 +9,7 @@ import { usePlannerState } from '@/hooks/use-planner-state'
 import { streamPlannerResponse } from '@/lib/planner-stream'
 import { PlannerChat } from './planner-chat'
 import { PlannerPanel } from './planner-panel'
-import type { PlannerData, PlannerStep, CourseContext } from '@/types/planner'
+import type { PlannerData, PlannerStep, CourseContext, PlannerAttachment } from '@/types/planner'
 import { STEP_LABELS } from '@/types/planner'
 
 interface PlannerLayoutProps {
@@ -42,7 +42,8 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
     message: string,
     step: PlannerStep,
     data: PlannerData,
-    history: Array<{ role: 'user' | 'assistant'; content: string }>
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    attachments?: PlannerAttachment[]
   ) => {
     const assistantId = planner.addAssistantPlaceholder()
     planner.setIsLoading(true)
@@ -97,7 +98,9 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
       },
       '/api/planner/chat',
       'plannerData',
-      extra,
+      attachments && attachments.length > 0
+        ? { ...(extra ?? {}), attachments }
+        : extra,
       controller.signal
     )
 
@@ -143,7 +146,7 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
     generateWelcome()
   }, [generateWelcome])
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, attachments?: PlannerAttachment[]) => {
     planner.addUserMessage(content)
 
     const history = planner.messages
@@ -155,7 +158,8 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
       content,
       planner.step,
       planner.data,
-      history
+      history,
+      attachments
     )
 
     if (nextStep) {

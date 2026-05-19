@@ -103,10 +103,18 @@ export const PlannerDataSchema = z.object({
   activities: z.array(ActivitySchema).default([]),
 })
 
+// Adjunto del planificador: base64 (~12MB de límite base64 ≈ 9MB de archivo).
+export const PlannerAttachmentSchema = z.object({
+  name: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(100),
+  dataBase64: z.string().min(1).max(12_000_000),
+})
+
 export const PlannerChatRequestSchema = z.object({
   message: z.string().min(1).max(5000),
   step: PlannerStepSchema,
   plannerData: PlannerDataSchema,
+  attachments: z.array(PlannerAttachmentSchema).max(3).optional(),
   courseContext: z
     .object({
       courseId: z.string(),
@@ -154,6 +162,7 @@ export const CoursePlannerChatRequestSchema = z.object({
   message: z.string().min(1).max(5000),
   step: CoursePlannerStepSchema,
   courseData: CoursePlannerDataSchema,
+  attachments: z.array(PlannerAttachmentSchema).max(3).optional(),
   history: z
     .array(
       z.object({

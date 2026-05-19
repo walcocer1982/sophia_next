@@ -63,6 +63,15 @@ export interface PlannerStreamEvent {
   newStep?: PlannerStep
 }
 
+// Archivo adjuntado en el chat del planificador (contexto por-turno, NO se
+// guarda). El cliente lo manda como base64; el servidor lo convierte en
+// bloques para Claude (imagen/PDF nativos; docx/xlsx → texto extraído).
+export interface PlannerAttachment {
+  name: string
+  mimeType: string
+  dataBase64: string
+}
+
 // Mensaje del chat del planner (sin persistencia en DB en Fase 1)
 export interface PlannerMessage {
   id: string

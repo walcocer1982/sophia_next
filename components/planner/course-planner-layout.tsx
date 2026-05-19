@@ -9,7 +9,7 @@ import { useCoursePlannerState } from '@/hooks/use-course-planner-state'
 import { streamPlannerResponse } from '@/lib/planner-stream'
 import { PlannerChat } from './planner-chat'
 import { CoursePlannerPanel } from './course-planner-panel'
-import type { CoursePlannerData, CoursePlannerStep } from '@/types/planner'
+import type { CoursePlannerData, CoursePlannerStep, PlannerAttachment } from '@/types/planner'
 import { COURSE_STEP_LABELS } from '@/types/planner'
 
 interface CareerOption {
@@ -44,7 +44,8 @@ export function CoursePlannerLayout({ careers = [] }: CoursePlannerLayoutProps) 
     message: string,
     step: CoursePlannerStep,
     data: CoursePlannerData,
-    history: Array<{ role: 'user' | 'assistant'; content: string }>
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    attachments?: PlannerAttachment[]
   ) => {
     const assistantId = planner.addAssistantPlaceholder()
     planner.setIsLoading(true)
@@ -97,7 +98,7 @@ export function CoursePlannerLayout({ careers = [] }: CoursePlannerLayoutProps) 
       },
       '/api/planner/course/chat',
       'courseData',
-      undefined,
+      attachments && attachments.length > 0 ? { attachments } : undefined,
       controller.signal
     )
 
@@ -147,7 +148,7 @@ export function CoursePlannerLayout({ careers = [] }: CoursePlannerLayoutProps) 
     generateWelcome()
   }, [generateWelcome])
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, attachments?: PlannerAttachment[]) => {
     planner.addUserMessage(content)
 
     const history = planner.messages
@@ -159,7 +160,8 @@ export function CoursePlannerLayout({ careers = [] }: CoursePlannerLayoutProps) 
       content,
       planner.step,
       planner.data,
-      history
+      history,
+      attachments
     )
 
     // If step changed, auto-follow-up to ask next question

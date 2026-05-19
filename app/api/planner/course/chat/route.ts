@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth-utils'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { CoursePlannerChatRequestSchema } from '@/lib/planner/validation'
 import { buildCoursePlannerSystemPrompt } from '@/lib/planner/course-prompts'
+import { processPlannerAttachments, type PlannerContentBlock } from '@/lib/planner/attachments'
 import { COURSE_PLANNER_STEPS } from '@/types/planner'
 import type { CoursePlannerStep, CoursePlannerData } from '@/types/planner'
 import { NextResponse } from 'next/server'
@@ -86,10 +87,13 @@ export async function POST(request: Request) {
     )
   }
 
-  const { message, step, courseData, history } = parseResult.data
+  const { message, step, courseData, history, attachments } = parseResult.data
   const systemPrompt = buildCoursePlannerSystemPrompt(step, courseData)
 
-  const claudeMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  const claudeMessages: Array<{
+    role: 'user' | 'assistant'
+    content: string | PlannerContentBlock[]
+  }> = []
 
   const recentHistory = history.slice(-10)
   for (const msg of recentHistory) {
@@ -109,7 +113,17 @@ export async function POST(request: Request) {
   } else {
     userContent = message
   }
-  claudeMessages.push({ role: 'user', content: userContent })
+
+  if (attachments && attachments.length > 0) {
+    const { blocks, notes } = await processPlannerAttachments(attachments)
+    const text = notes.length > 0 ? `${userContent}\n\n${notes.join('\n\n')}` : userContent
+    claudeMessages.push({
+      role: 'user',
+      content: [{ type: 'text', text }, ...blocks],
+    })
+  } else {
+    claudeMessages.push({ role: 'user', content: userContent })
+  }
 
   const encoder = new TextEncoder()
 

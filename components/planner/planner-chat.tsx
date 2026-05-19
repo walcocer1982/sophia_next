@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { ChatMessages } from '@/components/learning/chat-messages'
 import { ChatInput, type ChatInputRef } from '@/components/learning/chat-input'
-import type { PlannerMessage } from '@/types/planner'
+import type { PlannerMessage, PlannerAttachment } from '@/types/planner'
 import type { OptimisticMessage } from '@/types/chat'
 
 interface PlannerChatProps {
@@ -11,7 +11,7 @@ interface PlannerChatProps {
   isLoading: boolean
   step: string
   stepLabels?: Record<string, string>
-  onSend: (message: string) => void
+  onSend: (message: string, attachments?: PlannerAttachment[]) => void
   onStop?: () => void
   title?: string
 }
@@ -94,6 +94,7 @@ export function PlannerChat({
           placeholder="Escribe tu respuesta..."
           isStreaming={isLoading}
           allowPaste
+          allowAttachments
         />
       </div>
     </div>
