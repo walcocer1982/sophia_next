@@ -42,6 +42,7 @@ export async function POST(request: Request) {
             course: {
               select: {
                 instructor: true,
+                methodology: true,
               },
             },
           },
@@ -98,11 +99,15 @@ export async function POST(request: Request) {
     const lessonContext = getLessonContext(contentJson)
 
     // Usar el sistema de prompts completo con cache
+    const methodology = lessonSession.lesson.course?.methodology ?? 'REFLECTIVE'
+    const isCodeMethodology = methodology === 'CODE'
+
     const { staticBlocks, dynamicPrompt } = buildSystemPrompt({
       activityContext: firstActivityContext,
       recentMessages: [],
       tangentCount: 0,
       lessonContext,
+      methodology,
     })
 
     // Instrucción para mensaje de bienvenida - Presenta el tema e invita a aprender
@@ -135,7 +140,9 @@ LARGO TOTAL: 3-5 oraciones. NO más.
 ESTRUCTURA NATURAL:
 1. Saludo + presentación (1 oración) - di ${greetingLine}
 2. Menciona qué van a aprender hoy de forma fluida (1-2 oraciones)
-3. Pregunta sobre experiencia previa para conectar (1 oración)
+${isCodeMethodology
+  ? '3. Anticipa que es una guía paso a paso y pregunta si está listo para empezar el primer paso (1 oración)'
+  : '3. Pregunta sobre experiencia previa para conectar (1 oración)'}
 
 NO asumas el género del estudiante. Usa formas neutras.
 

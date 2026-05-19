@@ -13,6 +13,7 @@ interface PromptBuilderContext {
   lessonContext?: LessonContext  // Contexto normativo/técnico de la lección
   nextActivity?: Activity  // Siguiente actividad (cuando ready_to_advance = true)
   lastUserMessage?: string  // Último mensaje del estudiante (para detectar "no sé")
+  methodology?: 'REFLECTIVE' | 'CODE'  // Metodología del curso (default REFLECTIVE)
 }
 
 /**
@@ -168,7 +169,9 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
     lessonContext,
     nextActivity,
     lastUserMessage = '',
+    methodology = 'REFLECTIVE',
   } = context
+  const isCodeMethodology = methodology === 'CODE'
 
   // Detectar si el estudiante expresó que no sabe
   const studentIsUnsure = isStudentUnsure(lastUserMessage)
@@ -257,6 +260,41 @@ EXTENSIÓN (ESTRICTO):
 - PROHIBIDO dar "clases magistrales" de 200+ palabras antes de preguntar
 - PROHIBIDO repetir lo que el estudiante ya dijo correctamente
 - Si el estudiante cumplió los criterios de verificación, NO hagas preguntas de profundización adicionales. Cierra y avanza.`
+
+  // Variante INSTRUCCIONAL (metodología CODE): la lección es una guía paso a
+  // paso (programación / uso de software). Sophia instruye, no hace mayéutica;
+  // solo confirma que el estudiante completó el paso. El bloque reflexivo de
+  // arriba queda intacto para los cursos REFLECTIVE.
+  const codeStaticBlock1 = `IDENTIDAD: Eres Sophia, instructora técnica (MUJER). Usa SIEMPRE género femenino al referirte a ti misma. NO asumas el género del estudiante (usa lenguaje neutro).
+
+MODO INSTRUCCIONAL — NO SOCRÁTICO:
+- Esta es una sesión guiada paso a paso (código / configuración de software).
+- Da la instrucción del paso de forma CLARA, DIRECTA y ACCIONABLE. Incluye comandos, código o pasos exactos cuando apliquen.
+- NO uses método socrático ni preguntas de razonamiento. NO ocultes la respuesta: aquí SÍ se dan instrucciones explícitas.
+- Espera a que el estudiante confirme que completó el paso (o pegue el resultado/salida/captura). Entonces valida brevemente y avanza al siguiente paso.
+- Si el estudiante reporta un error, ayúdalo a resolverlo con instrucciones concretas; luego continúa.
+- NO hay nota por comprensión: lo único que importa es si completó el paso.
+
+REGLA CRÍTICA DE PRESENTACIÓN:
+- Te presentas como "Sophia, tu instructora" SOLO en el PRIMER mensaje. Luego nunca repitas la presentación.
+
+${courseInstructor}
+
+CURSO: ${lessonTitle}
+${lessonObjective ? `OBJETIVO: ${lessonObjective}` : ''}
+${technicalContextBlock}
+
+${lessonKeyPoints.length > 0 ? `PUNTOS CLAVE:
+${lessonKeyPoints.map((p, i) => `${i + 1}. ${p}`).join('\n')}` : ''}
+
+---
+
+EXTENSIÓN:
+- Instrucción de un paso: directa, lo necesario para ejecutarlo (puede incluir bloques de código/comandos).
+- Confirmación tras completar: 1 oración + siguiente paso.
+- Sin emojis. Habla como persona real.`
+
+  const effectiveStaticBlock1 = isCodeMethodology ? codeStaticBlock1 : staticBlock1
 
   // ═══════════════════════════════════════════════════════════════
   // BLOQUE ESTÁTICO 2: Instrucciones de actividad (CACHEABLE)
@@ -621,12 +659,14 @@ Estrategia: ${intentClassification.suggested_response_strategy}
     staticBlocks: [
       {
         type: 'text',
-        text: staticBlock1,
+        text: effectiveStaticBlock1,
         cache_control: { type: 'ephemeral' }
       },
       {
         type: 'text',
-        text: staticBlock2,
+        text: isCodeMethodology
+          ? `MODO INSTRUCCIONAL: Trata "${activity.verification.question}" como el PASO a completar. Da la instrucción para ejecutarlo y, cuando el estudiante confirme/pegue el resultado, valida brevemente y avanza. No apliques criterios socráticos ni de comprensión.\n\n${staticBlock2}`
+          : staticBlock2,
         cache_control: { type: 'ephemeral' }
       }
     ],
@@ -641,49 +681,5 @@ function getActivityPosition(context: CurrentActivityContext): number {
   return context.activityIdx + 1
 }
 
-/**
- * Construir PROMPT para generar mensaje de bienvenida
- * La IA genera el mensaje, no está hardcodeado
- */
-export function buildWelcomePrompt(
-  activityContext: CurrentActivityContext,
-  lessonContext?: LessonContext
-): string {
-  const { isFirstActivity, lessonTitle, courseInstructor } = activityContext
-
-  // Construir contexto técnico si existe
-  const technicalContext = lessonContext ? buildTechnicalContextBlock(lessonContext) : ''
-
-  if (isFirstActivity) {
-    return `${courseInstructor}
-
-TAREA: Genera un mensaje de bienvenida para iniciar la lección "${lessonTitle}".
-${technicalContext}
-
-INSTRUCCIONES:
-- Preséntate brevemente (tu nombre y rol)
-- Menciona el tema de hoy
-- Pregunta si tiene experiencia previa con el tema
-- Tono conversacional, como persona real
-- Sin emojis
-- Máximo 3 oraciones
-- Termina con UNA pregunta abierta
-
-NO incluyas: "Bienvenido", saludos formales, exclamaciones exageradas.`
-  }
-
-  return `${courseInstructor}
-
-TAREA: Genera un mensaje de transición para continuar con la siguiente actividad de "${lessonTitle}".
-${technicalContext}
-
-INSTRUCCIONES:
-- Reconoce brevemente el progreso
-- Invita a continuar
-- Pregunta si hay dudas antes de avanzar
-- Tono conversacional
-- Sin emojis
-- Máximo 2 oraciones
-
-NO incluyas: "¡Excelente!", exclamaciones exageradas, felicitaciones largas.`
-}
+// (buildWelcomePrompt eliminado: era código muerto — el mensaje de
+// bienvenida real se construye inline en app/api/chat/welcome/route.ts)

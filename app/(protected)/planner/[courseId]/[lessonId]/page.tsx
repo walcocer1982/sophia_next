@@ -26,6 +26,7 @@ type LessonWithCourse = {
     title: string
     capacidad: string | null
     instructor: string
+    methodology: 'REFLECTIVE' | 'CODE'
     userId: string | null
     lessons: Array<{ title: string; order: number }>
   }
@@ -56,6 +57,7 @@ export default async function SessionPlannerPage({
           title: true,
           capacidad: true,
           instructor: true,
+          methodology: true,
           userId: true,
           lessons: {
             orderBy: { order: 'asc' },
@@ -80,6 +82,7 @@ export default async function SessionPlannerPage({
     courseTitle: lesson.course.title,
     capacidad: lesson.course.capacidad || '',
     instructor: lesson.course.instructor,
+    methodology: lesson.course.methodology,
     lessonId: lesson.id,
     lessonTitle: lesson.title,
     lessonObjective: lesson.objective,

@@ -4,10 +4,11 @@ import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
 import { buildSystemPrompt, getMaxTokensForActivity } from '@/lib/prompt-builder'
 import { isPassing } from '@/lib/rubric'
+import { calculateGrade, calculateCompletionGrade } from '@/lib/grading'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { logger, logChatMessage, logError } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
-import { verifyActivityCompletion } from '@/lib/activity-verification'
+import { verifyActivityCompletion, verifyStepCompletion } from '@/lib/activity-verification'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
 import { classifyIntent } from '@/lib/services/intent-classification'
 import { compressMessagesForAPI } from '@/lib/message-summarizer'
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
           course: {
             select: {
               instructor: true,
+              methodology: true,
             },
           },
         },
@@ -224,9 +226,11 @@ export async function POST(request: Request) {
           confidence: 'high' as const,
           ready_to_advance: true,
         })
-      // Continuaciones ("sí", "listo"): verificar acumulativamente
-      // El estudiante puede haber cumplido criterios en mensajes previos
-      : verifyActivityCompletion(message, currentActivity, conversationHistory)
+      // Continuaciones ("sí", "listo"): verificar acumulativamente.
+      // CODE: verificación binaria (¿completó el paso?). REFLECTIVE: socrática.
+      : (lessonSession.lesson.course?.methodology === 'CODE'
+          ? verifyStepCompletion(message, currentActivity, conversationHistory)
+          : verifyActivityCompletion(message, currentActivity, conversationHistory))
   ])
 
   // Logging de clasificación
@@ -325,6 +329,7 @@ export async function POST(request: Request) {
     lessonContext,
     nextActivity: nextActivityData || undefined,
     lastUserMessage: message,  // Para detectar "no sé" y extraer escenario
+    methodology: lessonSession.lesson.course?.methodology ?? 'REFLECTIVE',
   })
 
   // ═══════════════════════════════════════════════════════════════
@@ -545,33 +550,20 @@ export async function POST(request: Request) {
               activityEvaluativeMap.set(a.id, a.verification?.is_evaluative !== false)
             }
 
-            // Scoring: comprensión (70%) + eficiencia (30%)
-            const comprehensionScores: Record<string, number> = {
-              memorized: 40, understood: 70, applied: 85, analyzed: 100,
-            }
-            // Penalización gradual: más suave que antes, mínimo ×0.75
-            const attemptPenalty = [1.0, 0.95, 0.90, 0.85, 0.80, 0.75] // 1st-6th+
-
+            // Scoring: comprensión (70%) + eficiencia (30%).
+            // Shared formula — see lib/grading.ts
             // Only evaluate activities marked as evaluative
             const evaluativeActivities = allActivities.filter(ap =>
               activityEvaluativeMap.get(ap.activityId) !== false
             )
 
-            let totalScore = 0
-            for (const ap of evaluativeActivities) {
-              const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
-              const lastAttempt = evidence?.attempts?.at(-1)
-              const level = lastAttempt?.analysis?.understanding_level || 'memorized'
-              const comprehension = comprehensionScores[level] || 40
-              const efficiency = attemptPenalty[Math.min(ap.attempts - 1, 5)]
-              const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
-              const activityScore = (comprehension * 0.7) + (comprehension * 0.3 * efficiency * tangentPenalty)
-              totalScore += activityScore
-            }
-
-            const grade = evaluativeActivities.length > 0
-              ? Math.round(totalScore / evaluativeActivities.length)
-              : 0
+            // CODE: nota = % de pasos completados (sin rúbrica de comprensión).
+            // REFLECTIVE: fórmula comprensión/eficiencia.
+            const totalEvaluativeCount = Array.from(activityEvaluativeMap.values())
+              .filter(Boolean).length
+            const grade = lessonSession.lesson.course?.methodology === 'CODE'
+              ? calculateCompletionGrade(evaluativeActivities.length, totalEvaluativeCount)
+              : calculateGrade(evaluativeActivities)
 
             logger.info('chat.stream.grade_calculated', {
               sessionId,

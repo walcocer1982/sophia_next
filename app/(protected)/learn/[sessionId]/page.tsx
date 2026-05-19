@@ -52,6 +52,7 @@ export default async function ChatPage({
               id: true,
               instructor: true,
               voiceEnabled: true,
+              allowPaste: true,
             },
           },
         },
@@ -140,7 +141,8 @@ export default async function ChatPage({
           session.user.role === 'ADMIN' ||
           session.user.role === 'SUPERADMIN' ||
           session.user.role === 'INSTRUCTOR' ||
-          lessonSession.isTest === true
+          lessonSession.isTest === true ||
+          lessonSession.lesson.course?.allowPaste === true
         }
       />
     </LearningLayout>

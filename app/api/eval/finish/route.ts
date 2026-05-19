@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { gradeTo20 } from '@/lib/assessment-utils'
 import { isPassing } from '@/lib/rubric'
 import { verifyActivityCompletion } from '@/lib/activity-verification'
+import { calculateGrade, calculateCompletionGrade } from '@/lib/grading'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
     include: {
       session: {
         include: {
-          lesson: true,
+          lesson: { include: { course: { select: { methodology: true } } } },
           activities: { where: { status: 'COMPLETED' } },
         },
       },
@@ -170,28 +171,13 @@ export async function POST(request: Request) {
     activityEvaluativeMap.get(ap.activityId) !== false
   )
 
-  const comprehensionScores: Record<string, number> = {
-    memorized: 40, understood: 70, applied: 85, analyzed: 100,
-  }
-  const attemptPenalty = [1.0, 0.95, 0.90, 0.85, 0.80, 0.75]
-
-  let totalScore = 0
-  for (const ap of evaluativeActivities) {
-    const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
-    const lastAttempt = evidence?.attempts?.at(-1)
-    const level = lastAttempt?.analysis?.understanding_level || 'memorized'
-    const comprehension = comprehensionScores[level] || 40
-    const efficiency = attemptPenalty[Math.min(ap.attempts - 1, 5)]
-    const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
-    const activityScore = (comprehension * 0.7) + (comprehension * 0.3 * efficiency * tangentPenalty)
-    totalScore += activityScore
-  }
-
-  // If no evaluative activities completed, grade is 0
+  // Average over total expected evaluative activities (not just completed),
+  // so an incomplete session is penalized. Shared formula — see lib/grading.ts
+  // CODE methodology grades on binary step completion instead of the rubric.
   const totalEvaluative = Array.from(activityEvaluativeMap.values()).filter(Boolean).length
-  const grade = totalEvaluative > 0
-    ? Math.round((totalScore / totalEvaluative)) // average over total expected, not just completed
-    : 0
+  const grade = session.lesson.course?.methodology === 'CODE'
+    ? calculateCompletionGrade(evaluativeActivities.length, totalEvaluative)
+    : calculateGrade(evaluativeActivities, totalEvaluative)
   const gradeOver20 = gradeTo20(grade)
   const passed = isPassing(grade)
 

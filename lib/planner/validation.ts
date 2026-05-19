@@ -113,6 +113,7 @@ export const PlannerChatRequestSchema = z.object({
       courseTitle: z.string(),
       capacidad: z.string(),
       instructor: z.string(),
+      methodology: z.enum(['REFLECTIVE', 'CODE']).optional(),
       lessonId: z.string(),
       lessonTitle: z.string(),
       lessonObjective: z.string(),

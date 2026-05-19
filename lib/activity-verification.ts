@@ -1,4 +1,4 @@
-import { anthropic } from '@/lib/anthropic'
+import { anthropic, extractJsonFromMarkdown, callAndParseJson } from '@/lib/anthropic'
 import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints } from '@/types/lesson'
 
 /**
@@ -270,17 +270,10 @@ export async function verifyActivityCompletion(
       throw new Error('Unexpected response type from verification')
     }
 
-    // Extraer JSON de markdown code blocks si está presente
-    let jsonText = content.text.trim()
-
-    // Si el texto tiene markdown code blocks (```json ... ```), extraerlos
-    const jsonBlockMatch = jsonText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-    if (jsonBlockMatch) {
-      jsonText = jsonBlockMatch[1].trim()
-    }
-
-    // Parsear JSON response
-    const result: ActivityCompletionResult = JSON.parse(jsonText)
+    // Parsear JSON response (tolera markdown code blocks y prosa alrededor)
+    const result: ActivityCompletionResult = JSON.parse(
+      extractJsonFromMarkdown(content.text)
+    )
 
     // Validar que ready_to_advance sea consistente
     if (result.completeness_percentage >= effectiveThreshold && !result.ready_to_advance) {
@@ -408,6 +401,77 @@ function fallbackVerification(
       : 'Bien, pero falta profundizar en algunos puntos.',
     confidence: 'low', // Baja confianza en fallback
     ready_to_advance,
+  }
+}
+
+/**
+ * Verificación BINARIA para cursos con metodología CODE (instruccional).
+ *
+ * No evalúa comprensión ni rúbrica socrática: solo decide si el estudiante
+ * completó / confirmó el paso (o reportó su resultado). Devuelve el mismo
+ * shape que verifyActivityCompletion para que el flujo de chat/stream y la
+ * auto-progresión funcionen sin cambios.
+ */
+export async function verifyStepCompletion(
+  userMessage: string,
+  activity: Activity,
+  conversationHistory?: { role: 'user' | 'assistant'; content: string }[]
+): Promise<ActivityCompletionResult> {
+  const stepInstruction =
+    activity.teaching?.agent_instruction ||
+    activity.verification?.question ||
+    'el paso indicado'
+
+  const history = (conversationHistory || [])
+    .slice(-6)
+    .map((m) => `${m.role === 'user' ? 'Estudiante' : 'Sophia'}: ${m.content}`)
+    .join('\n')
+
+  const prompt = `Eres un verificador de progreso en una sesión INSTRUCCIONAL paso a paso (curso de código/software).
+
+PASO A COMPLETAR:
+${stepInstruction}
+
+HISTORIAL RECIENTE:
+${history || '(sin historial)'}
+
+ÚLTIMO MENSAJE DEL ESTUDIANTE:
+"${userMessage}"
+
+¿El estudiante completó o confirmó este paso (lo hizo, pegó el resultado/salida, o indicó que lo terminó)? Reportar un error mientras lo intenta NO cuenta como completado.
+
+Responde ÚNICAMENTE con JSON:
+{"completed": true|false, "reason": "breve"}`
+
+  try {
+    const { completed } = await callAndParseJson<{ completed: boolean; reason?: string }>(
+      prompt,
+      { maxTokens: 150 }
+    )
+    return {
+      completed,
+      criteriaMatched: completed ? ['Paso completado'] : [],
+      criteriaMissing: completed ? [] : ['Paso pendiente'],
+      completeness_percentage: completed ? 100 : 0,
+      understanding_level: 'applied' as UnderstandingLevel, // No aplica en CODE
+      response_type: (completed ? 'correct' : 'partial') as ResponseType,
+      feedback: '',
+      confidence: 'high',
+      ready_to_advance: completed,
+    }
+  } catch {
+    // Fail-safe: no avanzar si la verificación falla
+    return {
+      completed: false,
+      criteriaMatched: [],
+      criteriaMissing: ['Paso pendiente'],
+      completeness_percentage: 0,
+      understanding_level: 'applied' as UnderstandingLevel,
+      response_type: 'partial' as ResponseType,
+      feedback: '',
+      confidence: 'low',
+      ready_to_advance: false,
+    }
   }
 }
 

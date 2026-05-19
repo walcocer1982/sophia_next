@@ -9,7 +9,7 @@ import { PublishToggle } from '@/components/planner/publish-toggle'
 import { TestLessonButton } from '@/components/planner/test-lesson-button'
 import { DeleteCourseButton } from '@/components/planner/delete-course-button'
 import { CourseCareerSelector } from '@/components/planner/course-career-selector'
-import { CourseVoiceToggle } from '@/components/planner/course-voice-toggle'
+import { CourseConfigPanel } from '@/components/planner/course-config-panel'
 
 type CourseWithLessons = {
   id: string
@@ -18,6 +18,9 @@ type CourseWithLessons = {
   instructor: string
   isPublished: boolean
   voiceEnabled: boolean
+  methodology: 'REFLECTIVE' | 'CODE'
+  allowPaste: boolean
+  allowImagePaste: boolean
   lessons: Array<{
     id: string
     title: string
@@ -52,6 +55,9 @@ export default async function CourseOverviewPage({
       instructor: true,
       isPublished: true,
       voiceEnabled: true,
+      methodology: true,
+      allowPaste: true,
+      allowImagePaste: true,
       userId: true,
       careerId: true,
       lessons: {
@@ -158,9 +164,14 @@ export default async function CourseOverviewPage({
               </span>
             )}
             {!isSectionInstructor && (
-              <CourseVoiceToggle
+              <CourseConfigPanel
                 courseId={course.id}
-                initialVoiceEnabled={course.voiceEnabled}
+                initial={{
+                  methodology: course.methodology,
+                  voiceEnabled: course.voiceEnabled,
+                  allowPaste: course.allowPaste,
+                  allowImagePaste: course.allowImagePaste,
+                }}
               />
             )}
             <DeleteCourseButton courseId={course.id} courseTitle={course.title} />

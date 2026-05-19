@@ -90,6 +90,11 @@ model Career {
 // 3. CONTENIDO EDUCATIVO
 // ============================================
 
+enum CourseMethodology {
+  REFLECTIVE // Actividades + verificación socrática (default)
+  CODE       // Instrucciones paso a paso + verificación binaria
+}
+
 model Course {
   id          String   @id @default(cuid())
   title       String
@@ -99,6 +104,12 @@ model Course {
   userId      String?            // Instructor que creó el curso
   careerId    String?            // Carrera a la que pertenece el curso
   voiceEnabled Boolean @default(true)  // Si false, el chat del curso oculta el botón de voz
+  // Metodología pedagógica del curso (todas sus lecciones la heredan):
+  //  - REFLECTIVE: actividades con prompt de instrucción + verificación socrática (default actual)
+  //  - CODE: instrucciones paso a paso, verificación binaria (hizo/no hizo), sin rúbrica de comprensión
+  methodology     CourseMethodology @default(REFLECTIVE)
+  allowPaste      Boolean @default(false)  // Permitir pegar texto en el chat del estudiante
+  allowImagePaste Boolean @default(false)  // Permitir pegar/adjuntar imágenes en el chat del estudiante
   isPublished Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

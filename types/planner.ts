@@ -141,6 +141,7 @@ export interface CourseContext {
   courseTitle: string
   capacidad: string
   instructor: string
+  methodology?: 'REFLECTIVE' | 'CODE'  // Metodología del curso (default REFLECTIVE)
   lessonId: string
   lessonTitle: string
   lessonObjective: string

@@ -322,6 +322,28 @@ Hablas en español, con tono profesional pero cercano.`
   const stateBlock = buildStateBlock(plannerData)
   const stepInstructions = STEP_INSTRUCTIONS[step]
 
+  // Curso con metodología CODE (instruccional): el diseño NO es socrático.
+  // Este bloque tiene PRIORIDAD sobre las guías socráticas de cada paso
+  // (INSTRUCCIONES/KEY_POINTS/CONTENIDO/ESTRUCTURA). Para REFLECTIVE no se
+  // emite nada y el comportamiento queda idéntico.
+  const isCodeMethodology = courseContext?.methodology === 'CODE'
+  const codeMethodologyBlock = isCodeMethodology
+    ? `⚙️ METODOLOGÍA DEL CURSO: CODE (INSTRUCCIONAL / PASO A PASO)
+Este curso enseña código o uso/configuración de software. El diseño debe ser INSTRUCCIONAL, NO socrático. Esta regla TIENE PRIORIDAD sobre cualquier guía socrática (preguntas reflexivas, taxonomía de Bloom, "no revelar la respuesta") que aparezca en las instrucciones del paso.
+
+Adapta cada paso así:
+- INSTRUCCIONES: directivas para que la IA dé instrucciones EXPLÍCITAS y accionables (comandos, código, pasos exactos). NADA de "usa preguntas reflexivas antes de definir".
+- KEY_POINTS: cada punto clave es un PASO o hito concreto del procedimiento (ej: "Instalar dependencias", "Configurar el archivo .env", "Ejecutar la migración"), en orden de ejecución.
+- CONTENIDO TÉCNICO: incluye los comandos / fragmentos de código / valores exactos que el estudiante necesita para ejecutar cada paso.
+- ESTRUCTURA (actividades): cada actividad = UN paso a ejecutar.
+  · teaching.agent_instruction: instruir el paso de forma directa y explícita (puede incluir el comando/código).
+  · type: usa "practice" para pasos ejecutables; "explanation" solo si es teoría previa imprescindible; "closing" para el cierre.
+  · verification.question: pide CONFIRMACIÓN o EVIDENCIA del paso ("Pega la salida del comando", "Confirma que la app levantó en el puerto 3000"), NO una pregunta de comprensión teórica.
+  · verification.success_criteria.must_include: señales OBSERVABLES de que el paso se completó (salida esperada, archivo creado, estado), no conceptos a "comprender".
+  · open_ended: false (se verifica completitud del paso, no razonamiento).
+- NO generes preguntas socráticas ni de Bloom. NO ocultes la respuesta: aquí se dan instrucciones explícitas.`
+    : ''
+
   const contextNote = courseContext
     ? `\nNOTA: Esta sesión pertenece a un curso. El tema y objetivo ya están definidos. Tu tarea empieza en INSTRUCCIONES.
 No preguntes por el tema ni el objetivo — ya están fijados desde el curso.
@@ -378,6 +400,7 @@ Si no emites PANEL_DATA, el panel NO se actualiza y el paso NO avanza, sin impor
   parts.push(stateBlock)
   if (editModeBlock) parts.push(editModeBlock)
   parts.push(stepInstructions)
+  if (codeMethodologyBlock) parts.push(codeMethodologyBlock)
   if (contextNote) parts.push(contextNote)
   parts.push(rules)
 
