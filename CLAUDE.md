@@ -1804,13 +1804,9 @@ Esta fase establece la fundación del proyecto. Al completarla tendrás:
 **Duración real:** 2-3 horas
 **Estado:** ✅ 100% completa y desplegada
 
-**Ver detalles completos:** `CLAUDE.md.backup` (secciones TAREA 1-4)
-
 ---
 
 ## 📋 Phase 2: AI Chat System (IN PROGRESS)
-
-**Ver documento completo:** [`PLAN_FASE2_CHAT.md`](./PLAN_FASE2_CHAT.md)
 
 **Enfoque:** 3 MVPs incrementales desplegables
 
