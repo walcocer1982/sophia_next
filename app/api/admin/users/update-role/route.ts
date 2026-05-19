@@ -1,19 +1,14 @@
-import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { requireRole } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
 
 const VALID_ROLES = ['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPERADMIN'] as const
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  if (session.user.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const session = await requireRole('SUPERADMIN')
+  if (session instanceof NextResponse) return session
 
   const { userId, newRole } = (await request.json()) as {
     userId?: string

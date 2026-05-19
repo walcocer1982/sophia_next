@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   // aprendizajes are stored implicitly via temas[].objetivo
 
   // Generate unique slug
-  let baseSlug = slugify(titulo)
+  const baseSlug = slugify(titulo)
   let slug = baseSlug
   let counter = 1
   while (await prisma.course.findFirst({ where: { slug, deletedAt: null } })) {

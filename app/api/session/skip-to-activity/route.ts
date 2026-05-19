@@ -1,6 +1,6 @@
-import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-utils'
 import { parseContentJson } from '@/lib/lesson-parser'
 import type { LessonContent } from '@/types/lesson'
 
@@ -13,10 +13,8 @@ export const runtime = 'nodejs'
  * Only works on isTest sessions.
  */
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const session = await requireAuth()
+  if (session instanceof NextResponse) return session
 
   const { sessionId, activityId } = (await request.json()) as {
     sessionId: string

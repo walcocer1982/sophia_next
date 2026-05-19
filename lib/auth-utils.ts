@@ -12,6 +12,23 @@ const ROLE_LEVEL: Record<string, number> = {
 }
 
 /**
+ * Verify there is an authenticated session.
+ *
+ * Returns the session, or a JSON `401 Unauthorized` response. Callers use the
+ * same convention as {@link requireRole}:
+ *
+ *   const session = await requireAuth()
+ *   if (session instanceof NextResponse) return session
+ */
+export async function requireAuth() {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return session
+}
+
+/**
  * Verify session has required minimum role. Returns session or error response.
  * Role hierarchy: SUPERADMIN > ADMIN > INSTRUCTOR > STUDENT
  */

@@ -1,4 +1,5 @@
-import { auth } from '@/auth'
+import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-utils'
 import { uploadImage } from '@/lib/cloudinary'
 
 export const runtime = 'nodejs'
@@ -8,10 +9,8 @@ const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 const MAX_SIZE = 5 * 1024 * 1024 // 5MB
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const session = await requireAuth()
+  if (session instanceof NextResponse) return session
 
   try {
     const formData = await request.formData()

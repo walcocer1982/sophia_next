@@ -3,6 +3,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff, Loader2, Calendar, Clock } from 'lucide-react'
+import { apiFetch } from '@/lib/api-client'
+import { useAsyncOp } from '@/lib/hooks/use-async-op'
+import { formatDateTime } from '@/lib/formatters'
 
 interface PublishToggleProps {
   lessonId: string
@@ -17,7 +20,8 @@ export function PublishToggle({ lessonId, initialPublished, initialAvailableAt, 
   const [isPublished, setIsPublished] = useState(initialPublished)
   const [availableAt, setAvailableAt] = useState<string | null>(initialAvailableAt || null)
   const [closesAfterHours, setClosesAfterHours] = useState(initialClosesAfterHours)
-  const [loading, setLoading] = useState(false)
+  const { run, isPending } = useAsyncOp()
+  const loading = isPending()
   const [showSchedule, setShowSchedule] = useState(false)
   const [scheduleDate, setScheduleDate] = useState('')
   const [scheduleTime, setScheduleTime] = useState('09:00')
@@ -36,61 +40,42 @@ export function PublishToggle({ lessonId, initialPublished, initialAvailableAt, 
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showSchedule])
 
-  async function publishNow() {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/planner/lesson/publish', {
+  async function setPublishState(body: Record<string, unknown>) {
+    return run(() =>
+      apiFetch<{ availableAt: string | null }>('/api/planner/lesson/publish', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lessonId, publish: true, availableAt: null, closesAfterHours, sectionId }),
+        json: { lessonId, sectionId, ...body },
       })
-      if (res.ok) {
-        const data = await res.json()
-        setIsPublished(true)
-        setAvailableAt(data.availableAt)
-        setShowSchedule(false)
-      }
-    } finally {
-      setLoading(false)
-    }
+    )
+  }
+
+  async function publishNow() {
+    const data = await setPublishState({ publish: true, availableAt: null, closesAfterHours })
+    if (!data) return
+    setIsPublished(true)
+    setAvailableAt(data.availableAt)
+    setShowSchedule(false)
   }
 
   async function publishScheduled() {
     if (!scheduleDate) return
-    setLoading(true)
-    try {
-      const dateTime = new Date(`${scheduleDate}T${scheduleTime}:00`)
-      const res = await fetch('/api/planner/lesson/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lessonId, publish: true, availableAt: dateTime.toISOString(), closesAfterHours, sectionId }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setIsPublished(true)
-        setAvailableAt(data.availableAt)
-        setShowSchedule(false)
-      }
-    } finally {
-      setLoading(false)
-    }
+    const dateTime = new Date(`${scheduleDate}T${scheduleTime}:00`)
+    const data = await setPublishState({
+      publish: true,
+      availableAt: dateTime.toISOString(),
+      closesAfterHours,
+    })
+    if (!data) return
+    setIsPublished(true)
+    setAvailableAt(data.availableAt)
+    setShowSchedule(false)
   }
 
   async function unpublish() {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/planner/lesson/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lessonId, publish: false, sectionId }),
-      })
-      if (res.ok) {
-        setIsPublished(false)
-        setAvailableAt(null)
-      }
-    } finally {
-      setLoading(false)
-    }
+    const data = await setPublishState({ publish: false })
+    if (!data) return
+    setIsPublished(false)
+    setAvailableAt(null)
   }
 
   const isScheduledFuture = availableAt && new Date(availableAt) > new Date()
@@ -114,8 +99,7 @@ export function PublishToggle({ lessonId, initialPublished, initialAvailableAt, 
         </Button>
         {isScheduledFuture && availableAt && (
           <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-            {new Date(availableAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}{' '}
-            {new Date(availableAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })}
+            {formatDateTime(availableAt)}
           </span>
         )}
       </div>

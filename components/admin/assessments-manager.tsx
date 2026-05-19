@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Plus, Copy, Power, Trash2, ExternalLink, BarChart3, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
@@ -184,11 +185,7 @@ export function AssessmentsManager({ lessonId, courseId, initialAssessments }: P
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <h3 className="font-semibold">{a.title}</h3>
-                  {a.isActive ? (
-                    <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">Activa</span>
-                  ) : (
-                    <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Cerrada</span>
-                  )}
+                  <StatusBadge status={a.isActive ? 'active' : 'inactive'} />
                 </div>
                 <div className="text-sm text-gray-500 space-x-3">
                   <span>Código: <span className="font-mono font-semibold text-gray-700">{a.code}</span></span>

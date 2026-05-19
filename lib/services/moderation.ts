@@ -1,4 +1,4 @@
-import { anthropic, HAIKU_MODEL } from '@/lib/anthropic'
+import { callAndParseJson, HAIKU_MODEL } from '@/lib/anthropic'
 import type { ModerationResult } from '@/types/lesson'
 
 /**
@@ -65,24 +65,6 @@ EVALÚA EL CONTENIDO EN CONTEXTO EDUCATIVO. No bloquees términos técnicos apro
 }
 
 /**
- * Extrae JSON de texto que puede contener explicaciones adicionales
- */
-function extractJSON(text: string): string {
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
-    return jsonMatch[0]
-  }
-
-  const cleanText = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
-  const jsonMatch2 = cleanText.match(/\{[\s\S]*\}/)
-  if (jsonMatch2) {
-    return jsonMatch2[0]
-  }
-
-  return text
-}
-
-/**
  * Modera el contenido del mensaje del estudiante
  * para detectar contenido inapropiado
  *
@@ -126,20 +108,10 @@ Responde ÚNICAMENTE con JSON válido (sin markdown):
 {"is_safe": true, "violations": [], "severity": "none", "requires_intervention": false}`
 
   try {
-    const response = await anthropic.messages.create({
+    return await callAndParseJson<ModerationResult>(moderationPrompt, {
       model: HAIKU_MODEL,
-      max_tokens: 300,
-      messages: [{ role: 'user', content: moderationPrompt }],
+      maxTokens: 300,
     })
-
-    const content = response.content[0]
-    if (content.type !== 'text') {
-      throw new Error('Respuesta inesperada de la API')
-    }
-
-    const jsonText = extractJSON(content.text)
-    const result = JSON.parse(jsonText) as ModerationResult
-    return result
   } catch (error) {
     console.error('Error en moderación:', error)
     // En caso de error, permitir por defecto (fail-open)

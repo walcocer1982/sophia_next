@@ -1,5 +1,7 @@
-import { auth } from '@/auth'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/auth-utils'
+import { getLessonSessionSafe } from '@/lib/lesson-session'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -18,10 +20,8 @@ export async function POST(request: Request) {
     return new Response('Not available in production', { status: 403 })
   }
 
-  const session = await auth()
-  if (!session?.user?.id) {
-    return new Response('Unauthorized', { status: 401 })
-  }
+  const session = await requireAuth()
+  if (session instanceof NextResponse) return session
 
   const { sessionId } = await request.json()
 
@@ -31,12 +31,8 @@ export async function POST(request: Request) {
 
   try {
     // 1. Validar que la sesión pertenece al usuario
-    const lessonSession = await prisma.lessonSession.findFirst({
-      where: {
-        id: sessionId,
-        userId: session.user.id,
-        endedAt: null,
-      },
+    const lessonSession = await getLessonSessionSafe(sessionId, session.user.id, {
+      mustBeActive: true,
     })
 
     if (!lessonSession) {

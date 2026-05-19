@@ -3,12 +3,13 @@ import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
 import { checkAndGeneratePartialReports } from '@/lib/lesson-report'
 import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '@/lib/rubric'
+import { calculateGrade } from '@/lib/grading'
 import { logger } from '@/lib/logger'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
 
-// Calculate partial grade from completed activities (same formula as chat/stream)
+// Partial grade from completed activities (shared formula — see lib/grading.ts)
 function calculatePartialGrade(activities: Array<{
   status: string
   attempts: number
@@ -17,24 +18,7 @@ function calculatePartialGrade(activities: Array<{
 }>): number | null {
   const completed = activities.filter(a => a.status === 'COMPLETED')
   if (completed.length === 0) return null
-
-  const comprehensionScores: Record<string, number> = {
-    memorized: 40, understood: 70, applied: 85, analyzed: 100,
-  }
-  const attemptPenalty = [1.0, 0.95, 0.90, 0.85, 0.80, 0.75]
-
-  let totalScore = 0
-  for (const ap of completed) {
-    const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
-    const lastAttempt = evidence?.attempts?.at(-1)
-    const level = lastAttempt?.analysis?.understanding_level || 'memorized'
-    const comprehension = comprehensionScores[level] || 40
-    const efficiency = attemptPenalty[Math.min(ap.attempts - 1, 5)]
-    const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
-    totalScore += (comprehension * 0.7) + (comprehension * 0.3 * efficiency * tangentPenalty)
-  }
-
-  return Math.round(totalScore / completed.length)
+  return calculateGrade(completed)
 }
 
 // Calculate rubric levels from session activities

@@ -1,4 +1,4 @@
-import { anthropic, HAIKU_MODEL } from '@/lib/anthropic'
+import { callAndParseJson, HAIKU_MODEL } from '@/lib/anthropic'
 import type { Activity, IntentClassification } from '@/types/lesson'
 
 export interface ConversationContext {
@@ -129,28 +129,10 @@ Responde SOLO con JSON válido (sin markdown):
 }`
 
   try {
-    const response = await anthropic.messages.create({
+    return await callAndParseJson<IntentClassification>(classificationPrompt, {
       model: HAIKU_MODEL,
-      max_tokens: 400,
-      messages: [{ role: 'user', content: classificationPrompt }],
+      maxTokens: 400,
     })
-
-    const content = response.content[0]
-    if (content.type !== 'text') {
-      throw new Error('Respuesta inesperada de la API')
-    }
-
-    // Extraer JSON del texto
-    let jsonText = content.text.trim()
-    jsonText = jsonText.replace(/```json\s*/g, '').replace(/```\s*/g, '')
-
-    const jsonMatch = jsonText.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      jsonText = jsonMatch[0]
-    }
-
-    const result = JSON.parse(jsonText) as IntentClassification
-    return result
   } catch (error) {
     console.error('Error en clasificación de intención:', error)
     // Valor por defecto en caso de error

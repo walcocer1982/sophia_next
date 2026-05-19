@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { Plus, GraduationCap, Users, BookOpen, Pencil, Trash2, Check, X } from 'lucide-react'
+import { apiFetch } from '@/lib/api-client'
+import { useAsyncOp } from '@/lib/hooks/use-async-op'
 
 type CareerRow = {
   id: string
@@ -17,10 +19,9 @@ type CareerRow = {
 export function CareerManager({ careers: initialCareers }: { careers: CareerRow[] }) {
   const [careers, setCareers] = useState(initialCareers)
   const [newName, setNewName] = useState('')
-  const [creating, setCreating] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
-  const [loading, setLoading] = useState<string | null>(null)
+  const { run, isPending } = useAsyncOp()
 
   const handleCreate = async () => {
     if (!newName.trim() || newName.trim().length < 3) {
@@ -28,28 +29,21 @@ export function CareerManager({ careers: initialCareers }: { careers: CareerRow[
       return
     }
 
-    setCreating(true)
-    try {
-      const res = await fetch('/api/admin/careers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() }),
-      })
+    const result = await run(
+      () =>
+        apiFetch<{ career: CareerRow }>('/api/admin/careers', {
+          method: 'POST',
+          json: { name: newName.trim() },
+        }),
+      { key: 'create' }
+    )
+    if (!result) return
 
-      if (res.ok) {
-        const { career } = (await res.json()) as { career: CareerRow }
-        setCareers((prev) => [...prev, career].sort((a, b) => a.name.localeCompare(b.name)))
-        setNewName('')
-        toast.success(`Carrera "${career.name}" creada`)
-      } else {
-        const data = (await res.json()) as { error?: string }
-        toast.error(data.error || 'Error al crear carrera')
-      }
-    } catch {
-      toast.error('Error de conexión')
-    } finally {
-      setCreating(false)
-    }
+    setCareers((prev) =>
+      [...prev, result.career].sort((a, b) => a.name.localeCompare(b.name))
+    )
+    setNewName('')
+    toast.success(`Carrera "${result.career.name}" creada`)
   }
 
   const handleRename = async (id: string) => {
@@ -58,55 +52,34 @@ export function CareerManager({ careers: initialCareers }: { careers: CareerRow[
       return
     }
 
-    setLoading(id)
-    try {
-      const res = await fetch('/api/admin/careers', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, name: editName.trim() }),
-      })
+    const result = await run(
+      () =>
+        apiFetch<{ career: CareerRow }>('/api/admin/careers', {
+          method: 'PUT',
+          json: { id, name: editName.trim() },
+        }),
+      { key: id }
+    )
+    if (!result) return
 
-      if (res.ok) {
-        const { career } = (await res.json()) as { career: CareerRow }
-        setCareers((prev) =>
-          prev.map((c) => (c.id === id ? career : c)).sort((a, b) => a.name.localeCompare(b.name))
-        )
-        setEditingId(null)
-        toast.success('Carrera renombrada')
-      } else {
-        const data = (await res.json()) as { error?: string }
-        toast.error(data.error || 'Error al renombrar')
-      }
-    } catch {
-      toast.error('Error de conexión')
-    } finally {
-      setLoading(null)
-    }
+    setCareers((prev) =>
+      prev.map((c) => (c.id === id ? result.career : c)).sort((a, b) => a.name.localeCompare(b.name))
+    )
+    setEditingId(null)
+    toast.success('Carrera renombrada')
   }
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`¿Eliminar la carrera "${name}"?`)) return
 
-    setLoading(id)
-    try {
-      const res = await fetch('/api/admin/careers', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      })
+    const result = await run(
+      () => apiFetch('/api/admin/careers', { method: 'DELETE', json: { id } }),
+      { key: id }
+    )
+    if (result === undefined) return
 
-      if (res.ok) {
-        setCareers((prev) => prev.filter((c) => c.id !== id))
-        toast.success(`Carrera "${name}" eliminada`)
-      } else {
-        const data = (await res.json()) as { error?: string }
-        toast.error(data.error || 'Error al eliminar')
-      }
-    } catch {
-      toast.error('Error de conexión')
-    } finally {
-      setLoading(null)
-    }
+    setCareers((prev) => prev.filter((c) => c.id !== id))
+    toast.success(`Carrera "${name}" eliminada`)
   }
 
   return (
@@ -122,7 +95,7 @@ export function CareerManager({ careers: initialCareers }: { careers: CareerRow[
         />
         <Button
           onClick={handleCreate}
-          disabled={creating || !newName.trim()}
+          disabled={isPending('create') || !newName.trim()}
           size="sm"
         >
           <Plus className="mr-1 h-4 w-4" />
@@ -154,7 +127,7 @@ export function CareerManager({ careers: initialCareers }: { careers: CareerRow[
                     variant="ghost"
                     className="h-7 w-7"
                     onClick={() => handleRename(career.id)}
-                    disabled={loading === career.id}
+                    disabled={isPending(career.id)}
                   >
                     <Check className="h-3.5 w-3.5 text-green-600" />
                   </Button>
@@ -198,7 +171,7 @@ export function CareerManager({ careers: initialCareers }: { careers: CareerRow[
                       variant="ghost"
                       className="h-7 w-7"
                       onClick={() => handleDelete(career.id, career.name)}
-                      disabled={loading === career.id}
+                      disabled={isPending(career.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-500" />
                     </Button>

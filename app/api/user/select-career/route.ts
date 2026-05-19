@@ -1,6 +1,6 @@
-import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
 
@@ -8,10 +8,8 @@ export const runtime = 'nodejs'
  * GET /api/user/select-career — List available careers
  */
 export async function GET() {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const session = await requireAuth()
+  if (session instanceof NextResponse) return session
 
   const careers = await prisma.career.findMany({
     orderBy: { name: 'asc' },
@@ -25,10 +23,8 @@ export async function GET() {
  * POST /api/user/select-career — Student selects their career
  */
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const session = await requireAuth()
+  if (session instanceof NextResponse) return session
 
   const { careerId } = (await request.json()) as { careerId?: string }
 

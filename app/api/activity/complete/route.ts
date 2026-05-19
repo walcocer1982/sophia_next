@@ -1,5 +1,6 @@
-import { auth } from '@/auth'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/auth-utils'
 import { parseContentJson, getNextActivity, getTotalActivities } from '@/lib/lesson-parser'
 import type { LessonContent } from '@/types/lesson'
 
@@ -10,10 +11,8 @@ export const runtime = 'nodejs'
  * Marcar actividad como completada y retornar siguiente actividad
  */
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return new Response('Unauthorized', { status: 401 })
-  }
+  const session = await requireAuth()
+  if (session instanceof NextResponse) return session
 
   const { sessionId, activityId } = await request.json()
 

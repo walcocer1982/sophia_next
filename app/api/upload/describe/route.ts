@@ -1,15 +1,13 @@
-import { auth } from '@/auth'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const session = await requireAuth()
+  if (session instanceof NextResponse) return session
 
   const { imageUrl, expectedContent } = (await request.json()) as {
     imageUrl?: string
