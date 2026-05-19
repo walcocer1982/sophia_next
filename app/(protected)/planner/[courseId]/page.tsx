@@ -171,6 +171,7 @@ export default async function CourseOverviewPage({
                   voiceEnabled: course.voiceEnabled,
                   allowPaste: course.allowPaste,
                   allowImagePaste: course.allowImagePaste,
+                  instructor: course.instructor,
                 }}
               />
             )}

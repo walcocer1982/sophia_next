@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     voiceEnabled?: boolean
     allowPaste?: boolean
     allowImagePaste?: boolean
+    instructor?: string
   }
 
   if (!body.courseId) {
@@ -39,6 +40,16 @@ export async function POST(request: Request) {
   if (typeof body.voiceEnabled === 'boolean') data.voiceEnabled = body.voiceEnabled
   if (typeof body.allowPaste === 'boolean') data.allowPaste = body.allowPaste
   if (typeof body.allowImagePaste === 'boolean') data.allowImagePaste = body.allowImagePaste
+  if (typeof body.instructor === 'string') {
+    const trimmed = body.instructor.trim()
+    if (trimmed.length < 20 || trimmed.length > 4000) {
+      return NextResponse.json(
+        { error: 'instructor debe tener entre 20 y 4000 caracteres' },
+        { status: 400 }
+      )
+    }
+    data.instructor = trimmed
+  }
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 })
@@ -64,6 +75,7 @@ export async function POST(request: Request) {
       voiceEnabled: true,
       allowPaste: true,
       allowImagePaste: true,
+      instructor: true,
     },
   })
 

@@ -427,7 +427,7 @@ export async function verifyStepCompletion(
     .map((m) => `${m.role === 'user' ? 'Estudiante' : 'Sophia'}: ${m.content}`)
     .join('\n')
 
-  const prompt = `Eres un verificador de progreso en una sesión INSTRUCCIONAL paso a paso (curso de código/software).
+  const prompt = `Eres un verificador de progreso en una sesión INSTRUCCIONAL paso a paso.
 
 PASO A COMPLETAR:
 ${stepInstruction}
@@ -438,7 +438,7 @@ ${history || '(sin historial)'}
 ÚLTIMO MENSAJE DEL ESTUDIANTE:
 "${userMessage}"
 
-¿El estudiante completó o confirmó este paso (lo hizo, pegó el resultado/salida, o indicó que lo terminó)? Reportar un error mientras lo intenta NO cuenta como completado.
+¿El estudiante completó o confirmó este paso (lo hizo, pegó evidencia del resultado, o indicó que lo terminó)? Reportar un error mientras lo intenta NO cuenta como completado.
 
 Responde ÚNICAMENTE con JSON:
 {"completed": true|false, "reason": "breve"}`
