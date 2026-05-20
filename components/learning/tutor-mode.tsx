@@ -9,6 +9,8 @@ import { VoiceButton } from './voice-button'
 import { ConversationDrawer } from './conversation-drawer'
 import { ChatInput, type ChatInputRef } from './chat-input'
 import { PlayAudioButton } from './play-audio-button'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { OptimisticMessage } from '@/types/chat'
 import { useRef } from 'react'
 
@@ -126,8 +128,22 @@ export function TutorMode({
               transition={{ duration: 0.3 }}
               className="max-w-2xl w-full bg-white rounded-2xl shadow-md p-4 sm:p-5"
             >
-              <p className="text-base sm:text-lg text-gray-800 leading-relaxed">
-                {lastAssistantMessage.content}
+              <div className="text-base sm:text-lg text-gray-800 leading-relaxed">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    p: ({ children }) => <p className="leading-relaxed mb-2 last:mb-0">{children}</p>,
+                    strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+                    em: ({ children }) => <em className="italic">{children}</em>,
+                    hr: () => <hr className="my-2 border-gray-300" />,
+                    ul: ({ children }) => <ul className="list-disc list-inside my-1.5 space-y-0.5">{children}</ul>,
+                    ol: ({ children }) => <ol className="list-decimal list-inside my-1.5 space-y-0.5">{children}</ol>,
+                    li: ({ children }) => <li className="ml-2">{children}</li>,
+                    code: ({ children }) => <code className="px-1 py-0.5 rounded bg-gray-100 text-gray-800 font-mono text-sm">{children}</code>,
+                  }}
+                >
+                  {lastAssistantMessage.content}
+                </ReactMarkdown>
                 {lastAssistantMessage.status === 'streaming' && (
                   <motion.span
                     animate={{ opacity: [1, 0.3, 1] }}
@@ -137,7 +153,7 @@ export function TutorMode({
                     ▊
                   </motion.span>
                 )}
-              </p>
+              </div>
               {/* Play audio button - only show for completed messages (not while streaming) */}
               {lastAssistantMessage.status !== 'streaming' && lastAssistantMessage.content.length > 10 && (
                 <div className="mt-2 flex justify-end">
