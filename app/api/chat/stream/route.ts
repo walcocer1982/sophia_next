@@ -414,19 +414,45 @@ export async function POST(request: Request) {
           ],
         })
 
-        // Process stream events
+        // Process stream events.
+        // El marcador PROJECT_BRIEF (---PROJECT_BRIEF---{...}---END_PROJECT_BRIEF---)
+        // se persiste server-side pero NUNCA debe verse en vivo al estudiante.
+        // Buffer pequeño que retiene los últimos ~25 chars antes de reenviar al
+        // cliente, así detectamos el inicio del marcador aunque venga partido en
+        // varios chunks. Cuando aparece, suprimimos todo lo posterior.
+        const PROJECT_BRIEF_MARK = '---PROJECT_BRIEF---'
+        const HOLDBACK = PROJECT_BRIEF_MARK.length + 5
+        let unsent = ''
+        let suppressFurther = false
+
+        const flushToClient = (text: string) => {
+          if (!text) return
+          const data = JSON.stringify({ type: 'content', text })
+          controller.enqueue(encoder.encode(`data: ${data}\n\n`))
+        }
+
         for await (const event of claudeStream) {
           if (event.type === 'content_block_delta') {
             if (event.delta.type === 'text_delta') {
               const text = event.delta.text
               fullResponse += text
+              if (suppressFurther) continue
 
-              // Send chunk to client
-              const data = JSON.stringify({
-                type: 'content',
-                text: text,
-              })
-              controller.enqueue(encoder.encode(`data: ${data}\n\n`))
+              unsent += text
+              const markerIdx = unsent.indexOf(PROJECT_BRIEF_MARK)
+              if (markerIdx >= 0) {
+                // Mandar la parte conversacional anterior al marcador y cortar.
+                flushToClient(unsent.slice(0, markerIdx))
+                suppressFurther = true
+                unsent = ''
+                continue
+              }
+
+              // Retener los últimos HOLDBACK chars por si el marcador llega partido.
+              if (unsent.length > HOLDBACK) {
+                flushToClient(unsent.slice(0, -HOLDBACK))
+                unsent = unsent.slice(-HOLDBACK)
+              }
             }
           } else if (event.type === 'message_start') {
             inputTokens = event.message.usage.input_tokens
@@ -434,6 +460,9 @@ export async function POST(request: Request) {
             outputTokens = event.usage.output_tokens
           }
         }
+
+        // Drenar el buffer si no apareció el marcador (caso normal sin brief).
+        if (!suppressFurther && unsent) flushToClient(unsent)
 
         // 4. Save messages to database (con activityId y timestamps explícitos para orden correcto)
         const userTimestamp = new Date()

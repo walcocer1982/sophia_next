@@ -8,6 +8,20 @@ import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
 
+/**
+ * Calcula el próximo sessionAttempt para evitar violar el unique
+ * [userId, lessonId, sessionAttempt] cuando ya hay sesiones previas
+ * (de prueba, completadas o de cualquier otro estado).
+ */
+async function nextSessionAttempt(userId: string, lessonId: string): Promise<number> {
+  const last = await prisma.lessonSession.findFirst({
+    where: { userId, lessonId },
+    orderBy: { sessionAttempt: 'desc' },
+    select: { sessionAttempt: true },
+  })
+  return (last?.sessionAttempt ?? 0) + 1
+}
+
 export async function POST(request: Request) {
   // 1. Auth check
   const session = await auth()
@@ -160,11 +174,12 @@ export async function POST(request: Request) {
       await prisma.lessonSession.delete({ where: { id: existingTest.id } })
     }
 
+    const sessionAttempt = await nextSessionAttempt(session.user.id, lessonId)
     const lessonSession = await prisma.lessonSession.create({
       data: {
         userId: session.user.id,
         lessonId,
-        sessionAttempt: 1,
+        sessionAttempt,
         startedAt: new Date(),
         lastActivityAt: new Date(),
         activityId: startActivityId,
@@ -217,11 +232,12 @@ export async function POST(request: Request) {
 
   // 9. If no active session, create one with first activity
   if (!lessonSession) {
+    const sessionAttempt = await nextSessionAttempt(session.user.id, lessonId)
     lessonSession = await prisma.lessonSession.create({
       data: {
         userId: session.user.id,
         lessonId: lessonId,
-        sessionAttempt: 1,
+        sessionAttempt,
         startedAt: new Date(),
         lastActivityAt: new Date(),
         activityId: firstActivity.activityId,
