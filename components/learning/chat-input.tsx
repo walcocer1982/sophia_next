@@ -3,6 +3,7 @@
 import {
   useState,
   useRef,
+  useEffect,
   forwardRef,
   useImperativeHandle,
   KeyboardEvent,
@@ -68,6 +69,18 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
       textareaRef.current?.focus()
     }
   }), [])
+
+  // Auto-foco cuando el input vuelve a estar habilitado (Sophia terminó de
+  // responder, error de envío, etc.). Evita depender de un setTimeout externo
+  // y cubre todos los paths (onDone, onError, abort).
+  const prevDisabledRef = useRef<boolean>(!!disabled)
+  useEffect(() => {
+    if (prevDisabledRef.current && !disabled) {
+      // requestAnimationFrame asegura que el DOM ya reflejó disabled=false
+      requestAnimationFrame(() => textareaRef.current?.focus())
+    }
+    prevDisabledRef.current = !!disabled
+  }, [disabled])
 
   const handleSend = () => {
     if ((message.trim() || attachments.length > 0) && !disabled) {
