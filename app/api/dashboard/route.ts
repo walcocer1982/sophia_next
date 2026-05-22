@@ -70,6 +70,7 @@ export async function GET() {
               grade: true,
               lastActivityAt: true,
               activityId: true,
+              user: { select: { name: true } },
               activities: {
                 where: { status: 'COMPLETED' },
                 select: { activityId: true, attempts: true },
@@ -112,6 +113,16 @@ export async function GET() {
   }
 
   const lessonRows: LessonRow[] = []
+
+  interface HistoryEntry {
+    studentName: string
+    courseTitle: string
+    careerName: string
+    lessonTitle: string
+    completedAt: string
+    grade: number | null
+  }
+  const history: HistoryEntry[] = []
 
   const globalStudents = new Set<string>()
   let globalActiveNow = 0
@@ -187,6 +198,18 @@ export async function GET() {
         funnel,
       })
 
+      // Historial: cada sesión completada es un registro
+      for (const s of completed) {
+        history.push({
+          studentName: s.user?.name || 'Estudiante',
+          courseTitle: course.title,
+          careerName: course.career?.name || 'Sin carrera',
+          lessonTitle: lesson.title,
+          completedAt: (s.completedAt as Date).toISOString(),
+          grade: s.grade,
+        })
+      }
+
       // Global stats
       for (const s of lesson.sessions) {
         globalStudents.add(s.userId)
@@ -197,13 +220,18 @@ export async function GET() {
     }
   }
 
+  // Historial: más reciente primero, tope 200 registros
+  history.sort((a, b) => b.completedAt.localeCompare(a.completedAt))
+
   return NextResponse.json({
     stats: {
       activeNow: globalActiveNow,
       inDifficulty: globalInDifficulty,
       completedToday: globalCompletedToday,
       totalStudents: globalStudents.size,
+      totalCompleted: history.length,
     },
     lessons: lessonRows,
+    history: history.slice(0, 200),
   })
 }

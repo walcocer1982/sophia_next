@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
-import { Activity, AlertTriangle, CheckCircle, Users } from 'lucide-react'
+import { Activity, AlertTriangle, CheckCircle, Users, History } from 'lucide-react'
 import Link from 'next/link'
+import { formatDateTime } from '@/lib/formatters'
 
 interface FunnelStep {
   index: number
@@ -32,14 +33,25 @@ interface LessonRow {
   funnel: FunnelStep[]
 }
 
+interface HistoryEntry {
+  studentName: string
+  courseTitle: string
+  careerName: string
+  lessonTitle: string
+  completedAt: string
+  grade: number | null
+}
+
 interface DashboardData {
   stats: {
     activeNow: number
     inDifficulty: number
     completedToday: number
     totalStudents: number
+    totalCompleted: number
   }
   lessons: LessonRow[]
+  history: HistoryEntry[]
 }
 
 export default function DashboardPage() {
@@ -92,7 +104,7 @@ export default function DashboardPage() {
 
   if (!data) return null
 
-  const { stats, lessons } = data
+  const { stats, lessons, history } = data
 
   // Group lessons by career > course
   const grouped: Record<string, {
@@ -300,6 +312,65 @@ export default function DashboardPage() {
           </Link>
         </div>
       )}
+
+      {/* Historial de finalizaciones */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 border-b pb-2">
+          <History className="h-5 w-5 text-gray-500" />
+          <h2 className="text-lg font-semibold text-gray-800">Historial de finalizaciones</h2>
+          <span className="text-xs text-gray-400">
+            ({history.length}{history.length === 200 ? '+' : ''} registros)
+          </span>
+        </div>
+
+        {history.length === 0 ? (
+          <p className="text-sm text-gray-400 py-4">Aún no hay lecciones completadas.</p>
+        ) : (
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50">
+                  <th className="text-left py-2.5 px-4 font-medium text-gray-500 text-xs uppercase tracking-wide">Alumno</th>
+                  {isSuperadmin && (
+                    <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Carrera</th>
+                  )}
+                  <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Curso</th>
+                  <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Lección</th>
+                  <th className="text-center py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Nota</th>
+                  <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Completado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((h, i) => (
+                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                    <td className="py-2.5 px-4 font-medium text-gray-800">{h.studentName}</td>
+                    {isSuperadmin && (
+                      <td className="py-2.5 px-3 text-gray-500">{h.careerName}</td>
+                    )}
+                    <td className="py-2.5 px-3 text-gray-600">{h.courseTitle}</td>
+                    <td className="py-2.5 px-3 text-gray-600">{h.lessonTitle}</td>
+                    <td className="text-center py-2.5 px-3">
+                      {h.grade !== null ? (
+                        <span className={`font-semibold ${
+                          h.grade >= 70 ? 'text-emerald-600' :
+                          h.grade >= 50 ? 'text-amber-600' : 'text-red-500'
+                        }`}>
+                          {h.grade}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-gray-500 text-xs whitespace-nowrap">
+                      {formatDateTime(h.completedAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
