@@ -47,7 +47,16 @@ export async function GET() {
         select: { name: true },
       },
       lessons: {
-        where: { isPublished: true },
+        // Monitoreo: incluir lecciones publicadas O con actividad real de
+        // estudiantes (sesiones no-test). Una lección publicada solo por
+        // sección puede tener isPublished=false pero sí alumnos activos —
+        // antes quedaba invisible en el dashboard.
+        where: {
+          OR: [
+            { isPublished: true },
+            { sessions: { some: { isTest: false } } },
+          ],
+        },
         select: {
           id: true,
           title: true,
