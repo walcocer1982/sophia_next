@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -22,7 +23,9 @@ interface SectionSelectorProps {
 
 export function SectionSelector({ grouped, existingEnrollments }: SectionSelectorProps) {
   const router = useRouter()
+  const { update } = useSession()
   const [loading, setLoading] = useState<string | null>(null)
+  const [continuing, setContinuing] = useState(false)
   const [enrolled, setEnrolled] = useState<Set<string>>(new Set(existingEnrollments))
 
   async function enrollInSection(sectionId: string) {
@@ -45,8 +48,18 @@ export function SectionSelector({ grouped, existingEnrollments }: SectionSelecto
     }
   }
 
-  function goToLessons() {
+  async function goToLessons() {
+    setContinuing(true)
+    // Refresca el JWT para que hasEnrollment pase a true tras matricularse.
+    // Sin esto, el proxy lee el token viejo (hasEnrollment=false) y rebota
+    // de vuelta a /select-section → loop de "no puedo ingresar".
+    try {
+      await update()
+    } catch {
+      // si el refresh falla, igual intentamos navegar
+    }
     router.push('/lessons')
+    router.refresh()
   }
 
   const hasEnrollments = enrolled.size > 0
@@ -101,8 +114,12 @@ export function SectionSelector({ grouped, existingEnrollments }: SectionSelecto
       ))}
 
       {hasEnrollments && (
-        <Button onClick={goToLessons} className="w-full">
-          Continuar a mis lecciones
+        <Button onClick={goToLessons} disabled={continuing} className="w-full">
+          {continuing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            'Continuar a mis lecciones'
+          )}
         </Button>
       )}
     </div>
