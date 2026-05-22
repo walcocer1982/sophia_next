@@ -106,7 +106,14 @@ export async function GET(
       career: { select: { id: true, name: true } },
       user: { select: { name: true } },
       lessons: {
-        where: { isPublished: true },
+        // Incluir lecciones publicadas O con actividad real (sesiones no-test),
+        // para que el historial muestre cursos publicados por sección o ya cerrados.
+        where: {
+          OR: [
+            { isPublished: true },
+            { sessions: { some: { isTest: false } } },
+          ],
+        },
         orderBy: { order: 'asc' },
         select: {
           id: true,

@@ -37,7 +37,14 @@ export async function GET(
 
   // Get all student sessions for this course's lessons
   const lessons = await prisma.lesson.findMany({
-    where: { courseId, isPublished: true },
+    // Publicadas O con sesiones reales (mismo criterio que el resto del dashboard).
+    where: {
+      courseId,
+      OR: [
+        { isPublished: true },
+        { sessions: { some: { isTest: false } } },
+      ],
+    },
     orderBy: { order: 'asc' },
     select: {
       id: true,
