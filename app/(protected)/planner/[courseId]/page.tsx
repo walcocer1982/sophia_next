@@ -99,8 +99,11 @@ export default async function CourseOverviewPage({
     notFound()
   }
 
-  // Career admins can publish but not edit design (same as section instructors)
-  const isSectionInstructor = (!!sectionInstructor || isCareerAdmin) && !isLeadOrSuper
+  // Quién puede DISEÑAR: el líder (dueño), SUPERADMIN, o un ADMIN de la misma
+  // carrera del curso. Solo los instructores de sección quedan en la vista de
+  // monitoreo (publicar por sección), sin edición de diseño.
+  const canDesign = isLeadOrSuper || isCareerAdmin
+  const isSectionInstructor = !canDesign && !!sectionInstructor
 
   // Get sections for this course (for section/career instructor publish)
   const courseSections = isSectionInstructor
