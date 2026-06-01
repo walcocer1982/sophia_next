@@ -127,6 +127,7 @@ export async function GET(
               id: true,
               userId: true,
               completedAt: true,
+              endedAt: true,
               passed: true,
               grade: true,
               startedAt: true,
@@ -179,6 +180,40 @@ export async function GET(
     ? allSessionsRaw.filter(s => allowedStudentIds!.has(s.user.id))
     : allSessionsRaw
 
+  // === MARK ABANDONED SESSIONS (persist + reclassify) ===
+  // Guests del kiosko (@assessment.local) sin actividad > 1h -> abandoned.
+  // Estudiantes regulares sin actividad > 24h -> abandoned.
+  // Solo aplica a sesiones aún no completadas y sin endedAt previo.
+  const GUEST_THRESHOLD_MS = 1 * 60 * 60 * 1000
+  const REGULAR_THRESHOLD_MS = 24 * 60 * 60 * 1000
+  const GUEST_EMAIL_SUFFIX = '@assessment.local'
+  const nowMs = now.getTime()
+  const toAbandon: { id: string; endedAt: Date }[] = []
+  for (const s of allSessions) {
+    if (s.completedAt || s.endedAt) continue
+    const isGuest = s.user.email?.endsWith(GUEST_EMAIL_SUFFIX) ?? false
+    const threshold = isGuest ? GUEST_THRESHOLD_MS : REGULAR_THRESHOLD_MS
+    const inactivityMs = nowMs - new Date(s.lastActivityAt).getTime()
+    if (inactivityMs > threshold) {
+      // Cierra la sesión 30 min después de la última actividad (estimación
+      // razonable: la persona dejó el dispositivo poco después).
+      const closedAt = new Date(new Date(s.lastActivityAt).getTime() + 30 * 60 * 1000)
+      toAbandon.push({ id: s.id, endedAt: closedAt })
+      // Mutar en memoria para que la clasificación siguiente lo vea
+      ;(s as { endedAt: Date | null }).endedAt = closedAt
+    }
+  }
+  if (toAbandon.length > 0) {
+    await prisma.$transaction(
+      toAbandon.map(t =>
+        prisma.lessonSession.update({
+          where: { id: t.id },
+          data: { endedAt: t.endedAt },
+        })
+      )
+    )
+  }
+
   // Build activity metadata from contentJson (for all lessons)
   const activityMeta: Record<string, { title: string; lessonTitle: string; index: number; total: number }> = {}
   for (const lesson of course.lessons) {
@@ -194,9 +229,9 @@ export async function GET(
     })
   }
 
-  // Active students (session not completed, activity in last 2h)
+  // Active students (session not completed, no endedAt, activity in last 2h)
   const activeStudents = allSessions
-    .filter(s => !s.completedAt && s.lastActivityAt > twoHoursAgo)
+    .filter(s => !s.completedAt && !s.endedAt && s.lastActivityAt > twoHoursAgo)
     .map(s => {
       const meta = s.activityId ? activityMeta[s.activityId] : null
       const currentActivityProgress = s.activities.find(a => a.activityId === s.activityId)
@@ -231,9 +266,9 @@ export async function GET(
       }
     })
 
-  // Inactive students (started but no activity in 2h+ and not completed)
+  // Inactive students (en pausa: no actividad en 2h+, NO abandonada, NO completada)
   const inactiveStudents = allSessions
-    .filter(s => !s.completedAt && s.lastActivityAt <= twoHoursAgo)
+    .filter(s => !s.completedAt && !s.endedAt && s.lastActivityAt <= twoHoursAgo)
     .map(s => {
       const meta = s.activityId ? activityMeta[s.activityId] : null
       const currentActivityProgress = s.activities.find(a => a.activityId === s.activityId)
@@ -290,6 +325,38 @@ export async function GET(
         grade: s.grade ?? calculatePartialGrade(s.activities),
         ...calculateSessionRubric(s.activities),
         completedAt: s.completedAt,
+      }
+    })
+
+  // Abandoned students (endedAt set, not completed): se fueron sin terminar.
+  // Su nota parcial refleja lo que alcanzaron a hacer.
+  const abandonedStudents = allSessions
+    .filter(s => !!s.endedAt && !s.completedAt)
+    .map(s => {
+      const meta = s.activityId ? activityMeta[s.activityId] : null
+      const currentActivityProgress = s.activities.find(a => a.activityId === s.activityId)
+      const activeMinutes = Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 1000 / 60)
+      const isGuest = s.user.email?.endsWith(GUEST_EMAIL_SUFFIX) ?? false
+      return {
+        userId: s.user.id,
+        name: s.user.name,
+        email: s.user.email,
+        image: s.user.image,
+        sessionId: s.id,
+        activityIndex: meta?.index || null,
+        activityTotal: meta?.total || null,
+        activityTitle: meta?.title || null,
+        lessonTitle: meta?.lessonTitle || null,
+        attempts: currentActivityProgress?.attempts || 0,
+        percentage: s.progress || 0,
+        startedAt: s.startedAt,
+        lastActivityAt: s.lastActivityAt,
+        endedAt: s.endedAt,
+        activeMinutes,
+        messageCount: s._count.messages,
+        grade: s.grade ?? calculatePartialGrade(s.activities),
+        ...calculateSessionRubric(s.activities),
+        isGuest,
       }
     })
 
@@ -464,6 +531,7 @@ export async function GET(
     monitoring: {
       active: activeStudents,
       inactive: inactiveStudents,
+      abandoned: abandonedStudents,
       completed: completedStudents,
     },
     alerts: inactivityAlerts,

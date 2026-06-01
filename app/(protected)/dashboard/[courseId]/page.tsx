@@ -32,6 +32,8 @@ interface MonitoredStudent {
   overallLevel: string | null
   hoursInactive?: number
   completedAt?: string
+  endedAt?: string
+  isGuest?: boolean
 }
 
 interface FunnelActivity {
@@ -74,6 +76,7 @@ interface CourseData {
   monitoring: {
     active: MonitoredStudent[]
     inactive: MonitoredStudent[]
+    abandoned: MonitoredStudent[]
     completed: MonitoredStudent[]
   }
   alerts: InactivityAlert[]
@@ -262,9 +265,10 @@ export default function CourseDashboardPage() {
               !search || (s.name?.toLowerCase().includes(search.toLowerCase())) || (s.email?.toLowerCase().includes(search.toLowerCase()))
             const filteredActive = monitoring.active.filter(filterStudent)
             const filteredInactive = monitoring.inactive.filter(filterStudent)
+            const filteredAbandoned = (monitoring.abandoned ?? []).filter(filterStudent)
             const filteredCompleted = monitoring.completed.filter(filterStudent)
 
-            return filteredActive.length === 0 && filteredInactive.length === 0 && filteredCompleted.length === 0 ? (
+            return filteredActive.length === 0 && filteredInactive.length === 0 && filteredAbandoned.length === 0 && filteredCompleted.length === 0 ? (
               <p className="text-sm text-gray-500 py-4 text-center">No se encontraron estudiantes</p>
             ) : (
             <div className="overflow-x-auto">
@@ -410,6 +414,70 @@ export default function CourseDashboardPage() {
                         <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
                           <Clock className="h-2.5 w-2.5" />
                           {s.hoursInactive}h inactivo
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {/* Abandoned students (started but did not finish, marked as ended) */}
+                  {filteredAbandoned.map(s => (
+                    <tr key={`abandoned-${s.userId}-${s.sessionId}`} className="border-b border-gray-100 bg-gray-50/40 hover:bg-gray-100/50 text-gray-600">
+                      <td className="py-1.5 pl-3" title="Abandonado">
+                        <span className="inline-flex rounded-full h-2 w-2 bg-gray-400" />
+                      </td>
+                      <td className="py-1.5">
+                        <Link href={`/dashboard/${courseId}/${s.userId}`} className="hover:text-blue-600">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium text-gray-700 text-sm">{s.name || s.email}</p>
+                            {s.isGuest && (
+                              <span className="inline-flex items-center gap-0.5 bg-amber-50 text-amber-700 px-1 py-0.5 rounded text-[9px] font-medium">
+                                👤 invitado
+                              </span>
+                            )}
+                          </div>
+                        </Link>
+                      </td>
+                      <td className="py-1.5">
+                        {s.activityIndex && s.activityTotal ? (
+                          <div>
+                            <span className="text-xs">Act {s.activityIndex}/{s.activityTotal}</span>
+                            {s.lessonTitle && (
+                              <p className="text-[10px] text-gray-400 truncate max-w-[150px]">{s.lessonTitle}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="py-1.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-gray-400 rounded-full" style={{ width: `${s.percentage}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-500">{Math.round(s.percentage)}%</span>
+                        </div>
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-500">
+                        {new Date(s.startedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-500">
+                        {new Date(s.startedAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-500">
+                        {new Date(s.lastActivityAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </td>
+                      <td className="py-1.5 text-xs text-gray-500">{s.activeMinutes} min</td>
+                      <td className="py-1.5 text-xs text-gray-500">{s.messageCount}</td>
+                      <td className="py-1.5">
+                        {s.grade !== null ? (
+                          <span className="text-xs font-medium text-gray-600">{s.grade}</span>
+                        ) : (
+                          <RubricBadge level={s.overallLevel} />
+                        )}
+                      </td>
+                      <td className="py-1.5">
+                        <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                          Abandonado
                         </span>
                       </td>
                     </tr>
