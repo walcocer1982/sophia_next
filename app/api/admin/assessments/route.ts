@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       createdById: session.user.id,
       timeLimitMin: timeLimitMin || 10,
       collectEmail: !!collectEmail,
-      collectDni: collectDni !== false, // Default true
+      collectDni: !!collectDni, // Default false (demos sin DNI)
       expiresAt,
     },
   })

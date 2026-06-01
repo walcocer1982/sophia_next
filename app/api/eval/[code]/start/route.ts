@@ -18,8 +18,11 @@ export async function POST(
   const { code } = await params
   const { firstName, lastName, dni, email } = await request.json()
 
-  if (!firstName || !lastName) {
-    return NextResponse.json({ error: 'Nombre y apellido son requeridos' }, { status: 400 })
+  // Solo el nombre es obligatorio. Apellido/DNI/email son opcionales para
+  // simplificar el flujo de demos/convención (el admin puede pedirlos
+  // explícitamente activando collectDni/collectEmail en el Assessment).
+  if (!firstName || !firstName.trim()) {
+    return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 })
   }
 
   const assessment = await prisma.assessment.findUnique({
@@ -34,7 +37,10 @@ export async function POST(
   // Create a temporary guest user
   // Email format ensures uniqueness even with duplicate names
   const guestEmail = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@assessment.local`
-  const fullName = `${firstName.trim()} ${lastName.trim()}`.slice(0, 100)
+  const trimmedLast = lastName?.trim() || ''
+  const fullName = (
+    trimmedLast ? `${firstName.trim()} ${trimmedLast}` : firstName.trim()
+  ).slice(0, 100)
 
   const guestUser = await prisma.user.create({
     data: {
@@ -58,7 +64,7 @@ export async function POST(
     data: {
       assessmentId: assessment.id,
       firstName: firstName.trim().slice(0, 80),
-      lastName: lastName.trim().slice(0, 80),
+      lastName: trimmedLast ? trimmedLast.slice(0, 80) : null,
       dni: dni?.trim().slice(0, 20) || null,
       email: email?.trim().slice(0, 100) || null,
       sessionId: lessonSession.id,

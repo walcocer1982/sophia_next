@@ -32,7 +32,7 @@ export function AssessmentsManager({ lessonId, courseId, initialAssessments }: P
   const [showForm, setShowForm] = useState(initialAssessments.length === 0)
   const [title, setTitle] = useState('')
   const [timeLimitMin, setTimeLimitMin] = useState(10)
-  const [collectDni, setCollectDni] = useState(true)
+  const [collectDni, setCollectDni] = useState(false)
   const [collectEmail, setCollectEmail] = useState(false)
 
   const handleCreate = async (e: React.FormEvent) => {

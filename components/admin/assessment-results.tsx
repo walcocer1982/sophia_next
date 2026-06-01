@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 interface Participant {
   id: string
   firstName: string
-  lastName: string
+  lastName: string | null
   dni: string | null
   email: string | null
   startedAt: string
@@ -35,7 +35,7 @@ export function AssessmentResults({ title, code, participants }: Props) {
       ['Nombre', 'Apellido', 'DNI', 'Correo', 'Inicio', 'Fin', 'Nota /20', 'Nota /100', 'Aprobado'],
       ...participants.map(p => [
         p.firstName,
-        p.lastName,
+        p.lastName || '',
         p.dni || '',
         p.email || '',
         new Date(p.startedAt).toLocaleString('es-PE'),
@@ -108,7 +108,7 @@ export function AssessmentResults({ title, code, participants }: Props) {
             {participants.map(p => (
               <tr key={p.id} className="border-b last:border-b-0">
                 <td className="px-4 py-3">
-                  <div className="font-medium text-gray-800">{p.firstName} {p.lastName}</div>
+                  <div className="font-medium text-gray-800">{p.firstName}{p.lastName ? ` ${p.lastName}` : ''}</div>
                   {p.email && <div className="text-xs text-gray-500">{p.email}</div>}
                 </td>
                 <td className="px-4 py-3 text-gray-600">{p.dni || '—'}</td>

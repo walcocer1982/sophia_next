@@ -46,14 +46,13 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
 
   // Form state
   const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
   const [dni, setDni] = useState('')
   const [email, setEmail] = useState('')
 
   const handleStart = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!firstName.trim() || !lastName.trim()) {
-      toast.error('Nombre y apellido son obligatorios')
+    if (!firstName.trim()) {
+      toast.error('El nombre es obligatorio')
       return
     }
     if (assessment.collectDni && !dni.trim()) {
@@ -66,7 +65,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
       const res = await fetch(`/api/eval/${assessment.code}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName, lastName, dni, email }),
+        body: JSON.stringify({ firstName, dni, email }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -75,7 +74,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
       const data = await res.json()
       setParticipantId(data.participantId)
       setSessionId(data.sessionId)
-      setParticipantName(`${firstName.trim()} ${lastName.trim()}`)
+      setParticipantName(firstName.trim())
       setStage('session')
     } catch (e) {
       toast.error((e as Error).message)
@@ -94,7 +93,6 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
     await fetch(`/api/eval/${assessment.code}/end`, { method: 'POST' }).catch(() => {})
     setStage('register')
     setFirstName('')
-    setLastName('')
     setDni('')
     setEmail('')
     setParticipantId(null)
@@ -172,20 +170,9 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                       id="firstName"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
-                      placeholder="Juan"
+                      placeholder="Tu nombre"
                       required
                       autoFocus
-                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="lastName">Apellido *</label>
-                    <Input
-                      id="lastName"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      placeholder="Pérez"
-                      required
                       className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
                     />
                   </div>

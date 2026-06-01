@@ -342,7 +342,7 @@ model AssessmentParticipant {
   id              String    @id @default(cuid())
   assessmentId    String
   firstName       String
-  lastName        String
+  lastName        String?
   dni             String?
   email           String?
   startedAt       DateTime  @default(now())
