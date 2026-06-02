@@ -107,8 +107,10 @@ export async function POST(request: Request) {
   const existingEvidence = (activityProgress?.evidenceData as {
     attempts?: Array<unknown>
     scaffoldingTurns?: number
+    wasExplained?: boolean
   } | null) || { attempts: [] }
   const scaffoldingTurns = existingEvidence.scaffoldingTurns || 0
+  const wasExplained = existingEvidence.wasExplained === true
 
   // Mismo cap por tipo que chat/stream
   const SCAFFOLDING_CAP_BY_TYPE: Record<string, number> = {
@@ -133,7 +135,7 @@ export async function POST(request: Request) {
   // Verificar (CODE = binario, resto = socrático)
   const verification = lessonSession.lesson.course?.methodology === 'CODE'
     ? await verifyStepCompletion(content, currentActivity, conversationHistory)
-    : await verifyActivityCompletion(content, currentActivity, conversationHistory)
+    : await verifyActivityCompletion(content, currentActivity, conversationHistory, wasExplained)
 
   // Aplicar cap de scaffolding
   let willScaffold = false
@@ -163,6 +165,9 @@ export async function POST(request: Request) {
   const newEvidence = JSON.parse(JSON.stringify({
     attempts: [...(existingEvidence.attempts || []), attemptRecord],
     scaffoldingTurns: willScaffold ? scaffoldingTurns + 1 : scaffoldingTurns,
+    // En voz, gpt-realtime maneja las explicaciones por su cuenta — preservamos
+    // el flag si fue seteado antes en modo texto pero no lo seteamos acá.
+    wasExplained,
   }))
 
   if (verification.ready_to_advance) {

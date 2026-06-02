@@ -2,7 +2,7 @@ import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
-import { buildSystemPrompt, getMaxTokensForActivity } from '@/lib/prompt-builder'
+import { buildSystemPrompt, getMaxTokensForActivity, isStudentUnsureStrong } from '@/lib/prompt-builder'
 import { isPassing } from '@/lib/rubric'
 import { calculateGrade, calculateCompletionGrade } from '@/lib/grading'
 import { checkRateLimit } from '@/lib/rate-limit'
@@ -219,8 +219,18 @@ export async function POST(request: Request) {
   const existingEvidence = (activityProgress?.evidenceData as {
     attempts?: Array<unknown>
     scaffoldingTurns?: number
+    wasExplained?: boolean
   } | null) || { attempts: [] }
   const scaffoldingTurns = existingEvidence.scaffoldingTurns || 0
+  const wasExplained = existingEvidence.wasExplained === true
+
+  // Detectar si esta vuelta vamos a inyectar una MINI-EXPLICACIÓN (no-sé fuerte
+  // + primer intento + no fue explicado antes). Si sí, marcamos el flag para
+  // que el verificador en la próxima vuelta sepa "ya hubo enseñanza".
+  const willExplainThisTurn =
+    !wasExplained &&
+    (activityProgress?.attempts || 0) <= 1 &&
+    isStudentUnsureStrong(message)
 
   // Cap de sub-preguntas (desglose) por tipo de actividad. Reflection cierra
   // pronto porque es una sola pregunta abierta — no se desglosa repetidamente.
@@ -305,7 +315,7 @@ export async function POST(request: Request) {
       // CODE: verificación binaria (¿completó el paso?). REFLECTIVE: socrática.
       : (lessonSession.lesson.course?.methodology === 'CODE'
           ? verifyStepCompletion(message, currentActivity, conversationHistory)
-          : verifyActivityCompletion(message, currentActivity, conversationHistory))
+          : verifyActivityCompletion(message, currentActivity, conversationHistory, wasExplained))
   ])
 
   // Logging de clasificación
@@ -435,6 +445,7 @@ export async function POST(request: Request) {
     lastUserMessage: message,  // Para detectar "no sé" y extraer escenario
     methodology: lessonSession.lesson.course?.methodology ?? 'REFLECTIVE',
     projectBrief: lessonSession.projectBrief ?? undefined,
+    wasExplained,
   })
 
   // ═══════════════════════════════════════════════════════════════
@@ -617,6 +628,8 @@ export async function POST(request: Request) {
             attempts: [...(existingEvidence.attempts || []), newAttempt],
             // Preservar el conteo de desglose (informativo: cuántas sub-preguntas se usaron antes de completar)
             scaffoldingTurns,
+            // Mantener el flag de explicación si ya se dio o se va a dar ahora
+            wasExplained: wasExplained || willExplainThisTurn,
           }))
 
           await prisma.activityProgress.upsert({
@@ -790,6 +803,8 @@ export async function POST(request: Request) {
             attempts: [...(existingEvidence.attempts || []), failedAttempt],
             // Conservar y avanzar el contador de desglose si Sophia va a desglosar
             scaffoldingTurns: willScaffold ? scaffoldingTurns + 1 : scaffoldingTurns,
+            // Mantener/setear el flag de explicación didáctica
+            wasExplained: wasExplained || willExplainThisTurn,
           }))
 
           await prisma.activityProgress.upsert({

@@ -260,7 +260,8 @@ function buildAccumulatedStudentResponse(
 export async function verifyActivityCompletion(
   userMessage: string,
   activity: Activity,
-  conversationHistory?: { role: 'user' | 'assistant'; content: string }[]
+  conversationHistory?: { role: 'user' | 'assistant'; content: string }[],
+  wasExplained: boolean = false,
 ): Promise<ActivityCompletionResult> {
   // Backwards compatibility: support both old and new structure
   // Old: verification.criteria[], New: verification.success_criteria.must_include[]
@@ -288,10 +289,22 @@ export async function verifyActivityCompletion(
   // Construir respuesta acumulada del estudiante para evaluar criterios repartidos en varios mensajes
   const accumulatedResponse = buildAccumulatedStudentResponse(userMessage, conversationHistory)
 
-  // Construir contexto para verificación
-  const verificationPrompt = isOpenEnded
+  // Construir contexto para verificación. Si Sophia ya dio una mini-explicación
+  // didáctica en esta actividad, agregamos un bloque que le pide al evaluador
+  // distinguir entre repetición de lo enseñado vs integración con palabras propias.
+  const explainedClause = wasExplained
+    ? `\n\nCONTEXTO IMPORTANTE: Sophia YA EXPLICÓ el concepto en esta actividad antes de esta respuesta.
+REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
+- Si el estudiante solo REPITE lo que Sophia le acaba de explicar → understanding_level = "memorized" (Inicio)
+- Si el estudiante INTEGRA la explicación con sus palabras / un ejemplo propio / una conexión → understanding_level = "understood" (Proceso) MÁXIMO
+- NUNCA marques "applied" (Logrado) ni "analyzed" (Destacado) después de explicación — esos niveles requieren que el estudiante haya demostrado dominio SIN que se le enseñara primero.
+- Cap absoluto post-explicación: understood (Proceso).`
+    : ''
+
+  const verificationPrompt = (isOpenEnded
     ? buildOpenEndedVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, hintsSection, expectedLevel)
     : buildStandardVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, successCriteria, hintsSection, minCompleteness, expectedLevel)
+  ) + explainedClause
 
   try {
     const response = await anthropic.messages.create({
@@ -345,6 +358,13 @@ export async function verifyActivityCompletion(
     // Si la confianza es baja pero el porcentaje es alto, confiar más en el porcentaje
     if (result.confidence === 'low' && result.completeness_percentage >= 70) {
       result.ready_to_advance = true
+    }
+
+    // Defensa en profundidad: si Sophia ya enseñó, cap absoluto en 'understood'
+    // (Proceso). El cap por código garantiza que aunque el AI ignore la regla
+    // del prompt, el nivel nunca pase de Proceso post-explicación.
+    if (wasExplained && (result.understanding_level === 'applied' || result.understanding_level === 'analyzed')) {
+      result.understanding_level = 'understood'
     }
 
     return result

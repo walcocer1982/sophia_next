@@ -15,6 +15,7 @@ interface PromptBuilderContext {
   lastUserMessage?: string  // Último mensaje del estudiante (para detectar "no sé")
   methodology?: 'REFLECTIVE' | 'CODE'  // Metodología del curso (default REFLECTIVE)
   projectBrief?: unknown               // Propuesta acordada en la sesión-bisagra (CODE personalizado)
+  wasExplained?: boolean               // Sophia ya dio una mini-explicación didáctica en esta actividad
 }
 
 /**
@@ -46,6 +47,9 @@ function isStudentUnsure(message: string): boolean {
     /pas[oó]/i,                          // "paso" como rendirse
   ]
 
+  // (función de detección "fuerte" abajo — patrones específicos)
+  void 0
+
   if (unsurePatterns.some(pattern => pattern.test(trimmed))) {
     return true
   }
@@ -63,6 +67,33 @@ function isStudentUnsure(message: string): boolean {
   }
 
   return false
+}
+
+/**
+ * Detector "fuerte" de no-sé: el estudiante no tiene ninguna base sobre el tema
+ * y necesita que se le ENSEÑE el concepto, no que se le hagan más preguntas.
+ *
+ * Distinto de isStudentUnsure() porque excluye:
+ * - "no estoy seguro" / "no me animo" (duda, sí tiene algo)
+ * - "no entiendo" (puede ser de la pregunta, no del tema)
+ *
+ * Solo dispara para confesiones literales de desconocimiento total del tema.
+ */
+export function isStudentUnsureStrong(message: string): boolean {
+  const trimmed = message.trim().toLowerCase()
+  const strongPatterns = [
+    /^no\s*s[eé][.!]*$/i,                       // "no sé" / "no se" puro
+    /^no\s*(lo\s*)?s[eé][.,!\s]*nada/i,         // "no sé nada"
+    /no\s*tengo\s*(ni\s*)?idea/i,                // "no tengo idea"
+    /ni\s*(la\s+m[aá]s\s+m[ií]nima\s+)?idea/i,  // "ni idea"
+    /no\s*conozco/i,                             // "no conozco X"
+    /nunca\s*(lo\s+)?(he\s+|hab[ií]a\s+)?(visto|escuchado|o[ií]do)/i, // "nunca lo había escuchado"
+    /no\s*me\s*ha\s*explicado/i,                 // "no me ha explicado"
+    /no\s*lo\s*entiendo\s*nada/i,                // "no lo entiendo nada"
+    /^pas[oó][.!]*$/i,                           // "paso"
+    /^me\s*rindo[.!]*$/i,                        // "me rindo"
+  ]
+  return strongPatterns.some(p => p.test(trimmed))
 }
 
 /**
@@ -195,6 +226,7 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
     lastUserMessage = '',
     methodology = 'REFLECTIVE',
     projectBrief,
+    wasExplained = false,
   } = context
   const isCodeMethodology = methodology === 'CODE'
 
@@ -659,36 +691,69 @@ ${extractedScenario ? `📍 ESCENARIO A USAR (OBLIGATORIO):
     dynamicPrompt += `\n\nLÍMITE OFF-TOPIC: Redirige al tema.`
   }
 
-  // Estudiante dice "no sé" - replantear usando el escenario de la PREGUNTA DE VERIFICACIÓN
+  // Estudiante dice "no sé": dos caminos según severidad y si ya fue explicado.
+  // - "Fuerte" + primer intento + sin explicación previa → MINI-EXPLICACIÓN didáctica
+  //   (el visitante no tiene base, hay que enseñar antes de seguir preguntando)
+  // - "Suave" o segunda vez → reformulación con escenario (sin opciones reveladas)
   if (studentIsUnsure) {
-    // Extraer el escenario de la pregunta para hacerlo más explícito
-    const questionText = verification.question
-    const scenarioMatch = questionText.match(/[Tt]e describo[^:]*:\s*([^?]+)/i) ||
-                          questionText.match(/[Ii]magina\s+(?:que\s+)?(?:estás\s+en\s+)?([^?]+)/i) ||
-                          questionText.match(/[Oo]bserva[:]?\s*([^?]+)/i) ||
-                          questionText.match(/[Ss]i tenemos[^?]+:\s*([^?]+)/i) ||
-                          questionText.match(/[Ee]n\s+(?:un[ao]?\s+)?(taller|fábrica|obra|cocina|hospital)[^?]*/i)
-    const extractedScenario = scenarioMatch ? scenarioMatch[1]?.trim() || scenarioMatch[0]?.trim() : null
+    const isStrong = isStudentUnsureStrong(lastUserMessage)
+    const firstTime = (attempts || 0) <= 1
+    const shouldExplain = isStrong && firstTime && !wasExplained
 
-    dynamicPrompt += `\n\n🚨 ESTUDIANTE DICE "NO SÉ" - APLICA TÉCNICA "NO OPT OUT"
+    if (shouldExplain) {
+      // Mini-explicación derivada de los criterios `must_include` de la actividad.
+      // Sophia entrega el CONCEPTO base, no la respuesta a la pregunta.
+      const criteria = verification.success_criteria?.must_include || []
+      const criteriaList = criteria.length > 0
+        ? criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')
+        : '(usar la información del bloque OBJETIVO de la actividad)'
 
+      dynamicPrompt += `\n\n📚 ESTUDIANTE NO TIENE BASE — ENSEÑÁ ANTES DE PREGUNTAR
+
+El estudiante dijo "no sé" / "no conozco" — necesita que le ENSEÑES el concepto, NO más preguntas.
+
+CONCEPTOS QUE SE ESPERABAN (úsalos como base de la explicación):
+${criteriaList}
+
+CÓMO RESPONDER (90-120 palabras MÁXIMO):
+1. Empezá con: "Te explico brevemente:" o "Va de menos a más:"
+2. Explicá los conceptos en TUS PROPIAS PALABRAS, simples y concretas. NO los listes como bullets — armá 2-3 oraciones fluidas.
+3. Cerrá con: "Ahora con esto en mente, [reformulá la pregunta de verificación]"
+
+PREGUNTA ORIGINAL A REFORMULAR AL FINAL:
+"${verification.question}"
+
+⛔ PROHIBIDO:
+- Empezar con la pregunta (primero ENSEÑÁ)
+- Dar la respuesta exacta a la pregunta (solo el CONCEPTO base que necesita)
+- Listar criterios literal (parafraseá)
+- Texto >120 palabras
+- Más preguntas exploratorias antes de la pregunta de verificación reformulada`
+    } else {
+      // Caso "suave" o ya hubo explicación previa → reformulación sin opciones reveladas
+      const questionText = verification.question
+      const scenarioMatch = questionText.match(/[Tt]e describo[^:]*:\s*([^?]+)/i) ||
+                            questionText.match(/[Ii]magina\s+(?:que\s+)?(?:estás\s+en\s+)?([^?]+)/i) ||
+                            questionText.match(/[Oo]bserva[:]?\s*([^?]+)/i)
+      const extractedScenario = scenarioMatch ? scenarioMatch[1]?.trim() || scenarioMatch[0]?.trim() : null
+
+      dynamicPrompt += `\n\n🚨 ESTUDIANTE DICE "NO SÉ" — DESCOMPONÉ SIN REVELAR
+
+${wasExplained ? 'Ya le explicaste antes en esta actividad. No vuelvas a re-explicar todo.' : ''}
 PREGUNTA ORIGINAL: "${verification.question}"
 ${extractedScenario ? `ESCENARIO: "${extractedScenario}"` : ''}
 
-TU RESPUESTA DEBE:
-1. Descomponer la pregunta en partes pequeñas
-2. Usar el MISMO escenario (no inventar otro)
-3. Ofrecer opciones concretas para guiar
+CÓMO RESPONDER (máx 60 palabras):
+1. Hacé UNA sub-pregunta CONCRETA que ataque el criterio más simple primero
+2. Usá el MISMO escenario (no inventes otro)
+3. La sub-pregunta debe inducir, NO revelar la respuesta
 
-EJEMPLO DE RESPUESTA CORRECTA:
-"Vamos por partes. ${extractedScenario ? `En el escenario que te describí, ` : ''}había [elemento del escenario].
-¿Qué tipo de [concepto] crees que representa: [opción A] o [opción B]?"
-
-⛔ NO HAGAS:
+⛔ PROHIBIDO:
+- Listar opciones para que elija ("¿es A o B?")
+- Dar la respuesta dentro de la sub-pregunta
 - Re-explicar toda la teoría
-- Listar todos los tipos o categorías otra vez
-- Inventar un escenario nuevo "más simple"
-- Volver a conceptos de actividades anteriores`
+- Cambiar el escenario por uno más simple`
+    }
   }
 
   // Scaffolding docente: progresión de 5 intentos
