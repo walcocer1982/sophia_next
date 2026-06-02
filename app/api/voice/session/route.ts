@@ -97,14 +97,34 @@ export async function POST(request: Request) {
   }
 
   const data = await response.json()
+  // Diagnóstico temporal: shape del response (claves de nivel superior y tipo
+  // de client_secret). NO loguea el token mismo. Quitar tras confirmar el shape.
+  console.log('[voice/session] OpenAI response shape:', {
+    topLevelKeys: Object.keys(data),
+    clientSecretType: typeof data.client_secret,
+    clientSecretIsObject: data.client_secret && typeof data.client_secret === 'object',
+    clientSecretKeys:
+      data.client_secret && typeof data.client_secret === 'object'
+        ? Object.keys(data.client_secret)
+        : null,
+    hasTopLevelValue: 'value' in data,
+  })
+
   // El cliente (use-voice-chat) espera client_secret.value (objeto). La API
-  // nueva devuelve client_secret como string "ek_..." — lo envolvemos.
-  const secretValue: string =
-    typeof data.client_secret === 'string'
-      ? data.client_secret
-      : data.client_secret?.value ?? ''
+  // nueva puede devolver: (1) string "ek_..." al top-level, (2) objeto
+  // { value, expires_at }, o (3) el response entero ES el secret y tiene .value.
+  let secretValue = ''
+  if (typeof data.client_secret === 'string') {
+    secretValue = data.client_secret
+  } else if (data.client_secret && typeof data.client_secret === 'object') {
+    secretValue = data.client_secret.value ?? ''
+  } else if (typeof data.value === 'string') {
+    // Caso: el response entero ES el client secret (sin wrapper).
+    secretValue = data.value
+  }
+
   return NextResponse.json({
-    client_secret: { value: secretValue, expires_at: data.expires_at },
+    client_secret: { value: secretValue, expires_at: data.expires_at ?? data.client_secret?.expires_at },
     session_id: data.session?.id ?? data.id ?? null,
   })
 }
