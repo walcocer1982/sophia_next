@@ -37,6 +37,11 @@ export function useVoiceChat({
   const recordingStartRef = useRef<number>(0)
   const stuckTimerRef = useRef<NodeJS.Timeout | null>(null)
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null)
+  // Guard contra auto-encadenamiento: si el server emite response.created
+  // mientras Sophia todavía está respondiendo, cancelamos la nueva respuesta.
+  // Evita el patrón observado donde Sophia hablaba 2-3 veces seguidas sin
+  // que el estudiante respondiera.
+  const responseInFlightRef = useRef<boolean>(false)
   const MIN_RECORDING_MS = 1500 // Minimum 1.5 seconds to ensure complete sentence
   const STUCK_TIMEOUT_MS = 30000 // Reset to ready if stuck in processing/speaking for 30s
   const IDLE_AFTER_DELTA_MS = 5000 // If no audio delta for 5s, response likely ended
@@ -101,6 +106,22 @@ export function useVoiceChat({
     try {
       const data = JSON.parse(event.data)
 
+      // Guard contra auto-encadenamiento: si llega response.created mientras
+      // ya hay una respuesta en curso (Sophia no terminó de hablar), cancelamos
+      // la nueva. Esto evita el caso observado donde Sophia decía 2-3 mensajes
+      // seguidos sin que el estudiante respondiera.
+      if (data.type === 'response.created') {
+        if (responseInFlightRef.current) {
+          console.warn('[Voice] response.created mientras anterior en curso — cancelando duplicada')
+          const dc = dataChannelRef.current
+          if (dc?.readyState === 'open') {
+            dc.send(JSON.stringify({ type: 'response.cancel' }))
+          }
+          return
+        }
+        responseInFlightRef.current = true
+      }
+
       // Log important events for debugging truncation
       if (
         data.type === 'response.done' ||
@@ -111,6 +132,10 @@ export function useVoiceChat({
         console.log('[Voice]', data.type, data)
         if (data.type === 'response.done' && data.response?.status_details) {
           console.warn('[Voice] Response ended:', data.response.status_details)
+        }
+        // Liberar el guard cuando la respuesta termina (done/cancelled/error)
+        if (data.type !== 'rate_limits.updated') {
+          responseInFlightRef.current = false
         }
       }
 

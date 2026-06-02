@@ -44,6 +44,8 @@ export function buildVoiceInstructions({
   parts.push(`Respuestas breves: 2-3 oraciones, completas, sin listas.`)
   parts.push(`Usa diálogo socrático: preguntas abiertas que activen razonamiento.`)
   parts.push(`Evita preguntas cerradas como "¿quieres saber más?" — simplemente continúa.`)
+  parts.push(`TURN-TAKING: Después de hacer UNA pregunta, ESPERÁ la respuesta del estudiante. NO sigas hablando ni hagas otra pregunta hasta que el estudiante responda con voz. Si pasa silencio, simplemente esperá — no insistas con otra pregunta.`)
+  parts.push(`PROHIBIDO el "filler retórico": "¿te das cuenta?", "¿ves cómo?", "¿qué te hace pensar?", "¿cómo crees que se mide el éxito?" — son confirmaciones disfrazadas de pregunta, no aportan a la evaluación. Si querés cerrar un punto, decí "Exacto." o "Correcto." y avanzá al siguiente concepto, sin más preguntas vacías.`)
   parts.push(``)
   parts.push(`Objetivo: ${lessonObjective}`)
 

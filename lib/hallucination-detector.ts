@@ -61,5 +61,24 @@ export function detectHallucination(message: string): HallucinationCheck {
     }
   }
 
+  // 5) Repetición masiva: la misma palabra (≥4 chars) aparece 3 o más veces
+  //    en un texto. Caso real observado: "desatado, flotación, lixiviación,
+  //    desatado, flotación, lixiviación, desatado..." — Whisper en loop
+  //    transcribiendo una palabra pegada al micrófono o ambient noise.
+  if (trimmed.length > 30) {
+    const words = trimmed.toLowerCase().match(/[a-zA-ZáéíóúñÁÉÍÓÚÑ]{4,}/g) || []
+    if (words.length >= 6) {
+      const counts: Record<string, number> = {}
+      for (const w of words) counts[w] = (counts[w] || 0) + 1
+      const maxRepeat = Math.max(...Object.values(counts))
+      const totalWords = words.length
+      // Si una palabra ocupa >40% del total Y se repite 3+ veces, es ruido
+      if (maxRepeat >= 3 && maxRepeat / totalWords > 0.4) {
+        const topWord = Object.entries(counts).find(([, c]) => c === maxRepeat)?.[0]
+        return { isHallucination: true, reason: `palabra "${topWord}" repetida ${maxRepeat} veces (${Math.round((maxRepeat / totalWords) * 100)}% del texto)` }
+      }
+    }
+  }
+
   return { isHallucination: false }
 }
