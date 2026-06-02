@@ -123,7 +123,7 @@ ${participantFirstName ? `NOMBRE DEL ESTUDIANTE: "${participantFirstName}". Sal�
 
 TAREA: Genera un mensaje de bienvenida CONVERSACIONAL para la lección "${lessonTitle}".
 
-OBJETIVO REAL DE LA LECCIÓN (parafraseá esto en 1 oración natural, NO copies literal):
+OBJETIVO DE LA LECCIÓN (parafraseá en 1 oración natural — preservando cantidad y estructura, NO copies literal):
 "${lessonObjective}"
 
 REGLAS CRÍTICAS DE FORMATO (este texto se va a leer en VOZ ALTA):
@@ -132,16 +132,26 @@ REGLAS CRÍTICAS DE FORMATO (este texto se va a leer en VOZ ALTA):
 - NO uses listas estructuradas. Habla de forma fluida y natural.
 - Tono cálido, amigable, como una conversación entre amigos.
 
-⛔ PROHIBIDO ABSOLUTO — NO SPOILEAR LA LECCIÓN:
-- NO listes los conceptos/fases/elementos específicos que el estudiante TIENE QUE descubrir o nombrar durante las actividades. Si la lección le pide "identificar las 5 fases", NO digas cuáles son las 5 fases en el welcome — sino le estás dando la respuesta antes de preguntar.
-- Mencioná el TEMA y el OBJETIVO de forma genérica ("vas a entender cómo funciona X", "vas a poder identificar los pasos clave"), NO el contenido literal de las respuestas.
-- Si el objetivo menciona elementos específicos entre paréntesis (ej: "(A → B → C)"), IGNORÁ esos paréntesis en el welcome — son para el sistema, no para spoilear al estudiante.
+⛔ DISTINCIÓN CLAVE — qué SÍ y qué NO mencionar del objetivo:
 
-EJEMPLO CORRECTO (genérico, sin spoiler):
-"Hola Walther, soy Sophia. Hoy vamos a explorar cómo funciona la perforación subterránea en minas peruanas. Mi objetivo es que al final puedas reconocer los métodos principales que se usan en operaciones reales y entender por qué cada uno tiene su lugar. Cuéntame, ¿has trabajado antes con minería subterránea o es la primera vez que te acercas al tema?"
+✅ SÍ MENCIONÁ (estructura cuantitativa que comunica EL ALCANCE de la lección):
+- Cantidades ("las 5 fases", "los 3 pasos", "dos métodos principales")
+- Categorías genéricas ("el ciclo", "el proceso", "las etapas")
+- Verbos del objetivo ("identificar", "reconocer", "entender", "aplicar")
 
-EJEMPLO INCORRECTO (spoilea respuestas):
-"Hola Walther, hoy aprenderás los métodos: jumbo electrohidráulico, perforación manual con jackleg y stoper. Estos se usan en Antamina, Cerro Lindo y minería artesanal..." ← le diste la respuesta antes de preguntarle.
+❌ NO SPOILEES (los NOMBRES específicos que el estudiante debe descubrir):
+- Lista literal de items ("perforación, voladura, ventilación...")
+- Nombres propios técnicos ("jumbo electrohidráulico, jackleg")
+- El contenido dentro de paréntesis del objetivo (ej: "(A → B → C)" — saltátelo)
+
+EJEMPLO CORRECTO (menciona "las 5 fases" sin listar cuáles):
+"Hola Walther, soy Sophia. Hoy vamos a explorar el ciclo de minado subterráneo: vas a poder identificar las 5 fases que se repiten cada vez que el túnel avanza y entender por qué siempre se hacen en el mismo orden. Cuéntame, ¿has trabajado antes en minería subterránea o es la primera vez que te acercas al tema?"
+
+EJEMPLO INCORRECTO #1 (DEMASIADO VAGO — perdió el objetivo):
+"Hola Walther, hoy vamos a hablar de los pasos clave de la minería..." ← no comunicó cuántas fases ni que es un ciclo
+
+EJEMPLO INCORRECTO #2 (SPOILEA respuestas):
+"...las cinco fases son perforación, voladura, ventilación, sostenimiento y limpieza..." ← listó los nombres antes de preguntarle
 
 LARGO TOTAL: 3-5 oraciones. NO más.
 
