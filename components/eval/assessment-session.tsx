@@ -307,14 +307,15 @@ export function AssessmentSession({
   }
 
   const handleFinishEarly = async () => {
-    if (!confirm('¿Estás seguro de terminar la evaluación ahora?')) return
+    if (!confirm('¿Querés salir de la clase?')) return
     await finishAssessment()
   }
 
+  // Tiempo restante: lo mostramos informativo (sin presión visual). El visitante
+  // sabe cuánto le queda pero no le aparece en rojo parpadeante.
   const minutes = Math.floor(secondsLeft / 60)
   const seconds = secondsLeft % 60
   const timeLabel = `${minutes}:${seconds.toString().padStart(2, '0')}`
-  const lowTime = secondsLeft <= 60
 
   return (
     <div className="h-[calc(100vh-64px)] w-full max-w-[1600px] mx-auto px-3 py-2 flex flex-col gap-2 overflow-hidden">
@@ -325,8 +326,8 @@ export function AssessmentSession({
           <strong className="text-white">{participantName}</strong>
         </div>
         <div className="flex items-center gap-3">
-          <div className={`flex items-center gap-2 font-mono text-lg font-semibold ${lowTime ? 'text-red-400 animate-pulse' : 'text-cyan-300'}`}>
-            <Clock className="h-5 w-5" />
+          <div className="flex items-center gap-2 font-mono text-sm text-slate-400" title="Tiempo restante en la clase">
+            <Clock className="h-4 w-4" />
             {timeLabel}
           </div>
           <Button
@@ -334,10 +335,10 @@ export function AssessmentSession({
             size="sm"
             variant="outline"
             onClick={handleFinishEarly}
-            className="gap-1.5 bg-red-500/10 border-red-400/30 text-red-300 hover:bg-red-500/20 hover:text-red-200"
+            className="gap-1.5 bg-white/5 border-white/20 text-slate-300 hover:bg-white/10 hover:text-white"
           >
             <LogOut className="h-4 w-4" />
-            Terminar
+            Salir
           </Button>
         </div>
       </div>

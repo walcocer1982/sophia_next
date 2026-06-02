@@ -40,7 +40,7 @@ export default async function AssessmentsPage({
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
-      <h1 className="text-2xl font-bold mb-1">Evaluaciones</h1>
+      <h1 className="text-2xl font-bold mb-1">Clases</h1>
       <p className="text-sm text-gray-500 mb-6">
         Curso: {lesson.course.title} · Lección: {lesson.title}
       </p>

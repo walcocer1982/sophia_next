@@ -331,7 +331,7 @@ export default async function CourseOverviewPage({
                         <Link href={`/planner/${courseId}/${lesson.id}/assessments`}>
                           <Button variant="outline" size="sm" className="gap-1.5">
                             <Users className="h-3.5 w-3.5" />
-                            Evaluaciones
+                            Clases
                           </Button>
                         </Link>
                         <PublishToggle

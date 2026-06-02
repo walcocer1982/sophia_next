@@ -67,7 +67,7 @@ export function AssessmentsManager({ lessonId, courseId, initialAssessments }: P
       setAssessments(mapped)
       setShowForm(false)
       setTitle('')
-      toast.success(`Evaluación creada con código: ${data.code}`)
+      toast.success(`Clase creada con código: ${data.code}`)
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -83,18 +83,18 @@ export function AssessmentsManager({ lessonId, courseId, initialAssessments }: P
     })
     if (res.ok) {
       setAssessments(prev => prev.map(a => a.id === id ? { ...a, isActive: !isActive } : a))
-      toast.success(isActive ? 'Evaluación cerrada' : 'Evaluación reabierta')
+      toast.success(isActive ? 'Clase cerrada' : 'Clase reabierta')
     } else {
       toast.error('Error al actualizar')
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar esta evaluación y todos los datos de participantes?')) return
+    if (!confirm('¿Eliminar esta clase y todos los datos de participantes?')) return
     const res = await fetch(`/api/admin/assessments/${id}`, { method: 'DELETE' })
     if (res.ok) {
       setAssessments(prev => prev.filter(a => a.id !== id))
-      toast.success('Evaluación eliminada')
+      toast.success('Clase eliminada')
     } else {
       toast.error('Error al eliminar')
     }
@@ -112,18 +112,18 @@ export function AssessmentsManager({ lessonId, courseId, initialAssessments }: P
       {!showForm ? (
         <Button onClick={() => setShowForm(true)} className="gap-2">
           <Plus className="h-4 w-4" />
-          Nueva evaluación
+          Nueva clase
         </Button>
       ) : (
         <form onSubmit={handleCreate} className="bg-white border rounded-lg p-6 space-y-4">
-          <h2 className="font-semibold">Nueva evaluación</h2>
+          <h2 className="font-semibold">Nueva clase</h2>
 
           <div>
             <label className="block text-sm font-medium mb-1">Título *</label>
             <Input
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="Ej: Evaluación ProExplo - Sesión 1"
+              placeholder="Ej: Clase ProExplo - Sesión 1"
               required
             />
           </div>
@@ -163,7 +163,7 @@ export function AssessmentsManager({ lessonId, courseId, initialAssessments }: P
           <div className="flex gap-2">
             <Button type="submit" disabled={creating}>
               {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Crear evaluación
+              Crear clase
             </Button>
             <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
               Cancelar
@@ -176,7 +176,7 @@ export function AssessmentsManager({ lessonId, courseId, initialAssessments }: P
       <div className="space-y-3">
         {assessments.length === 0 && (
           <p className="text-sm text-gray-500 text-center py-8">
-            No hay evaluaciones creadas todavía.
+            No hay clases creadas todavía.
           </p>
         )}
         {assessments.map(a => (
@@ -221,7 +221,7 @@ export function AssessmentsManager({ lessonId, courseId, initialAssessments }: P
                   variant="outline"
                   onClick={() => handleToggle(a.id, a.isActive)}
                   className="gap-1.5"
-                  title={a.isActive ? 'Cerrar evaluación' : 'Reabrir'}
+                  title={a.isActive ? 'Cerrar clase' : 'Reabrir'}
                 >
                   <Power className="h-3.5 w-3.5" />
                 </Button>

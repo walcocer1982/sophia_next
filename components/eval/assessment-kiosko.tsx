@@ -56,7 +56,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
       return
     }
     if (assessment.collectDni && !dni.trim()) {
-      toast.error('DNI es obligatorio para esta evaluación')
+      toast.error('DNI es obligatorio para esta clase')
       return
     }
 
@@ -69,7 +69,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'No se pudo iniciar la evaluación')
+        throw new Error(err.error || 'No se pudo iniciar la clase')
       }
       const data = await res.json()
       setParticipantId(data.participantId)
@@ -105,8 +105,8 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
       <div className="min-h-screen flex items-center justify-center bg-[#0a1628] p-4">
         <div className="text-center max-w-md">
           <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={120} height={120} className="mx-auto mb-6 rounded-lg" />
-          <h1 className="text-2xl font-bold text-white mb-2">Evaluación cerrada</h1>
-          <p className="text-slate-400">Esta evaluación ya no está disponible.</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Clase cerrada</h1>
+          <p className="text-slate-400">Esta clase ya no está disponible.</p>
         </div>
       </div>
     )
@@ -134,7 +134,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
           <div className="flex items-center gap-2">
             <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={32} height={32} className="rounded-full ring-2 ring-white/10 object-cover scale-110" />
             <div>
-              <h1 className="text-sm font-semibold text-white">Sophia · Evaluación</h1>
+              <h1 className="text-sm font-semibold text-white">Sophia · Clase</h1>
               <p className="text-xs text-slate-400">{assessment.title}</p>
             </div>
           </div>
@@ -205,8 +205,8 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                   )}
 
                   <div className="text-xs text-slate-400 bg-cyan-500/5 border border-cyan-400/20 rounded-lg p-3">
-                    Tendrás <strong className="text-cyan-300">{assessment.timeLimitMin} minutos</strong> para completar la evaluación.
-                    Recibirás un puntaje sobre <strong className="text-cyan-300">20</strong> al finalizar.
+                    La clase dura aproximadamente <strong className="text-cyan-300">{assessment.timeLimitMin} minutos</strong>.
+                    Conversá con Sophia, ella te va guiando paso a paso.
                   </div>
 
                   <Button
@@ -220,7 +220,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                         Iniciando...
                       </>
                     ) : (
-                      'Iniciar evaluación'
+                      'Iniciar clase'
                     )}
                   </Button>
                 </form>
