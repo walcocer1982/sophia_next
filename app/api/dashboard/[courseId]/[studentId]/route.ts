@@ -112,19 +112,9 @@ export async function GET(
 
       const lastAttempt = evidence?.attempts?.at(-1)
 
-      // Calculate rubric level for this activity
-      const level = lastAttempt?.analysis?.understanding_level || 'memorized'
-      const completeness = lastAttempt?.analysis?.completeness_percentage || 0
       const passedCriteria = progress?.passedCriteria !== false // default true for old data
-
-      // Find best attempt completeness for rubric calculation
-      const bestCompleteness = evidence?.attempts
-        ? Math.max(...evidence.attempts.map(a => (a.analysis as { completeness_percentage?: number })?.completeness_percentage || 0))
-        : completeness
-
-      const responseType = lastAttempt?.analysis?.response_type
-      const rubricLevel = progress?.status === 'COMPLETED'
-        ? calculateRubricLevel(level, bestCompleteness, progress.attempts, passedCriteria, responseType)
+      const rubricLevel = progress?.status === 'COMPLETED' && progress
+        ? calculateRubricLevel(progress, passedCriteria)
         : null
 
       return {

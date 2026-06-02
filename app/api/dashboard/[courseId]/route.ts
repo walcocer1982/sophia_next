@@ -32,15 +32,8 @@ function calculateSessionRubric(activities: Array<{
   if (completed.length === 0) return { lastActivityLevel: null, overallLevel: null }
 
   const levels: RubricLevel[] = completed.map(ap => {
-    const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string; completeness_percentage?: number; response_type?: string } }> } | null
-    const bestCompleteness = evidence?.attempts
-      ? Math.max(...evidence.attempts.map(a => a.analysis?.completeness_percentage || 0))
-      : 0
-    const lastAttempt = evidence?.attempts?.at(-1)
-    const level = lastAttempt?.analysis?.understanding_level || 'memorized'
-    const responseType = lastAttempt?.analysis?.response_type
     const passed = ap.passedCriteria !== false
-    return calculateRubricLevel(level, bestCompleteness, ap.attempts, passed, responseType)
+    return calculateRubricLevel(ap, passed)
   })
 
   const lastActivityLevel = levels.at(-1) || null

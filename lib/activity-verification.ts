@@ -73,11 +73,16 @@ CRITERIOS PARA PREGUNTA ABIERTA:
 
 REGLA PRINCIPAL: Si el estudiante muestra pensamiento crítico y engagement con el tema, es SUFICIENTE para avanzar. No busques una respuesta "perfecta".
 
-NIVELES DE COMPRENSIÓN:
-- "memorized": Repite información sin reflexión
-- "understood": Muestra comprensión propia del tema
-- "applied": Conecta con experiencias o ejemplos propios
-- "analyzed": Evalúa, compara o propone soluciones originales
+NIVELES DE DOMINIO (clasifica por LOGRO, no por estilo del lenguaje):
+- "memorized" = EN INICIO: Respuesta con errores conceptuales o tan incompleta que NO demuestra dominio mínimo del tema. Necesita repaso.
+- "understood" = EN PROCESO: Parcialmente correcta. Idea general OK pero le faltan elementos clave o tiene confusiones menores. Va por buen camino.
+- "applied" = LOGRADO: Cumple los criterios de la actividad. Sabe el tema — sea por memoria correcta, paráfrasis o ejemplo. ESTE es el nivel esperado cuando responde bien.
+- "analyzed" = DESTACADO: Va MÁS ALLÁ de lo pedido. Aporta ejemplo propio no requerido, conecta con otro tema, identifica matices, o propone variantes.
+
+IMPORTANTE:
+- Memorizar correctamente una definición = LOGRADO (no inicio).
+- Equivocarse o tener errores conceptuales = INICIO.
+- "Profundidad cognitiva" NO es el criterio — el criterio es DOMINIO DEL OBJETIVO.
 
 Responde en formato JSON con esta estructura EXACTA:
 {
@@ -147,11 +152,16 @@ REGLAS DE EVALUACIÓN FLEXIBLE:
 - Si el estudiante demuestra que ENTENDIÓ LA IDEA CENTRAL, marca el criterio como cumplido
 - Solo marca como NO cumplido si claramente NO ENTENDIÓ o tiene información ERRÓNEA
 
-NIVELES DE COMPRENSIÓN:
-- "memorized": Repite información sin procesar
-- "understood": Explica con sus propias palabras
-- "applied": Puede usar el concepto en ejemplos
-- "analyzed": Puede comparar, contrastar o evaluar
+NIVELES DE DOMINIO (clasifica por LOGRO del objetivo, no por estilo del lenguaje):
+- "memorized" = EN INICIO: Respuesta con errores conceptuales o tan incompleta que NO demuestra dominio mínimo del tema. Necesita repaso.
+- "understood" = EN PROCESO: Parcialmente correcta. Idea general OK pero le faltan elementos clave o tiene confusiones menores. Va por buen camino.
+- "applied" = LOGRADO: Cumple los criterios de la actividad. Sabe el tema — sea por memoria correcta, paráfrasis o ejemplo. ESTE es el nivel esperado cuando responde bien.
+- "analyzed" = DESTACADO: Va MÁS ALLÁ de lo pedido. Aporta ejemplo propio no requerido, conecta con otro tema, identifica matices, o propone variantes.
+
+IMPORTANTE:
+- Memorizar correctamente una definición = LOGRADO (no inicio).
+- Equivocarse o tener errores conceptuales = INICIO.
+- "Profundidad cognitiva" NO es el criterio — el criterio es DOMINIO DEL OBJETIVO.
 
 Responde en formato JSON con esta estructura EXACTA:
 {

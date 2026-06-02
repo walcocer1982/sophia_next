@@ -1,6 +1,6 @@
 /**
- * 4-level rubric system for activity evaluation
- * Aligned to Peruvian grading system (base 20, pass = 13/20 = 65/100)
+ * 4-level rubric system para evaluación de actividades.
+ * Aligned to Peruvian grading (base 20, pass = 13/20 = 65/100).
  *
  * | Nivel              | Rango (100) | Equivalente (20) |
  * |--------------------|-------------|------------------|
@@ -10,7 +10,13 @@
  * | En Inicio          | 0-49        | 0-10             |
  *
  * Passing grade: 65 (= 13/20)
+ *
+ * SOURCE OF TRUTH: la rúbrica se deriva del grade numérico calculado en
+ * lib/grading.ts (activityScore aplica cap-por-intentos). Esta capa solo
+ * mapea el número al label.
  */
+
+import { activityScore, type ScorableActivity } from './grading'
 
 export const GRADE_THRESHOLDS = {
   LOGRADO_DESTACADO: 85,
@@ -27,76 +33,45 @@ export interface RubricResult {
   level: RubricLevel
   label: string
   description: string
-  color: string // Tailwind color class
+  color: string
 }
 
 const RUBRIC_CONFIG: Record<RubricLevel, Omit<RubricResult, 'level'>> = {
   logrado_destacado: {
     label: 'Logrado destacado',
-    description: 'Analiza, conecta con experiencia, propone soluciones',
+    description: 'Va más allá: aporta ejemplo, conecta o profundiza',
     color: 'text-emerald-700',
   },
   logrado: {
     label: 'Logrado',
-    description: 'Comprende y aplica el concepto correctamente',
+    description: 'Cumple los criterios de la actividad',
     color: 'text-blue-700',
   },
   en_proceso: {
     label: 'En proceso',
-    description: 'Entiende parcialmente, necesita reforzar',
+    description: 'Parcialmente correcta — le faltan elementos clave',
     color: 'text-amber-700',
   },
   en_inicio: {
     label: 'En inicio',
-    description: 'No logró demostrar comprensión del concepto',
+    description: 'Errores conceptuales o muy incompleta',
     color: 'text-red-600',
   },
 }
 
 /**
- * Determine rubric level from activity evidence
- * Uses response_type as fallback when understanding_level lacks variance (all "understood")
+ * Calculate rubric level for a single activity.
+ *
+ * Delega en activityScore() (lib/grading.ts) para tener UNA fuente de verdad.
+ * Ese score ya incluye el cap-por-intentos: el primer intento puede llegar
+ * a Destacado; intento 2 tope Logrado; 3 tope Proceso; 4+ tope Inicio.
  */
 export function calculateRubricLevel(
-  understandingLevel: string,
-  completenessPercentage: number,
-  attempts: number,
+  ap: ScorableActivity,
   passedCriteria: boolean,
-  responseType?: string,
 ): RubricLevel {
-  // Forced advance or didn't pass criteria
-  if (!passedCriteria) {
-    return 'en_inicio'
-  }
-
-  // If we have completeness_percentage, use the full logic
-  if (completenessPercentage > 0) {
-    if (understandingLevel === 'analyzed') return 'logrado_destacado'
-    if (understandingLevel === 'applied') {
-      return completenessPercentage >= 80 && attempts <= 2 ? 'logrado_destacado' : 'logrado'
-    }
-    if (understandingLevel === 'understood' && completenessPercentage >= 60) return 'logrado'
-    if (understandingLevel === 'memorized') return attempts <= 2 ? 'en_proceso' : 'en_inicio'
-    return 'en_proceso'
-  }
-
-  // Fallback: use response_type + attempts (for historical data without completeness_percentage)
-  const rt = responseType || 'partial'
-
-  if (rt === 'correct') {
-    if (attempts <= 2) return 'logrado_destacado'
-    if (attempts <= 4) return 'logrado'
-    return 'en_proceso'
-  }
-
-  if (rt === 'partial') {
-    if (attempts <= 2) return 'logrado'
-    if (attempts <= 4) return 'en_proceso'
-    return 'en_proceso'
-  }
-
-  // off_topic or incorrect that somehow passed
-  return 'en_inicio'
+  if (!passedCriteria) return 'en_inicio'
+  return gradeToRubricLevel(activityScore(ap))
 }
 
 /**
@@ -107,7 +82,8 @@ export function getRubricInfo(level: RubricLevel): RubricResult {
 }
 
 /**
- * Calculate overall rubric level for a lesson from activity levels
+ * Overall rubric level para una lección a partir de los niveles de sus actividades.
+ * Usa promedio numérico de los niveles (1-4) en lugar de moda, para suavizar.
  */
 export function calculateOverallRubric(activityLevels: RubricLevel[]): RubricLevel {
   if (activityLevels.length === 0) return 'en_inicio'
@@ -128,8 +104,8 @@ export function calculateOverallRubric(activityLevels: RubricLevel[]): RubricLev
 }
 
 /**
- * Convert numeric grade (0-100) to rubric level
- * Uses Peruvian grading thresholds
+ * Convert numeric grade (0-100) to rubric level.
+ * Uses Peruvian grading thresholds.
  */
 export function gradeToRubricLevel(grade: number): RubricLevel {
   if (grade >= GRADE_THRESHOLDS.LOGRADO_DESTACADO) return 'logrado_destacado'
@@ -145,7 +121,4 @@ export function isPassing(grade: number): boolean {
   return grade >= PASSING_GRADE
 }
 
-/**
- * All levels for iteration
- */
 export const RUBRIC_LEVELS: RubricLevel[] = ['logrado_destacado', 'logrado', 'en_proceso', 'en_inicio']
