@@ -49,34 +49,44 @@ export async function POST(request: Request) {
     currentActivityId,
   })
 
-  // Create ephemeral token via OpenAI Realtime API
-  // Docs: https://platform.openai.com/docs/api-reference/realtime-sessions
-  const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
+  // Create ephemeral client secret via OpenAI Realtime API.
+  // Doc: POST /v1/realtime/client_secrets (renamed from /v1/realtime/sessions).
+  // Config nested under "session"; audio nested under session.audio.{input,output}.
+  const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      // Use latest GA model 'gpt-realtime' which has better instruction following
-      // and reduced false-positive content_filter for non-English (Spanish)
-      model: 'gpt-realtime',
-      // 'shimmer' is the most neutral/Latin-friendly female voice
-      voice: 'shimmer',
-      modalities: ['text', 'audio'],
-      instructions,
-      // Allow longer responses (default is 4096, "inf" lets model finish naturally)
-      max_response_output_tokens: 'inf',
-      input_audio_transcription: {
-        model: 'whisper-1',
-        language: 'es', // Force Spanish transcription
-        // Keep the Whisper prompt VERY short (under ~40 chars). Long prompts
-        // get hallucinated verbatim into the transcription on quiet/short
-        // audio. Use compact vocabulary cues only.
-        prompt: 'Minería, jumbo, desatado, flotación, lixiviación.',
+      session: {
+        type: 'realtime',
+        // GA alias 'gpt-realtime' — mejor instrucciones y menor falso-positivo
+        // en content_filter para español que el snapshot anterior.
+        model: 'gpt-realtime',
+        instructions,
+        // 'audio' es lo que importa para voz; el SDK del cliente expone el
+        // transcript igual desde los eventos de Realtime.
+        output_modalities: ['audio'],
+        max_output_tokens: 'inf',
+        audio: {
+          output: {
+            // 'shimmer' es la voz femenina más neutra / amigable para latinos.
+            voice: 'shimmer',
+          },
+          input: {
+            transcription: {
+              model: 'whisper-1',
+              language: 'es',
+              // Prompt corto a propósito: prompts largos se alucinan verbatim
+              // en audios cortos/silenciosos. Solo pistas de vocabulario.
+              prompt: 'Minería, jumbo, desatado, flotación, lixiviación.',
+            },
+            // Push-to-talk: el cliente controla cuándo enviar el audio.
+            turn_detection: null,
+          },
+        },
       },
-      // Push-to-talk: client manually controls when to commit audio
-      turn_detection: null,
     }),
   })
 
@@ -87,8 +97,14 @@ export async function POST(request: Request) {
   }
 
   const data = await response.json()
+  // El cliente (use-voice-chat) espera client_secret.value (objeto). La API
+  // nueva devuelve client_secret como string "ek_..." — lo envolvemos.
+  const secretValue: string =
+    typeof data.client_secret === 'string'
+      ? data.client_secret
+      : data.client_secret?.value ?? ''
   return NextResponse.json({
-    client_secret: data.client_secret,
-    session_id: data.id,
+    client_secret: { value: secretValue, expires_at: data.expires_at },
+    session_id: data.session?.id ?? data.id ?? null,
   })
 }
