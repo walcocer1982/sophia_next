@@ -171,8 +171,13 @@ export async function GET(
     }
   }
 
-  // Overall rubric level
-  const overallRubric = calculateOverallRubric(allRubricLevels)
+  // Overall rubric level. Si no hay NINGUNA actividad evaluada, devolvemos
+  // null para que el frontend muestre "Sin evaluar" — antes mostraba
+  // "En inicio" por defecto, lo que era engañoso (no es que el estudiante
+  // esté en inicio, es que el sistema no llegó a evaluarlo).
+  const overallRubric = allRubricLevels.length > 0
+    ? calculateOverallRubric(allRubricLevels)
+    : null
 
   // Grade trend (per lesson, in order)
   const gradeTrend = lessonDetails

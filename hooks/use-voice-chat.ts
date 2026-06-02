@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { detectHallucination } from '@/lib/hallucination-detector'
 
 type VoiceState = 'idle' | 'connecting' | 'ready' | 'recording' | 'processing' | 'speaking' | 'error'
 
@@ -114,26 +115,34 @@ export function useVoiceChat({
       }
 
       if (data.type === 'conversation.item.input_audio_transcription.completed') {
-        const transcript = data.transcript?.trim()
-        // Filter known Whisper hallucinations on silence/low audio.
-        // IMPORTANT: We do NOT cancel Sophia's response here, because the response
-        // is generated directly from the AUDIO, not from this transcript.
-        // Whisper may hallucinate the text even when the audio is clear and Sophia
-        // is responding correctly to it.
-        const hallucinationPatterns = [
+        const transcript = data.transcript?.trim() || ''
+        // Patrones específicos de hallucinations clásicas de Whisper en silencio
+        // (videos de YouTube traducidos, suscripciones, créditos, etc).
+        const youtubeStylePatterns = [
           /subt[íi]tulos? (realizados|por) .*amara/i,
-          /m[áa]s informaci[óo]n.*\.(com|org|es)/i, // www.alimmenta.com etc
+          /m[áa]s informaci[óo]n.*\.(com|org|es)/i,
           /^you you/i,
           /^thanks for watching/i,
           /^thank you( for watching)?$/i,
           /^suscr[íi]bete/i,
-          /^\.+$/, // Just dots
-          /^\s*$/, // Empty or whitespace
+          /^\.+$/,
+          /^\s*$/,
         ]
-        const isHallucination = !transcript || hallucinationPatterns.some(p => p.test(transcript))
+        const matchesYoutubePattern = !transcript || youtubeStylePatterns.some(p => p.test(transcript))
+        // Detector más amplio del lado server: mezcla de idiomas, sopa de mayúsculas,
+        // palabras foráneas. Cubre casos como "ADRIAN PORDA ALFARONE" o transcripciones
+        // multi-idioma observadas en sesiones reales.
+        const broadCheck = detectHallucination(transcript)
+        const isHallucination = matchesYoutubePattern || broadCheck.isHallucination
         if (isHallucination) {
-          // Don't save and don't show error — Sophia's response is still valid (it comes from audio)
-          console.warn('[Voice] Whisper hallucination detected, skipping transcript save:', transcript)
+          console.warn('[Voice] Whisper hallucination detected, skipping transcript save + cancelling Sophia response:', transcript, broadCheck.reason || '')
+          // Cancelar la respuesta en curso de Sophia: si Whisper hallucinated,
+          // significa que probablemente fue ruido y Sophia estaría respondiendo
+          // a la nada. Mejor cortar que generar respuesta encadenada sin sentido.
+          const dc = dataChannelRef.current
+          if (dc?.readyState === 'open') {
+            dc.send(JSON.stringify({ type: 'response.cancel' }))
+          }
           return
         }
         saveMessage('user', transcript)

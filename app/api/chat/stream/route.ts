@@ -6,6 +6,7 @@ import { buildSystemPrompt, getMaxTokensForActivity } from '@/lib/prompt-builder
 import { isPassing } from '@/lib/rubric'
 import { calculateGrade, calculateCompletionGrade } from '@/lib/grading'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { detectHallucination } from '@/lib/hallucination-detector'
 import { logger, logChatMessage, logError } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { verifyActivityCompletion, verifyStepCompletion } from '@/lib/activity-verification'
@@ -249,6 +250,19 @@ export async function POST(request: Request) {
   const CONTINUATION_REGEX = /^(si|sí|ok|vale|entendido|claro|continuar|siguiente|adelante|de acuerdo|perfecto|listo|vamos|dale|ya|bueno)(\s+(por\s+favor|porfavor|gracias))?[.!]?$/i
   const isContinuationMessage = CONTINUATION_REGEX.test(message.trim())
 
+  // Detector de hallucinations de voz (Whisper transcribiendo ruido como palabras).
+  // Si se detecta, saltamos verificación AI (caro y engañoso) y devolvemos
+  // un off_topic suave que no cuenta como intento real.
+  const hallucinationCheck = detectHallucination(message)
+  if (hallucinationCheck.isHallucination) {
+    logger.warn('chat.stream.hallucination_detected', {
+      sessionId,
+      userId: session.userId,
+      reason: hallucinationCheck.reason,
+      messagePreview: message.slice(0, 80),
+    })
+  }
+
   const [moderation, intent, verification] = await Promise.all([
     moderateContent(message, { lessonTitle }),
     classifyIntent(message, currentActivity, {
@@ -256,8 +270,24 @@ export async function POST(request: Request) {
       currentActivity: currentActivityInstruction,
       lastInstructorQuestion: lastInstructorMessage?.content || undefined
     }),
+    // Hallucination de voz: skip AI verifier (caro), tratar como off_topic
+    // suave para que Sophia pida repetir sin contar como intento real.
+    hallucinationCheck.isHallucination
+      ? Promise.resolve({
+          completed: false,
+          criteriaMatched: [] as string[],
+          criteriaMissing: [] as string[],
+          completeness_percentage: 0,
+          understanding_level: 'memorized' as const,
+          response_type: 'off_topic' as const,
+          feedback: 'No te entendí bien, ¿podés repetir?',
+          confidence: 'high' as const,
+          ready_to_advance: false,
+          needs_scaffolding: false,
+          next_subquestion: undefined,
+        })
     // Solo skip verificación si la actividad YA está completada en DB
-    activityAlreadyCompleted
+    : activityAlreadyCompleted
       ? Promise.resolve({
           completed: true,
           criteriaMatched: ['Actividad ya completada'],
@@ -740,9 +770,9 @@ export async function POST(request: Request) {
               logger.error('chat.stream.report_generation_failed', { sessionId, error: String(err) })
             })
           }
-        } else if (verification.response_type !== 'continuation') {
-          // Incrementar attempts sin completar + guardar evidenceData
-          // Skip para mensajes de continuación ("sí", "listo") — no son intentos reales
+        } else if (verification.response_type !== 'continuation' && !hallucinationCheck.isHallucination) {
+          // Incrementar attempts sin completar + guardar evidenceData.
+          // Skip si: continuación ("sí", "listo") o hallucination de voz — no son intentos reales.
           const failedAttempt = {
             studentResponse: message,
             analysis: {

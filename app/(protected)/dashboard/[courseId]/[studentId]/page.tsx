@@ -62,7 +62,7 @@ interface StudentData {
     totalLessons: number
     avgGrade: number | null
     totalMessages: number
-    overallRubric: string
+    overallRubric: string | null
     rubricDistribution: Record<string, number>
     gradeTrend: Array<{ lesson: string; grade: number }>
   }
@@ -200,7 +200,7 @@ export default function StudentDetailPage() {
         />
         <StatCard
           title="Nivel General"
-          value={rubricLabels[stats.overallRubric] || '—'}
+          value={stats.overallRubric ? (rubricLabels[stats.overallRubric] || '—') : 'Sin evaluar'}
           icon={<Award className="h-5 w-5 text-amber-600" />}
           bgColor="bg-amber-50"
         />
@@ -324,6 +324,14 @@ export default function StudentDetailPage() {
                       )}
                       {!lesson.startedAt && (
                         <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">No iniciada</span>
+                      )}
+                      {lesson.startedAt && lesson.totalMessages >= 5 && completedActivities === 0 && (
+                        <span
+                          className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded"
+                          title={`${lesson.totalMessages} mensajes pero 0 actividades registradas — Sophia no llegó a plantear las preguntas de verificación`}
+                        >
+                          ⚠ Sin progreso registrado
+                        </span>
                       )}
                     </div>
                     <div className="flex items-center gap-4 text-xs text-gray-500">
