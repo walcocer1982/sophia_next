@@ -96,27 +96,50 @@ export function getMaxTokensForActivity(complexity?: ActivityComplexity): number
  * Templates de instrucciones según tipo de actividad (BREVES)
  */
 const ACTIVITY_TYPE_TEMPLATES: Record<ActivityType, string> = {
-  explanation: `MODO: EXPLICACIÓN
-- Haz primero una pregunta exploratoria breve para saber qué ya sabe el estudiante
-- Según su respuesta, explica SOLO lo que no sabe (no repitas lo que ya demostró conocer)
-- Máximo 2-3 oraciones de contexto antes de tu primera pregunta
-- Termina con UNA pregunta de comprensión`,
+  explanation: `MODO: EXPLICACIÓN (introduce un concepto nuevo y verifica comprensión)
 
-  practice: `MODO: PRÁCTICA
-- Presenta el escenario o ejercicio concreto
-- Haz preguntas CERRADAS y específicas: "¿Qué tipo de X es este?" "¿Qué harías primero?"
-- Abre progresivamente: si responde bien, pregunta "¿por qué?" o "¿qué pasaría si...?"
-- Da feedback específico sobre cada intento`,
+ESTRUCTURA OBLIGATORIA — MÁXIMO 3 TURNOS antes de plantear la pregunta de verificación:
+1. TURNO 1: Pregunta exploratoria breve (1 oración) para sondear qué ya sabe.
+2. TURNO 2: Explica SOLO lo que falte (máximo 3-4 oraciones). NO repitas lo que ya demostró saber.
+3. TURNO 3 (OBLIGATORIO): Plantea TEXTUAL la pregunta literal del bloque "VERIFICACIÓN - Pregunta:" del bloque DATOS DE ACTIVIDAD.
 
-  reflection: `MODO: REFLEXIÓN
-- Haz UNA pregunta ABIERTA que invite a razonar
-- No hay respuesta única correcta — evalúa calidad del razonamiento
-- Profundiza con "¿por qué piensas eso?" o "¿puedes dar un ejemplo?"`,
+REGLAS DURAS:
+- NO parafrasees la pregunta de verificación. NO la dividas en sub-preguntas. NO la suavices.
+- NO sigas haciendo preguntas exploratorias después del turno 3.
+- Si el estudiante responde antes del turno 3 con algo que cubre los criterios, AVANZA al turno 3 inmediatamente.`,
 
-  closing: `MODO: CIERRE
-- Resume en 2-3 puntos clave
-- Pregunta ABIERTA de síntesis: "¿Qué fue lo más importante?" o "¿Cómo lo aplicarías?"
-- Felicita brevemente`
+  practice: `MODO: PRÁCTICA (aplicar el concepto a un escenario concreto)
+
+ESTRUCTURA OBLIGATORIA — MÁXIMO 2 TURNOS antes de plantear la pregunta de verificación:
+1. TURNO 1: Presenta el escenario concreto (2-3 oraciones máximo). Sin pregunta floja del estilo "¿qué te parece?".
+2. TURNO 2 (OBLIGATORIO): Plantea TEXTUAL la pregunta literal del bloque "VERIFICACIÓN - Pregunta:" del bloque DATOS DE ACTIVIDAD.
+
+REGLAS DURAS:
+- NO uses preguntas de calentamiento ("qué tipo de X", "qué harías primero") como sustituto de la pregunta de verificación.
+- Si responde mal, da feedback ESPECÍFICO sobre qué le falta y RE-PLANTEA la MISMA pregunta de verificación.
+- NO cambies la pregunta entre intentos — el AI evaluador necesita consistencia.`,
+
+  reflection: `MODO: REFLEXIÓN (razonamiento personal, sin respuesta única)
+
+ESTRUCTURA OBLIGATORIA — 1 TURNO para llegar a la pregunta:
+1. TURNO 1: Contextualiza brevemente (1-2 oraciones) y plantea TEXTUAL la pregunta literal del bloque "VERIFICACIÓN - Pregunta:".
+2. Si la respuesta es superficial, profundiza con "¿por qué piensas eso?" o "¿podés dar un ejemplo?".
+
+REGLAS DURAS:
+- ACEPTA cualquier posición/elección que el estudiante justifique. NO hay respuesta "correcta".
+- Evalúa: (a) ¿eligió/se posicionó claramente? (b) ¿lo justificó con un argumento coherente?
+- NO sugieras "la respuesta correcta" — eso anularía la reflexión.`,
+
+  closing: `MODO: CIERRE (síntesis final de la lección — NO introducir conceptos nuevos)
+
+ESTRUCTURA OBLIGATORIA — 1 TURNO:
+1. TURNO 1: Resume en 2-3 puntos clave la LECCIÓN COMPLETA + plantea TEXTUAL la pregunta literal del bloque "VERIFICACIÓN - Pregunta:" de síntesis.
+2. Acepta la síntesis del estudiante con sus propias palabras.
+3. Felicita brevemente al confirmar la respuesta.
+
+REGLAS DURAS:
+- NO inicies otra mini-lección. NO introduzcas datos nuevos. Es el FINAL.
+- NO hagas preguntas exploratorias previas — el estudiante ya pasó por toda la lección.`
 }
 
 /**
