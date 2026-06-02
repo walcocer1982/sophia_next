@@ -102,25 +102,39 @@ export default function StudentDetailPage() {
       return
     }
 
+    let cancelled = false
+    let isFirstFetch = true
+
     const fetchData = async () => {
       try {
         const res = await fetch(`/api/dashboard/${courseId}/${studentId}`)
-        if (res.ok) {
-          const result = await res.json()
-          setData(result)
-          // Auto-expand first lesson
-          if (result.lessons.length > 0) {
-            setExpandedLesson(result.lessons[0].lessonId)
-          }
+        if (!res.ok || cancelled) return
+        const result = await res.json()
+        if (cancelled) return
+        setData(result)
+        // Auto-expand first lesson SOLO en el primer fetch (no en refresh)
+        if (isFirstFetch && result.lessons.length > 0) {
+          setExpandedLesson(result.lessons[0].lessonId)
+          isFirstFetch = false
         }
       } catch (error) {
         console.error('Error loading student data:', error)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     fetchData()
+    // Auto-refresh cada 10s mientras la página esté abierta. Cubre el caso de
+    // sesiones activas (instructor mirando dashboard mientras estudiante hace
+    // la lección por voz/texto) — los nuevos mensajes y actividades aparecen
+    // sin tener que refrescar manualmente. 10s es balance entre frescura y
+    // carga del servidor.
+    const interval = setInterval(fetchData, 10000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [role, router, courseId, studentId])
 
   if (loading) {
