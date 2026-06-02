@@ -300,8 +300,10 @@ export function useVoiceChat({
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
 
+      // SDP exchange: OpenAI cambió a /v1/realtime/calls. El modelo y demás
+      // config viven en el token efímero (server-side), ya no van en URL params.
       const sdpResponse = await fetch(
-        'https://api.openai.com/v1/realtime?model=gpt-realtime',
+        'https://api.openai.com/v1/realtime/calls',
         {
           method: 'POST',
           body: offer.sdp,
