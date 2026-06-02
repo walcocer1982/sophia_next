@@ -52,12 +52,20 @@ export function useVoiceChat({
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null)
   const playbackUrlRef = useRef<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-  // Cola de oraciones para TTS chunked: cada oración se sintetiza en paralelo
-  // (fetch al endpoint TTS) y se reproduce en orden. Esto permite empezar a
-  // hablar mientras Claude todavía está streameando el resto del response.
-  const speakQueueRef = useRef<Promise<Blob | null>[]>([])
+  // Cola de oraciones para TTS chunked. Cada entrada tiene el TEXTO y la
+  // promesa del audio. La sincronización texto+voz se hace cuando empieza
+  // a reproducirse cada oración: ahí se revela el texto en la UI.
+  // Esto evita que el estudiante vea el texto antes de oírlo.
+  type QueuedSentence = { text: string; blobPromise: Promise<Blob | null> }
+  const speakQueueRef = useRef<QueuedSentence[]>([])
   const isPlayingQueueRef = useRef<boolean>(false)
   const cancelPlaybackRef = useRef<boolean>(false)
+  // ID del mensaje de Sophia en la UI — usado para revelar texto sincronizado
+  // con el audio. Se setea al inicio de cada turno.
+  const currentAssistantIdRef = useRef<string | null>(null)
+  // Callbacks capturados por turno — los almacenamos en refs para que el
+  // playFromQueue (que se invoca de modo "fire and forget") los pueda usar.
+  const onDeltaRef = useRef<((id: string, delta: string) => void) | undefined>(undefined)
   const MIN_RECORDING_MS = 800
   const MIN_SENTENCE_CHARS = 20
 
@@ -135,10 +143,13 @@ export function useVoiceChat({
   }, [])
 
   /**
-   * Loop que consume la cola de oraciones: toma el próximo blob, lo reproduce,
-   * espera a que termine, y sigue con la siguiente. Si la cola se vacía,
-   * termina. Si se vuelve a llenar, hay que volver a llamar (idempotente —
-   * un solo loop activo a la vez gracias a isPlayingQueueRef).
+   * Loop que consume la cola: toma la próxima entrada {text, blobPromise},
+   * espera a que llegue el audio, REVELA el texto en la UI, lo reproduce,
+   * espera a que termine, y sigue con la siguiente.
+   *
+   * Sincronización clave: el texto se muestra al estudiante AL MISMO TIEMPO
+   * que el audio empieza a hablarlo. Antes el texto aparecía antes
+   * (streaming de Claude) y el audio llegaba 1-2s después.
    */
   const playFromQueue = useCallback(async () => {
     if (isPlayingQueueRef.current) return
@@ -146,11 +157,19 @@ export function useVoiceChat({
     setState('speaking')
 
     while (speakQueueRef.current.length > 0 && !cancelPlaybackRef.current) {
-      const blobPromise = speakQueueRef.current.shift()
-      if (!blobPromise) continue
+      const entry = speakQueueRef.current.shift()
+      if (!entry) continue
       try {
-        const blob = await blobPromise
-        if (!blob || cancelPlaybackRef.current) continue
+        const blob = await entry.blobPromise
+        if (cancelPlaybackRef.current) continue
+        // Revelar el texto en la UI EXACTAMENTE cuando arranca el audio.
+        const assistantId = currentAssistantIdRef.current
+        if (assistantId && onDeltaRef.current) {
+          // Agregamos espacio entre oraciones para que se concatenen bien.
+          const prefix = entry.text.startsWith(' ') ? '' : ' '
+          onDeltaRef.current(assistantId, prefix + entry.text)
+        }
+        if (!blob) continue
         const url = URL.createObjectURL(blob)
         playbackUrlRef.current = url
 
@@ -185,16 +204,22 @@ export function useVoiceChat({
    * Extrae oraciones completas del buffer y las agrega a la cola TTS.
    * Una "oración completa" termina en `.` `?` `!` seguidos de espacio o fin.
    * Devuelve el remainder (texto sin oración terminada todavía).
+   *
+   * Cada entrada de la cola es {text, blobPromise} — el fetch a TTS arranca
+   * en paralelo (synthesizeSentence se llama acá) mientras Claude sigue
+   * streameando. La sincronización con UI ocurre en playFromQueue.
    */
   const flushSentencesIntoQueue = useCallback((buffer: string): string => {
-    // Capturamos hasta el siguiente terminador. Acepta '. ' '? ' '! ' o fin.
     const re = /([^.!?\n]+[.!?]+)(?=\s|$)/g
     let lastIdx = 0
     let match: RegExpExecArray | null
     while ((match = re.exec(buffer)) !== null) {
       const sentence = match[1].trim().replace(/\s+/g, ' ')
       if (sentence.length >= MIN_SENTENCE_CHARS) {
-        speakQueueRef.current.push(synthesizeSentence(sentence))
+        speakQueueRef.current.push({
+          text: sentence,
+          blobPromise: synthesizeSentence(sentence),
+        })
       }
       lastIdx = match.index + match[0].length
     }
@@ -225,10 +250,12 @@ export function useVoiceChat({
 
     let accumulated = ''
     let sentenceBuffer = ''
-    // Reset de la cola para este turno
+    // Reset de la cola para este turno + capturar refs para playFromQueue
     speakQueueRef.current = []
     isPlayingQueueRef.current = false
     cancelPlaybackRef.current = false
+    currentAssistantIdRef.current = assistantId
+    onDeltaRef.current = onAssistantStreamDelta
 
     await new Promise<void>((resolve) => {
       streamChatResponse(
@@ -237,18 +264,16 @@ export function useVoiceChat({
         (chunk) => {
           accumulated += chunk
           sentenceBuffer += chunk
-          onAssistantStreamDelta?.(assistantId, chunk)
-          // Cada vez que llega un chunk, intentamos extraer oraciones completas
-          // y encolarlas para TTS. Sentencias parciales se quedan en el buffer.
+          // IMPORTANTE: NO llamamos a onAssistantStreamDelta acá. El texto se
+          // revela en la UI cuando arranca cada audio (playFromQueue), no
+          // mientras Claude todavía está generándolo. Esto sincroniza texto+voz.
           const previousQueueLen = speakQueueRef.current.length
           sentenceBuffer = flushSentencesIntoQueue(sentenceBuffer)
           if (speakQueueRef.current.length > previousQueueLen) {
-            // Hay nuevas oraciones en cola: arrancar el loop si no está corriendo.
             playFromQueue()
           }
         },
         () => {
-          onAssistantStreamDone?.(assistantId)
           resolve()
         },
         () => {
@@ -258,10 +283,14 @@ export function useVoiceChat({
       )
     })
 
-    // Stream terminado: si quedó texto en el buffer sin terminador (la última
-    // "oración" sin punto final), la encolamos también.
+    // Stream terminado: si quedó texto sin terminador (última "oración"
+    // sin punto final), la encolamos también.
     if (sentenceBuffer.trim().length >= 3) {
-      speakQueueRef.current.push(synthesizeSentence(sentenceBuffer.trim()))
+      const lastText = sentenceBuffer.trim()
+      speakQueueRef.current.push({
+        text: lastText,
+        blobPromise: synthesizeSentence(lastText),
+      })
       playFromQueue()
     }
 
@@ -269,11 +298,18 @@ export function useVoiceChat({
       onTranscript?.({ role: 'assistant', content: accumulated })
     }
 
-    // Esperar a que la cola termine de reproducir antes de volver a 'ready'.
+    // Esperar a que la cola termine de reproducir (texto + audio).
     while (isPlayingQueueRef.current || speakQueueRef.current.length > 0) {
       await new Promise((r) => setTimeout(r, 100))
       if (cancelPlaybackRef.current) break
     }
+
+    // Notificar fin del stream del asistente DESPUÉS de que termine el audio,
+    // para que la UI marque el mensaje como completado solo cuando ya se
+    // reveló todo el texto.
+    onAssistantStreamDone?.(assistantId)
+    currentAssistantIdRef.current = null
+    onDeltaRef.current = undefined
 
     setState('ready')
   }, [sessionId, onTranscript, onAssistantStreamStart, onAssistantStreamDelta, onAssistantStreamDone, flushSentencesIntoQueue, playFromQueue, synthesizeSentence])
