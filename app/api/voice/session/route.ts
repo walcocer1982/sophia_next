@@ -91,9 +91,18 @@ export async function POST(request: Request) {
   })
 
   if (!response.ok) {
-    const error = await response.text()
-    console.error('OpenAI Realtime session error:', error)
-    return NextResponse.json({ error: 'Failed to create voice session' }, { status: 500 })
+    const errorBody = await response.text()
+    console.error('OpenAI Realtime session error:', response.status, errorBody)
+    // Devolvemos el detalle (status + cuerpo truncado) para diagnosticar desde
+    // el cliente sin tener que ir a logs de Vercel. NO se filtra el API key.
+    return NextResponse.json(
+      {
+        error: 'Failed to create voice session',
+        openaiStatus: response.status,
+        openaiDetail: errorBody.slice(0, 500),
+      },
+      { status: 500 },
+    )
   }
 
   const data = await response.json()

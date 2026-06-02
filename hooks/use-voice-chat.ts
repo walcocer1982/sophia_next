@@ -320,12 +320,24 @@ export function useVoiceChat({
     setState('connecting')
 
     try {
+      // 1) Verificar que haya micrófono ANTES de pedir token a OpenAI
+      //    (sino gastamos un token efímero que nunca usaremos)
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Tu navegador no soporta micrófono. Usá la opción de Escribir.')
+      }
+
       const tokenRes = await fetch('/api/voice/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId }),
       })
-      if (!tokenRes.ok) throw new Error('Failed to get voice session token')
+      if (!tokenRes.ok) {
+        const errBody = await tokenRes.json().catch(() => ({}))
+        const detail = errBody.openaiDetail
+          ? ` (OpenAI ${errBody.openaiStatus}: ${errBody.openaiDetail.slice(0, 120)})`
+          : ''
+        throw new Error(`No se pudo iniciar la voz${detail}. Probá con el botón Escribir.`)
+      }
       const { client_secret } = await tokenRes.json()
 
       const pc = new RTCPeerConnection()
@@ -347,7 +359,22 @@ export function useVoiceChat({
         }
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      } catch (mediaErr) {
+        const name = (mediaErr as Error).name
+        if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+          throw new Error('No se detectó un micrófono en este dispositivo. Usá la opción de Escribir.')
+        }
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          throw new Error('Permiso de micrófono denegado. Habilitalo en tu navegador o usá la opción de Escribir.')
+        }
+        if (name === 'NotReadableError') {
+          throw new Error('El micrófono está siendo usado por otra app. Cerrala y volvé a intentar, o usá Escribir.')
+        }
+        throw mediaErr
+      }
       localStreamRef.current = stream
       // Start with mic muted (push-to-talk)
       stream.getAudioTracks().forEach(t => { t.enabled = false })
