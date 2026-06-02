@@ -73,7 +73,10 @@ const ActivitySchema = z.object({
 })
 
 export const GeneratedStructureSchema = z.object({
-  activities: z.array(ActivitySchema).min(4).max(8),
+  // Permitir 2-8 actividades: el caso "clase corta" (15 min) usa 3, las
+  // lecciones completas usan 4-8. Antes el mínimo era 4 y eso rechazaba
+  // las lecciones rediseñadas para convenciones (ej: "ciclo de minado").
+  activities: z.array(ActivitySchema).min(2).max(8),
 })
 
 export type GeneratedStructure = z.infer<typeof GeneratedStructureSchema>
@@ -194,6 +197,7 @@ export const SessionSaveSchema = z.object({
   lessonId: z.string().min(1),
   keyPoints: z.array(z.string()).min(2).max(8),
   contentJson: z.object({
-    activities: z.array(ActivitySchema).min(4).max(8),
+    // Mismo rango que GeneratedStructureSchema (2-8): permite clases cortas.
+    activities: z.array(ActivitySchema).min(2).max(8),
   }),
 })
