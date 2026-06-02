@@ -47,6 +47,7 @@ export function ChatInterface({
   const streamingContentRef = useRef<string>('')
   const assistantIdRef = useRef<string>('')
   const hasGeneratedWelcome = useRef(false)
+  const welcomeAudioPlayedRef = useRef(false)
   const chatInputRef = useRef<ChatInputRef>(null)
 
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -130,6 +131,7 @@ export function ChatInterface({
       }
 
       // Marcar como completado
+      const fullWelcome = streamingContentRef.current
       setMessages((prev) =>
         prev.map((m) =>
           m.id === welcomeId
@@ -138,6 +140,45 @@ export function ChatInterface({
         )
       )
       streamingContentRef.current = ''
+
+      // Auto-play TTS del welcome cuando el curso tiene voz habilitada.
+      // No bloquea el flujo: si falla (autoplay bloqueado, sin saldo, etc.)
+      // el texto ya está visible y la conversación sigue normal.
+      if (voiceEnabled && !welcomeAudioPlayedRef.current && fullWelcome.trim()) {
+        welcomeAudioPlayedRef.current = true
+        const cleanText = fullWelcome
+          .replace(/\*\*([^*]+)\*\*/g, '$1')
+          .replace(/\*([^*]+)\*/g, '$1')
+          .replace(/__([^_]+)__/g, '$1')
+          .replace(/_([^_]+)_/g, '$1')
+          .replace(/`([^`]+)`/g, '$1')
+          .replace(/#{1,6}\s+/g, '')
+          .replace(/^\s*\d+[.)]\s*/gm, '')
+          .replace(/^\s*[-*•]\s+/gm, '')
+          .replace(/\n{2,}/g, '. ')
+          .replace(/\n/g, ' ')
+          .replace(/\s+/g, ' ')
+          .replace(/\s+\./g, '.')
+          .replace(/\.+/g, '.')
+          .trim()
+        fetch('/api/voice/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: cleanText }),
+        })
+          .then(async (ttsRes) => {
+            if (!ttsRes.ok) return
+            const blob = await ttsRes.blob()
+            const url = URL.createObjectURL(blob)
+            const audio = new Audio(url)
+            audio.onended = () => URL.revokeObjectURL(url)
+            await audio.play().catch((e) => {
+              console.warn('Welcome TTS autoplay blocked:', e)
+              URL.revokeObjectURL(url)
+            })
+          })
+          .catch((e) => console.warn('TTS welcome failed:', e))
+      }
     } catch (error) {
       console.error('Error generating welcome message:', error)
       toast.error('Error al generar mensaje de bienvenida')
