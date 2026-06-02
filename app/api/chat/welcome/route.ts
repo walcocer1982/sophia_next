@@ -123,26 +123,36 @@ ${participantFirstName ? `NOMBRE DEL ESTUDIANTE: "${participantFirstName}". Sal�
 
 TAREA: Genera un mensaje de bienvenida CONVERSACIONAL para la lección "${lessonTitle}".
 
+OBJETIVO REAL DE LA LECCIÓN (parafraseá esto en 1 oración natural, NO copies literal):
+"${lessonObjective}"
+
 REGLAS CRÍTICAS DE FORMATO (este texto se va a leer en VOZ ALTA):
 - TEXTO PLANO. NO uses asteriscos (**), guiones (-), numeración (1. 2. 3.), ni markdown.
 - NO uses "Objetivo:" ni "Puntos clave:" como títulos sueltos. Intégralos en oraciones naturales.
 - NO uses listas estructuradas. Habla de forma fluida y natural.
 - Tono cálido, amigable, como una conversación entre amigos.
 
-EJEMPLO CORRECTO:
-"Hola Walther, soy Sophia. Hoy vamos a hablar sobre perforación subterránea en minas peruanas. Nuestro objetivo es que al final puedas identificar los principales métodos de perforación, los equipos que se usan en minas como Antamina y Cerro Lindo, y las normas de seguridad peruanas. Cuéntame, ¿has trabajado antes con este tema o lo estás explorando por primera vez?"
+⛔ PROHIBIDO ABSOLUTO — NO SPOILEAR LA LECCIÓN:
+- NO listes los conceptos/fases/elementos específicos que el estudiante TIENE QUE descubrir o nombrar durante las actividades. Si la lección le pide "identificar las 5 fases", NO digas cuáles son las 5 fases en el welcome — sino le estás dando la respuesta antes de preguntar.
+- Mencioná el TEMA y el OBJETIVO de forma genérica ("vas a entender cómo funciona X", "vas a poder identificar los pasos clave"), NO el contenido literal de las respuestas.
+- Si el objetivo menciona elementos específicos entre paréntesis (ej: "(A → B → C)"), IGNORÁ esos paréntesis en el welcome — son para el sistema, no para spoilear al estudiante.
 
-EJEMPLO INCORRECTO (NO HAGAS ESTO):
-"Hola Walther. **Objetivo de aprendizaje:** Identificar los métodos. **Puntos clave:** 1. Métodos 2. Tipos 3. Normativa..."
+EJEMPLO CORRECTO (genérico, sin spoiler):
+"Hola Walther, soy Sophia. Hoy vamos a explorar cómo funciona la perforación subterránea en minas peruanas. Mi objetivo es que al final puedas reconocer los métodos principales que se usan en operaciones reales y entender por qué cada uno tiene su lugar. Cuéntame, ¿has trabajado antes con minería subterránea o es la primera vez que te acercas al tema?"
+
+EJEMPLO INCORRECTO (spoilea respuestas):
+"Hola Walther, hoy aprenderás los métodos: jumbo electrohidráulico, perforación manual con jackleg y stoper. Estos se usan en Antamina, Cerro Lindo y minería artesanal..." ← le diste la respuesta antes de preguntarle.
 
 LARGO TOTAL: 3-5 oraciones. NO más.
 
 ESTRUCTURA NATURAL:
-1. Saludo + presentación (1 oración) - di ${greetingLine}
-2. Menciona qué van a aprender hoy de forma fluida (1-2 oraciones)
+1. Saludo + presentación (1 oración) — di ${greetingLine}
+2. Mencioná el TEMA y parafraseá el OBJETIVO de la lección de forma genérica (1-2 oraciones, sin spoiler de respuestas)
 ${isCodeMethodology
   ? '3. Anticipa que es una guía paso a paso y pregunta si está listo para empezar el primer paso (1 oración)'
   : '3. Pregunta sobre experiencia previa para conectar (1 oración)'}
+
+REGLA FINAL OBLIGATORIA: el mensaje DEBE terminar con UNA pregunta dirigida al estudiante. NUNCA con un statement neutro — eso deja al estudiante sin saber si tiene que responder.
 
 NO asumas el género del estudiante. Usa formas neutras.
 

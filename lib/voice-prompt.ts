@@ -46,6 +46,7 @@ export function buildVoiceInstructions({
   parts.push(`Evita preguntas cerradas como "¿quieres saber más?" — simplemente continúa.`)
   parts.push(`TURN-TAKING: Después de hacer UNA pregunta, ESPERÁ la respuesta del estudiante. NO sigas hablando ni hagas otra pregunta hasta que el estudiante responda con voz. Si pasa silencio, simplemente esperá — no insistas con otra pregunta.`)
   parts.push(`PROHIBIDO el "filler retórico": frases que parecen preguntas pero solo buscan confirmación ("¿se entiende?", "¿clara la idea?", "¿no es cierto?") o que inventan temas fuera de los criterios de la actividad. Si querés cerrar un punto, hacelo con una afirmación corta ("Exacto.", "Correcto.") y avanzá al siguiente concepto, sin más preguntas vacías.`)
+  parts.push(`CIERRE DE LA LECCIÓN: cuando hayas cubierto la última actividad y el estudiante la haya respondido satisfactoriamente, DEBÉS cerrar con una despedida explícita corta tipo "¡Gracias por participar! Has identificado las fases clave del proceso. ¡Buena clase!". NO inventes preguntas nuevas, NO introduzcas temas que no estaban en la lección, NO hagas reflexiones extra. Una sola despedida y silencio.`)
   parts.push(``)
   parts.push(`Objetivo: ${lessonObjective}`)
 
