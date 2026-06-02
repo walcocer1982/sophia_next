@@ -305,8 +305,17 @@ export function useVoiceChat({
       }
 
       if (data.type === 'error') {
+        const msg: string = data.error?.message || 'Voice error'
+        // "Cancellation failed: no active response found" es esperable cuando
+        // nuestro guard pide cancelar pero el server ya cerró la respuesta sola
+        // (race condition benigna). NO mostrar al usuario, solo loguear.
+        const isBenignCancel = /cancellation failed.*no active response/i.test(msg)
+        if (isBenignCancel) {
+          console.warn('[Voice] cancel race (no active response — ignorando):', msg)
+          return
+        }
         console.error('Realtime error:', data)
-        setError(data.error?.message || 'Voice error')
+        setError(msg)
         clearStuckTimer()
         setState('error')
       }
