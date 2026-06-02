@@ -361,7 +361,24 @@ export function useVoiceChat({
 
       let stream: MediaStream
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        // Audio constraints específicas para llamadas con WebRTC:
+        // - echoCancellation: evita que el mic capture la voz de Sophia desde
+        //   los parlantes (causa típica de entrecortado + loops de audio).
+        // - noiseSuppression: reduce ruido ambiente (ventiladores, gente cerca).
+        // - autoGainControl: nivela el volumen del estudiante (que puede estar
+        //   lejos o cerca del micrófono).
+        // - sampleRate: 24kHz coincide con lo que OpenAI Realtime usa internamente,
+        //   evitando resampling extra que introduce latencia y artefactos.
+        // - channelCount: 1 (mono) — basta para voz y reduce ancho de banda.
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 24000,
+            channelCount: 1,
+          },
+        })
       } catch (mediaErr) {
         const name = (mediaErr as Error).name
         if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
