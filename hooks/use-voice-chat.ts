@@ -42,11 +42,12 @@ export function useVoiceChat({
   // Evita el patrón observado donde Sophia hablaba 2-3 veces seguidas sin
   // que el estudiante respondiera.
   const responseInFlightRef = useRef<boolean>(false)
-  // Guard adicional para auto-chain DELAYED: rastrea si el estudiante habló
-  // desde la última respuesta de Sophia. Si llega response.created sin que
-  // haya habido transcripción de usuario en el medio, cancelamos.
-  // Resuelve el caso: Sophia termina → 28s después decide hablar otra vez sola.
-  const studentSpokeSinceLastResponseRef = useRef<boolean>(true) // true al inicio para permitir el welcome
+  // Guard contra auto-chain DELAYED: marcamos true cuando NOSOTROS enviamos
+  // response.create (en stopRecording). Si llega response.created sin que lo
+  // hayamos pedido, es el server iniciándose solo → cancelamos.
+  // Inicial true para permitir el welcome (que el server inicia automáticamente
+  // tras connect).
+  const weRequestedResponseRef = useRef<boolean>(true)
   const MIN_RECORDING_MS = 1500 // Minimum 1.5 seconds to ensure complete sentence
   const STUCK_TIMEOUT_MS = 30000 // Reset to ready if stuck in processing/speaking for 30s
   const IDLE_AFTER_DELTA_MS = 5000 // If no audio delta for 5s, response likely ended
@@ -113,9 +114,8 @@ export function useVoiceChat({
 
       // Guard contra auto-encadenamiento (inmediato + delayed):
       // - Inmediato: response.created mientras Sophia todavía habla → cancelar
-      // - Delayed: response.created sin que el estudiante haya hablado desde
-      //   la última respuesta de Sophia → cancelar (Sophia se auto-encadenó
-      //   minutos después sin input del usuario).
+      // - Delayed: response.created que NO pedimos nosotros → cancelar
+      //   (el server se inició solo sin que stopRecording haya enviado response.create)
       if (data.type === 'response.created') {
         if (responseInFlightRef.current) {
           console.warn('[Voice] response.created mientras anterior en curso — cancelando duplicada')
@@ -125,8 +125,8 @@ export function useVoiceChat({
           }
           return
         }
-        if (!studentSpokeSinceLastResponseRef.current) {
-          console.warn('[Voice] response.created sin input del estudiante desde la última respuesta — cancelando auto-chain delayed')
+        if (!weRequestedResponseRef.current) {
+          console.warn('[Voice] response.created sin que lo hayamos pedido — cancelando auto-chain server-initiated')
           const dc = dataChannelRef.current
           if (dc?.readyState === 'open') {
             dc.send(JSON.stringify({ type: 'response.cancel' }))
@@ -134,7 +134,7 @@ export function useVoiceChat({
           return
         }
         responseInFlightRef.current = true
-        studentSpokeSinceLastResponseRef.current = false // reset para la próxima ronda
+        weRequestedResponseRef.current = false // se vuelve true cuando stopRecording envíe response.create
       }
 
       // Log important events for debugging truncation
@@ -185,8 +185,6 @@ export function useVoiceChat({
           }
           return
         }
-        // Estudiante habló de verdad — habilitar la próxima respuesta de Sophia
-        studentSpokeSinceLastResponseRef.current = true
         saveMessage('user', transcript)
       }
 
@@ -418,6 +416,9 @@ export function useVoiceChat({
     stream.getAudioTracks().forEach(t => { t.enabled = false })
     setState('processing')
     sendEvent({ type: 'input_audio_buffer.commit' })
+    // Marcar que nosotros pedimos la respuesta — el guard de auto-chain
+    // necesita saber que esta respuesta es legítima (no iniciada por el server).
+    weRequestedResponseRef.current = true
     sendEvent({ type: 'response.create' })
   }, [state, sendEvent])
 
