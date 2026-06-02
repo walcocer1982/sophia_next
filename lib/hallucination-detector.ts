@@ -81,14 +81,16 @@ export function detectHallucination(message: string): HallucinationCheck {
     }
   }
 
-  // 6) Frase repetida: la misma secuencia de 2-3 palabras aparece 2+ veces.
-  //    Cubre el caso "¿Cómo se puede ver? ¿Cómo se puede ver? No. ¿Cómo se
-  //    puede ver?" donde Whisper transcribe un loop conversacional ambiente.
+  // 6) Frase repetida: la misma secuencia de 3 palabras aparece 3+ veces.
+  //    Subido a 3+ reps (antes 2+) porque un hablante natural puede repetir
+  //    una frase de 3 palabras 2 veces sin estar hallucinated (típico cuando
+  //    encadena ideas: "X para Y. X para Z..."). 3+ repeticiones del mismo
+  //    trigrama es mucho menos común en habla natural pero típico de Whisper
+  //    en loop transcribiendo ruido ambiente.
   if (trimmed.length > 30) {
     const normalized = trimmed.toLowerCase().replace(/[¿?¡!.,;:]/g, '')
     const tokens = normalized.split(/\s+/).filter(t => t.length > 0)
-    if (tokens.length >= 6) {
-      // Construir trigramas (3 palabras consecutivas)
+    if (tokens.length >= 9) {
       const trigrams: string[] = []
       for (let i = 0; i <= tokens.length - 3; i++) {
         trigrams.push(`${tokens[i]} ${tokens[i + 1]} ${tokens[i + 2]}`)
@@ -96,8 +98,7 @@ export function detectHallucination(message: string): HallucinationCheck {
       const triCounts: Record<string, number> = {}
       for (const t of trigrams) triCounts[t] = (triCounts[t] || 0) + 1
       const maxTri = Math.max(...Object.values(triCounts))
-      // Trigrama repetido 2+ veces es señal fuerte de loop
-      if (maxTri >= 2) {
+      if (maxTri >= 3) {
         const topTri = Object.entries(triCounts).find(([, c]) => c === maxTri)?.[0]
         return { isHallucination: true, reason: `frase "${topTri}" repetida ${maxTri} veces (loop de Whisper)` }
       }
