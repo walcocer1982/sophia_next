@@ -320,7 +320,7 @@ export function AssessmentSession({
   const timeLabel = `${minutes}:${seconds.toString().padStart(2, '0')}`
 
   return (
-    <div className="h-[calc(100vh-64px)] w-full max-w-[1600px] mx-auto px-3 py-2 flex flex-col gap-2 overflow-hidden">
+    <div className="h-full w-full max-w-[1600px] mx-auto px-3 py-2 flex flex-col gap-2 overflow-hidden">
       {/* Top bar: participant + timer + finish */}
       <div className="shrink-0 flex items-center justify-between bg-[#0d1f3c]/80 backdrop-blur border border-white/10 rounded-xl px-4 py-2">
         <div className="text-sm text-slate-300">

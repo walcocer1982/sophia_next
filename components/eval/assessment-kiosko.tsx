@@ -113,7 +113,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
   }
 
   return (
-    <div className="min-h-screen bg-[#0a1628] flex flex-col relative overflow-hidden">
+    <div className="h-screen bg-[#0a1628] flex flex-col relative overflow-hidden">
       {/* Subtle grid background */}
       <div
         className="absolute inset-0 opacity-[0.03]"
@@ -130,20 +130,17 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
       <header className="relative z-10 border-b border-white/5 bg-[#0a1628]/80 backdrop-blur-md px-6 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={40} height={40} className="rounded-md" />
-          <div className="hidden sm:block h-6 w-px bg-white/10" />
-          <div className="flex items-center gap-2">
-            <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={32} height={32} className="rounded-full ring-2 ring-white/10 object-cover scale-110" />
-            <div>
-              <h1 className="text-sm font-semibold text-white">Sophia · Clase</h1>
-              <p className="text-xs text-slate-400">{assessment.title}</p>
-            </div>
+          <div>
+            <h1 className="text-sm font-semibold text-white">Sophia · Clase</h1>
+            <p className="text-xs text-slate-400">{assessment.title}</p>
           </div>
         </div>
         <div className="text-xs text-slate-400">Código: <span className="font-mono font-semibold text-white">{assessment.code}</span></div>
       </header>
 
-      {/* Content */}
-      <main className="flex-1 flex items-center justify-center p-6">
+      {/* Content — flex-1 + min-h-0 para que el hijo (session/register) llene
+          exactamente lo que queda tras el header, sin necesidad de scroll. */}
+      <main className={`flex-1 min-h-0 flex flex-col ${stage === 'register' ? 'items-center justify-center p-6' : ''}`}>
         <AnimatePresence mode="wait">
           {stage === 'register' && (
             <motion.div
@@ -233,7 +230,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
               key="session"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="w-full h-full"
+              className="w-full flex-1 min-h-0 flex flex-col"
             >
               <AssessmentSession
                 sessionId={sessionId}
