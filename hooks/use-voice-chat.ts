@@ -175,14 +175,12 @@ export function useVoiceChat({
         const broadCheck = detectHallucination(transcript)
         const isHallucination = matchesYoutubePattern || broadCheck.isHallucination
         if (isHallucination) {
-          console.warn('[Voice] Whisper hallucination detected, skipping transcript save + cancelling Sophia response:', transcript, broadCheck.reason || '')
-          // Cancelar la respuesta en curso de Sophia: si Whisper hallucinated,
-          // significa que probablemente fue ruido y Sophia estaría respondiendo
-          // a la nada. Mejor cortar que generar respuesta encadenada sin sentido.
-          const dc = dataChannelRef.current
-          if (dc?.readyState === 'open') {
-            dc.send(JSON.stringify({ type: 'response.cancel' }))
-          }
+          // NO cancelamos la respuesta de Sophia aunque Whisper haya hallucinated.
+          // La respuesta de Sophia se genera del AUDIO original (que puede ser
+          // valido aunque la transcripcion sea basura). Si cancelamos, cortamos
+          // a Sophia a media frase — exactamente el bug que el usuario reporto.
+          // Solo descartamos el transcript del estudiante para no contaminar la DB.
+          console.warn('[Voice] Whisper hallucination detected — solo descartando transcript (no cancelando Sophia):', transcript, broadCheck.reason || '')
           return
         }
         saveMessage('user', transcript)
