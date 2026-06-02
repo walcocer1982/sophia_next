@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Clock, LogOut, Target, Lightbulb, ImageIcon, Type, X, BarChart3 } from 'lucide-react'
+import { Clock, LogOut, Target, Lightbulb, ImageIcon, Type, X, BarChart3, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { SophiaAvatar } from '../learning/sophia-avatar'
 import { VoiceButton } from '../learning/voice-button'
 import { ChatInput, type ChatInputRef } from '../learning/chat-input'
+import { ConversationDrawer } from '../learning/conversation-drawer'
 import type { OptimisticMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
 
@@ -57,6 +58,7 @@ export function AssessmentSession({
   const [avatarState, setAvatarState] = useState<AvatarState>('idle')
   const [lightboxImage, setLightboxImage] = useState<{ url: string; description: string } | null>(null)
   const [progressData, setProgressData] = useState<{ current: number; total: number; percentage: number } | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
   const welcomeRequested = useRef(false)
   const finishedRef = useRef(false)
   const welcomeAudioPlayedRef = useRef(false)
@@ -445,6 +447,20 @@ export function AssessmentSession({
             </AnimatePresence>
           </div>
 
+          {/* Ver conversación (mismo patrón que /learn — drawer lateral con historial completo) */}
+          {messages.length > 0 && (
+            <div className="shrink-0 flex items-center justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => setShowHistory(true)}
+                className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-cyan-300 transition-colors"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Ver conversación ({messages.length} {messages.length === 1 ? 'mensaje' : 'mensajes'})
+              </button>
+            </div>
+          )}
+
           {/* Controls */}
           <div className="shrink-0 mt-3 pt-3 border-t border-white/10 flex items-center justify-center gap-2">
             {voiceEnabled && (
@@ -599,6 +615,13 @@ export function AssessmentSession({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Historial de conversación (mismo componente que /learn) */}
+      <ConversationDrawer
+        open={showHistory}
+        onClose={() => setShowHistory(false)}
+        messages={messages}
+      />
     </div>
   )
 }
