@@ -114,7 +114,10 @@ export function ChatInterface({
         throw new Error('No reader available')
       }
 
-      // Read stream chunks y actualizar mensaje existente
+      // Acumular el welcome SILENCIOSAMENTE. Si el curso tiene voz, queremos
+      // que texto y audio aparezcan al mismo tiempo (no texto primero y voz
+      // 1-2s después). Si no hay voz, mostramos el texto en streaming como antes.
+      const shouldDeferReveal = voiceEnabled && !welcomeAudioPlayedRef.current
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -122,29 +125,33 @@ export function ChatInterface({
         const text = decoder.decode(value, { stream: true })
         streamingContentRef.current += text
 
-        // Actualizar mensaje por ID
+        if (!shouldDeferReveal) {
+          // Sin voz: actualizar bubble en vivo como antes.
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === welcomeId ? { ...m, content: streamingContentRef.current } : m
+            )
+          )
+        }
+        // Con voz: dejamos el bubble vacío (TutorMode mostrará "Sophia se está
+        // preparando…") hasta que el audio esté listo.
+      }
+
+      const fullWelcome = streamingContentRef.current
+      streamingContentRef.current = ''
+
+      // Helper: revelar el texto del welcome (markear el mensaje como completed).
+      const revealWelcomeText = () => {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === welcomeId ? { ...m, content: streamingContentRef.current } : m
+            m.id === welcomeId
+              ? { ...m, content: fullWelcome, status: 'completed', isOptimistic: false }
+              : m
           )
         )
       }
 
-      // Marcar como completado
-      const fullWelcome = streamingContentRef.current
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === welcomeId
-            ? { ...m, status: 'completed', isOptimistic: false }
-            : m
-        )
-      )
-      streamingContentRef.current = ''
-
-      // Auto-play TTS del welcome cuando el curso tiene voz habilitada.
-      // No bloquea el flujo: si falla (autoplay bloqueado, sin saldo, etc.)
-      // el texto ya está visible y la conversación sigue normal.
-      if (voiceEnabled && !welcomeAudioPlayedRef.current && fullWelcome.trim()) {
+      if (shouldDeferReveal && fullWelcome.trim()) {
         welcomeAudioPlayedRef.current = true
         const cleanText = fullWelcome
           .replace(/\*\*([^*]+)\*\*/g, '$1')
@@ -161,23 +168,51 @@ export function ChatInterface({
           .replace(/\s+\./g, '.')
           .replace(/\.+/g, '.')
           .trim()
-        fetch('/api/voice/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: cleanText }),
-        })
-          .then(async (ttsRes) => {
-            if (!ttsRes.ok) return
+        try {
+          const ttsRes = await fetch('/api/voice/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: cleanText }),
+          })
+          if (ttsRes.ok) {
             const blob = await ttsRes.blob()
             const url = URL.createObjectURL(blob)
-            const audio = new Audio(url)
+            const audio = new Audio()
+            audio.preload = 'auto'
+            audio.src = url
             audio.onended = () => URL.revokeObjectURL(url)
-            await audio.play().catch((e) => {
+            // Esperar a que el audio pueda reproducirse de corrido o hasta 1.5s
+            // como tope, para no bloquear si la red está lenta.
+            await new Promise<void>((resolve) => {
+              audio.oncanplaythrough = () => resolve()
+              audio.onerror = () => resolve()
+              audio.load()
+              setTimeout(() => resolve(), 1500)
+            })
+            // Revelar texto y arrancar audio al mismo tiempo.
+            revealWelcomeText()
+            audio.play().catch((e) => {
               console.warn('Welcome TTS autoplay blocked:', e)
               URL.revokeObjectURL(url)
             })
-          })
-          .catch((e) => console.warn('TTS welcome failed:', e))
+          } else {
+            // TTS falló — mostrar texto igual.
+            revealWelcomeText()
+          }
+        } catch (e) {
+          console.warn('TTS welcome failed:', e)
+          revealWelcomeText()
+        }
+      } else {
+        // Sin voz — el texto ya estaba apareciendo en streaming. Solo marcar
+        // como completed.
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === welcomeId
+              ? { ...m, status: 'completed', isOptimistic: false }
+              : m
+          )
+        )
       }
     } catch (error) {
       console.error('Error generating welcome message:', error)
