@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Clock, LogOut, Target, Lightbulb, ImageIcon, Type, X } from 'lucide-react'
+import { Clock, LogOut, Target, Lightbulb, ImageIcon, Type, X, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 import { SophiaAvatar } from '../learning/sophia-avatar'
 import { VoiceButton } from '../learning/voice-button'
 import { ChatInput, type ChatInputRef } from '../learning/chat-input'
@@ -55,11 +56,36 @@ export function AssessmentSession({
   const [showTextInput, setShowTextInput] = useState(!voiceEnabled)
   const [avatarState, setAvatarState] = useState<AvatarState>('idle')
   const [lightboxImage, setLightboxImage] = useState<{ url: string; description: string } | null>(null)
+  const [progressData, setProgressData] = useState<{ current: number; total: number; percentage: number } | null>(null)
   const welcomeRequested = useRef(false)
   const finishedRef = useRef(false)
   const welcomeAudioPlayedRef = useRef(false)
   const chatInputRef = useRef<ChatInputRef>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  // Fetch progress en montaje + cada vez que la conversación cambia (Sophia
+  // responde → posible activity_completed → recargar). Polling cada 8s como
+  // safety net por si la voz completa una actividad sin que el cliente lo sepa.
+  const fetchProgress = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/activity/progress?sessionId=${sessionId}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setProgressData({
+        current: data.currentPosition ?? data.progress ?? 0,
+        total: data.totalActivities ?? data.total ?? 0,
+        percentage: data.percentage ?? 0,
+      })
+    } catch {
+      // silencio: la barra solo es info, si falla queda en 0%
+    }
+  }, [sessionId])
+
+  useEffect(() => {
+    fetchProgress()
+    const interval = setInterval(fetchProgress, 8000)
+    return () => clearInterval(interval)
+  }, [fetchProgress])
 
   // Force the Sophia animation to autoplay reliably even if the browser
   // throttles the declarative autoplay attribute.
@@ -268,6 +294,8 @@ export function AssessmentSession({
           setMessages(prev => prev.map(m =>
             m.id === assistantId ? { ...m, status: 'completed', isOptimistic: false } : m
           ))
+          // Sophia terminó de responder — recargar progreso por si verificó/avanzó actividad
+          fetchProgress()
         },
         () => setMessages(prev => prev.filter(m => m.id !== assistantId))
       )
@@ -342,6 +370,25 @@ export function AssessmentSession({
               ))}
             </div>
           </section>
+
+          {/* PROGRESO — fijo abajo del sidebar para que el visitante vea su avance */}
+          {progressData && progressData.total > 0 && (
+            <section className="shrink-0 pt-3 border-t border-white/10">
+              <div className="bg-white/5 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-sm text-slate-300">
+                    <BarChart3 className="h-4 w-4 text-cyan-400" />
+                    <span>Progreso</span>
+                  </div>
+                  <span className="text-sm font-semibold text-cyan-400">{progressData.percentage}%</span>
+                </div>
+                <Progress value={progressData.percentage} className="h-2 bg-white/10" />
+                <p className="text-xs text-slate-400 mt-2 text-center">
+                  Actividad {Math.max(1, progressData.current)} de {progressData.total}
+                </p>
+              </div>
+            </section>
+          )}
         </aside>
 
         {/* CENTER: Avatar + bubble */}
