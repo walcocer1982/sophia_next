@@ -215,7 +215,22 @@ export async function POST(request: Request) {
 
   const attempts = activityProgress?.attempts || 0
   const tangentCount = activityProgress?.tangentCount || 0
-  const existingEvidence = (activityProgress?.evidenceData as { attempts?: Array<unknown> } | null) || { attempts: [] }
+  const existingEvidence = (activityProgress?.evidenceData as {
+    attempts?: Array<unknown>
+    scaffoldingTurns?: number
+  } | null) || { attempts: [] }
+  const scaffoldingTurns = existingEvidence.scaffoldingTurns || 0
+
+  // Cap de sub-preguntas (desglose) por tipo de actividad. Reflection cierra
+  // pronto porque es una sola pregunta abierta — no se desglosa repetidamente.
+  // CODE methodology no escala (usa verifyStepCompletion binario).
+  const SCAFFOLDING_CAP_BY_TYPE: Record<string, number> = {
+    explanation: 3,
+    practice: 3,
+    reflection: 1,
+    closing: 3,
+  }
+  const scaffoldingCap = SCAFFOLDING_CAP_BY_TYPE[currentActivity.type as string] ?? 3
 
   // ═══════════════════════════════════════════════════════════════
   // 3. MODERACIÓN + CLASIFICACIÓN + VERIFICACIÓN EN PARALELO
@@ -246,13 +261,15 @@ export async function POST(request: Request) {
       ? Promise.resolve({
           completed: true,
           criteriaMatched: ['Actividad ya completada'],
-          criteriaMissing: [],
+          criteriaMissing: [] as string[],
           completeness_percentage: 100,
           understanding_level: 'understood' as const,
           response_type: 'correct' as const,
           feedback: '',
           confidence: 'high' as const,
           ready_to_advance: true,
+          needs_scaffolding: false,
+          next_subquestion: undefined,
         })
       // Continuaciones ("sí", "listo"): verificar acumulativamente.
       // CODE: verificación binaria (¿completó el paso?). REFLECTIVE: socrática.
@@ -269,6 +286,35 @@ export async function POST(request: Request) {
     relevance_score: intent.relevance_score,
     moderation_safe: moderation.is_safe,
   })
+
+  // ═══════════════════════════════════════════════════════════════
+  // Escalada por desglose (scaffolding)
+  // ═══════════════════════════════════════════════════════════════
+  // El AI evaluador puede indicar needs_scaffolding=true cuando la respuesta
+  // es parcial/cero pero en tema. Sophia entonces desglosa con una sub-pregunta
+  // específica. Si ya alcanzamos el cap por tipo, forzamos avanzar con el nivel
+  // actual (no se castiga al estudiante: el nivel ya refleja lo que llegó a dar).
+  let willScaffold = false
+  if (
+    verification.needs_scaffolding === true &&
+    verification.next_subquestion &&
+    !activityAlreadyCompleted
+  ) {
+    if (scaffoldingTurns < scaffoldingCap) {
+      willScaffold = true
+    } else {
+      // Cap alcanzado: avanzar con el nivel ya escalado
+      verification.needs_scaffolding = false
+      verification.ready_to_advance = true
+      logger.info('chat.stream.scaffolding_cap_reached', {
+        sessionId,
+        activityId: currentActivity.id,
+        scaffoldingTurns,
+        cap: scaffoldingCap,
+        finalLevel: verification.understanding_level,
+      })
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // 4. VERIFICAR MODERACIÓN - Intervenir sin guardar en BD
@@ -539,6 +585,8 @@ export async function POST(request: Request) {
           }
           const updatedEvidence = JSON.parse(JSON.stringify({
             attempts: [...(existingEvidence.attempts || []), newAttempt],
+            // Preservar el conteo de desglose (informativo: cuántas sub-preguntas se usaron antes de completar)
+            scaffoldingTurns,
           }))
 
           await prisma.activityProgress.upsert({
@@ -710,6 +758,8 @@ export async function POST(request: Request) {
           }
           const failedEvidence = JSON.parse(JSON.stringify({
             attempts: [...(existingEvidence.attempts || []), failedAttempt],
+            // Conservar y avanzar el contador de desglose si Sophia va a desglosar
+            scaffoldingTurns: willScaffold ? scaffoldingTurns + 1 : scaffoldingTurns,
           }))
 
           await prisma.activityProgress.upsert({

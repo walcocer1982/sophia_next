@@ -94,13 +94,26 @@ Responde en formato JSON con esta estructura EXACTA:
   "response_type": "correct" | "partial" | "incorrect" | "off_topic",
   "feedback": "feedback conciso y constructivo (máximo 2 oraciones)",
   "confidence": "high" | "medium" | "low",
-  "ready_to_advance": boolean
+  "ready_to_advance": boolean,
+  "needs_scaffolding": boolean,
+  "next_subquestion": "string o null"
 }
 
 REGLAS PARA ready_to_advance (PREGUNTA ABIERTA — más permisivo):
 - true si el estudiante demuestra reflexión genuina (completeness >= 40%)
 - true si articula una posición coherente, aunque no cubra todos los aspectos
 - false SOLO si la respuesta es evasiva, monosílaba o completamente off-topic
+
+REGLAS PARA needs_scaffolding (DESGLOSE — para preguntas abiertas):
+- true SOLO si: response_type=partial Y completeness < 40% Y NO es off_topic
+- false si la respuesta es razonablemente completa O si es off_topic
+- En preguntas abiertas, profundizar UNA sola vez ("¿por qué piensas eso?") cuenta como scaffolding
+
+REGLAS PARA next_subquestion:
+- Si needs_scaffolding=true: una sub-pregunta CORTA que pida profundizar o dar un ejemplo
+- NUNCA reveles la respuesta esperada en la sub-pregunta
+- NUNCA listes opciones para que elija (ej: ~"¿es A, B o C?"~)
+- null si needs_scaffolding=false
 
 Responde SOLO con el JSON, sin texto adicional.`
 }
@@ -173,7 +186,9 @@ Responde en formato JSON con esta estructura EXACTA:
   "response_type": "correct" | "partial" | "incorrect" | "off_topic",
   "feedback": "feedback conciso y constructivo (máximo 2 oraciones)",
   "confidence": "high" | "medium" | "low",
-  "ready_to_advance": boolean
+  "ready_to_advance": boolean,
+  "needs_scaffolding": boolean,
+  "next_subquestion": "string o null"
 }
 
 REGLAS PARA response_type:
@@ -186,6 +201,21 @@ REGLAS PARA ready_to_advance:
 - true si completeness_percentage >= ${minCompleteness}
 - true si understanding_level es igual o superior a "${expectedLevel}"
 - false si el estudiante claramente no entendió el concepto central
+
+REGLAS PARA needs_scaffolding (DESGLOSE):
+- true SOLO si: response_type=partial o incorrect Y NO está listo para avanzar Y NO es off_topic
+- false si: ya está listo para avanzar, o si es off_topic, o si ya cumple criterios
+- El propósito: descomponer la pregunta cuando el estudiante dio respuesta parcial/cero pero está en tema
+
+REGLAS PARA next_subquestion (cuando needs_scaffolding=true):
+- Sub-pregunta CORTA (máx 1 oración) que apunte a UN criterio faltante específico
+- Debe inducir al estudiante a llegar al concepto SIN dárselo:
+  ✅ Pregunta por la consecuencia, el propósito, el "qué pasaría si no"
+  ✅ Pregunta por un escenario o ejemplo concreto
+  ❌ NUNCA reveles el nombre del concepto del criterio
+  ❌ NUNCA listes opciones para que elija ("¿es A, B o C?")
+  ❌ NUNCA digas "te falta hablar de X"
+- null si needs_scaffolding=false
 
 Responde SOLO con el JSON, sin texto adicional.`
 }

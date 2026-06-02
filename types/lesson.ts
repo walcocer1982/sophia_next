@@ -166,17 +166,25 @@ export interface CurrentActivityContext {
 
 /**
  * Resultado de verificación de completitud (estructura mejorada)
+ *
+ * Escalada (2026-06-02): el AI puede sugerir desglosar la pregunta cuando la
+ * respuesta es parcial/cero. El estudiante puede escalar hasta Logrado vía
+ * sub-preguntas (variante laxa). Destacado solo se logra al 1er disparo.
  */
 export interface ActivityCompletionResult {
   completed: boolean
   criteriaMatched: string[]
   criteriaMissing: string[]
   completeness_percentage: number         // 0-100
-  understanding_level: UnderstandingLevel // Nivel demostrado
+  understanding_level: UnderstandingLevel // Nivel demostrado (inicio/proceso/logrado/destacado)
   response_type: ResponseType             // Tipo de respuesta (correct/partial/incorrect/off_topic)
   feedback: string
   confidence: 'high' | 'medium' | 'low'
   ready_to_advance: boolean               // Si puede avanzar a siguiente actividad
+  /** True cuando la respuesta es parcial/cero y Sophia debe desglosar */
+  needs_scaffolding?: boolean
+  /** Sugerencia de sub-pregunta específica para descomponer (sin revelar la respuesta) */
+  next_subquestion?: string
 }
 
 /**

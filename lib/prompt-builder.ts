@@ -546,6 +546,33 @@ Pregunta: "${nextQuestion}"
         ? `Lo que falta por cubrir: ${verificationResult.criteriaMissing.join('; ')}`
         : ''
 
+      // Si el AI evaluador sugiere desglose, tiene prioridad sobre las guías
+      // genéricas por response_type: Sophia debe hacer la sub-pregunta SUGERIDA
+      // sin revelar la respuesta esperada.
+      if (verificationResult.needs_scaffolding && verificationResult.next_subquestion) {
+        dynamicPrompt += `\n\nESTADO: DESGLOSE — la respuesta está parcial/incompleta pero el estudiante está en tema. Hacé UNA sub-pregunta específica para que llegue al criterio que falta.
+${matchedStr}
+${missingStr}
+
+SUB-PREGUNTA SUGERIDA POR EL EVALUADOR:
+"${verificationResult.next_subquestion}"
+
+CÓMO RESPONDER (máximo 50-70 palabras):
+1. Reconocé lo que dijo bien en 1 oración corta ("Bien, eso es parte de la respuesta").
+2. Hacé la SUB-PREGUNTA sugerida arriba (o una variante que apunte al MISMO criterio faltante).
+3. NO repitas la pregunta original entera.
+
+⛔ PROHIBIDO al hacer la sub-pregunta:
+- Revelar el nombre del concepto que falta (no digas "te falta hablar de X")
+- Listar opciones para que elija ("¿es A, B o C?")
+- Dar la respuesta dentro de la pregunta misma
+
+Nivel acumulado actual: ${verificationResult.understanding_level}
+
+🎯 TEMA ORIGINAL (NO repetir textual, ya está planteado):
+"${verification.question}"`
+        // Saltar la guía tradicional por response_type — el desglose la reemplaza.
+      } else {
       switch (responseType) {
         case 'partial':
           if (attempts >= 3) {
@@ -623,6 +650,7 @@ ${extractedScenario ? `📍 ESCENARIO A USAR (OBLIGATORIO):
 - Ignorar lo que el estudiante ya respondió bien
 - Volver a explicar conceptos de actividades anteriores
 - Cambiar el escenario por uno "más simple"`
+      } // cierre del else (rama sin desglose)
     }
   }
 
