@@ -319,6 +319,7 @@ export function ChatInterface({
           isLoading={isLoading}
           isGeneratingWelcome={isGeneratingWelcome}
           voiceEnabled={voiceEnabled}
+          autoStartVoice={voiceEnabled}
           allowPaste={allowPaste}
         />
 

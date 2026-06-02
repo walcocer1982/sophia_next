@@ -127,7 +127,12 @@ function LearningLayoutInner({
             activities={testMode.activities}
           />
         )}
-        {children}
+        {/* min-h-0 + flex-1 garantiza que children llene SOLO el espacio
+            restante del flex-col (no se desborda y los controles abajo del
+            chat quedan visibles sin necesidad de scroll de la página). */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {children}
+        </div>
       </main>
 
       {/* Right Panel (Images or Sophia video) */}

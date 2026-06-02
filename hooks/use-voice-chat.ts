@@ -139,8 +139,14 @@ export function useVoiceChat({
         saveMessage('user', transcript)
       }
 
-      // Stream assistant transcript in real-time
-      if (data.type === 'response.audio_transcript.delta') {
+      // Stream assistant transcript in real-time.
+      // OpenAI GA renombró estos eventos: 'response.audio_transcript.*' (beta)
+      // ahora son 'response.output_audio_transcript.*'. Aceptamos ambos por
+      // compatibilidad — `response.done` no cambió.
+      if (
+        data.type === 'response.output_audio_transcript.delta' ||
+        data.type === 'response.audio_transcript.delta'
+      ) {
         if (!currentResponseIdRef.current) {
           currentResponseIdRef.current = `voice-asst-${Date.now()}`
           onAssistantStreamStart?.(currentResponseIdRef.current)
@@ -150,7 +156,10 @@ export function useVoiceChat({
         }
       }
 
-      if (data.type === 'response.audio_transcript.done') {
+      if (
+        data.type === 'response.output_audio_transcript.done' ||
+        data.type === 'response.audio_transcript.done'
+      ) {
         const transcript = data.transcript?.trim()
         if (transcript) {
           // Save to DB but don't re-emit to UI (already streamed)
@@ -166,7 +175,12 @@ export function useVoiceChat({
         }
       }
 
-      if (data.type === 'response.audio.delta' || data.type === 'response.audio_transcript.delta') {
+      if (
+        data.type === 'response.output_audio.delta' ||
+        data.type === 'response.audio.delta' ||
+        data.type === 'response.output_audio_transcript.delta' ||
+        data.type === 'response.audio_transcript.delta'
+      ) {
         setState('speaking')
         // Reset stuck timer on each delta
         clearStuckTimer()
