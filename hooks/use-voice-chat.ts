@@ -52,7 +52,14 @@ export function useVoiceChat({
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null)
   const playbackUrlRef = useRef<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  // Cola de oraciones para TTS chunked: cada oración se sintetiza en paralelo
+  // (fetch al endpoint TTS) y se reproduce en orden. Esto permite empezar a
+  // hablar mientras Claude todavía está streameando el resto del response.
+  const speakQueueRef = useRef<Promise<Blob | null>[]>([])
+  const isPlayingQueueRef = useRef<boolean>(false)
+  const cancelPlaybackRef = useRef<boolean>(false)
   const MIN_RECORDING_MS = 800
+  const MIN_SENTENCE_CHARS = 20
 
   const sendEvent = useCallback((event: object) => {
     const dc = dataChannelRef.current
@@ -87,6 +94,8 @@ export function useVoiceChat({
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
+    cancelPlaybackRef.current = true
+    speakQueueRef.current = []
     stopPlayback()
     if (dataChannelRef.current) {
       try { dataChannelRef.current.close() } catch { /* ignore */ }
@@ -104,53 +113,93 @@ export function useVoiceChat({
   }, [stopPlayback])
 
   /**
-   * Sintetiza el texto con gpt-4o-mini-tts y lo reproduce.
-   * Resuelve cuando el audio termina (o si falla).
+   * Sintetiza UNA oración con TTS — devuelve el blob (o null si falla).
+   * Sin reproducción; eso lo hace el loop de la cola.
    */
-  const speak = useCallback(async (text: string): Promise<void> => {
-    if (!text.trim()) return
-    setState('speaking')
-
+  const synthesizeSentence = useCallback(async (text: string): Promise<Blob | null> => {
     try {
-      const ttsRes = await fetch('/api/voice/speak', {
+      const res = await fetch('/api/voice/speak', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       })
-      if (!ttsRes.ok) {
-        throw new Error(`TTS failed: ${ttsRes.status}`)
+      if (!res.ok) {
+        console.warn('[Voice] TTS sentence failed:', res.status)
+        return null
       }
-      const blob = await ttsRes.blob()
-      const url = URL.createObjectURL(blob)
-
-      // Limpiar reproducción anterior si la hubo
-      stopPlayback()
-      playbackUrlRef.current = url
-
-      const audio = new Audio()
-      playbackAudioRef.current = audio
-      audio.src = url
-      audio.preload = 'auto'
-
-      await new Promise<void>((resolve) => {
-        audio.onended = () => {
-          stopPlayback()
-          resolve()
-        }
-        audio.onerror = () => {
-          console.warn('[Voice] Audio playback error')
-          stopPlayback()
-          resolve()
-        }
-        audio.play().catch((e) => {
-          console.warn('[Voice] play() rejected:', e)
-          resolve()
-        })
-      })
+      return await res.blob()
     } catch (e) {
-      console.error('[Voice] speak error:', e)
+      console.warn('[Voice] TTS sentence error:', e)
+      return null
     }
-  }, [stopPlayback])
+  }, [])
+
+  /**
+   * Loop que consume la cola de oraciones: toma el próximo blob, lo reproduce,
+   * espera a que termine, y sigue con la siguiente. Si la cola se vacía,
+   * termina. Si se vuelve a llenar, hay que volver a llamar (idempotente —
+   * un solo loop activo a la vez gracias a isPlayingQueueRef).
+   */
+  const playFromQueue = useCallback(async () => {
+    if (isPlayingQueueRef.current) return
+    isPlayingQueueRef.current = true
+    setState('speaking')
+
+    while (speakQueueRef.current.length > 0 && !cancelPlaybackRef.current) {
+      const blobPromise = speakQueueRef.current.shift()
+      if (!blobPromise) continue
+      try {
+        const blob = await blobPromise
+        if (!blob || cancelPlaybackRef.current) continue
+        const url = URL.createObjectURL(blob)
+        playbackUrlRef.current = url
+
+        const audio = new Audio()
+        playbackAudioRef.current = audio
+        audio.src = url
+        audio.preload = 'auto'
+
+        await new Promise<void>((resolve) => {
+          audio.onended = () => resolve()
+          audio.onerror = () => {
+            console.warn('[Voice] audio chunk error')
+            resolve()
+          }
+          audio.play().catch((e) => {
+            console.warn('[Voice] play() rejected:', e)
+            resolve()
+          })
+        })
+        try { URL.revokeObjectURL(url) } catch { /* ignore */ }
+        if (playbackUrlRef.current === url) playbackUrlRef.current = null
+        if (playbackAudioRef.current === audio) playbackAudioRef.current = null
+      } catch (e) {
+        console.warn('[Voice] chunk playback error:', e)
+      }
+    }
+
+    isPlayingQueueRef.current = false
+  }, [])
+
+  /**
+   * Extrae oraciones completas del buffer y las agrega a la cola TTS.
+   * Una "oración completa" termina en `.` `?` `!` seguidos de espacio o fin.
+   * Devuelve el remainder (texto sin oración terminada todavía).
+   */
+  const flushSentencesIntoQueue = useCallback((buffer: string): string => {
+    // Capturamos hasta el siguiente terminador. Acepta '. ' '? ' '! ' o fin.
+    const re = /([^.!?\n]+[.!?]+)(?=\s|$)/g
+    let lastIdx = 0
+    let match: RegExpExecArray | null
+    while ((match = re.exec(buffer)) !== null) {
+      const sentence = match[1].trim().replace(/\s+/g, ' ')
+      if (sentence.length >= MIN_SENTENCE_CHARS) {
+        speakQueueRef.current.push(synthesizeSentence(sentence))
+      }
+      lastIdx = match.index + match[0].length
+    }
+    return buffer.slice(lastIdx)
+  }, [synthesizeSentence])
 
   /**
    * Manda el transcript del estudiante a Claude vía /api/chat/stream,
@@ -175,6 +224,11 @@ export function useVoiceChat({
     onAssistantStreamStart?.(assistantId)
 
     let accumulated = ''
+    let sentenceBuffer = ''
+    // Reset de la cola para este turno
+    speakQueueRef.current = []
+    isPlayingQueueRef.current = false
+    cancelPlaybackRef.current = false
 
     await new Promise<void>((resolve) => {
       streamChatResponse(
@@ -182,7 +236,16 @@ export function useVoiceChat({
         userTranscript,
         (chunk) => {
           accumulated += chunk
+          sentenceBuffer += chunk
           onAssistantStreamDelta?.(assistantId, chunk)
+          // Cada vez que llega un chunk, intentamos extraer oraciones completas
+          // y encolarlas para TTS. Sentencias parciales se quedan en el buffer.
+          const previousQueueLen = speakQueueRef.current.length
+          sentenceBuffer = flushSentencesIntoQueue(sentenceBuffer)
+          if (speakQueueRef.current.length > previousQueueLen) {
+            // Hay nuevas oraciones en cola: arrancar el loop si no está corriendo.
+            playFromQueue()
+          }
         },
         () => {
           onAssistantStreamDone?.(assistantId)
@@ -195,15 +258,25 @@ export function useVoiceChat({
       )
     })
 
-    // Hablar la respuesta completa de Claude. NOTE: futuro optimización =
-    // hablar por oraciones (TTS chunked) mientras Claude termina de stream.
+    // Stream terminado: si quedó texto en el buffer sin terminador (la última
+    // "oración" sin punto final), la encolamos también.
+    if (sentenceBuffer.trim().length >= 3) {
+      speakQueueRef.current.push(synthesizeSentence(sentenceBuffer.trim()))
+      playFromQueue()
+    }
+
     if (accumulated.trim()) {
       onTranscript?.({ role: 'assistant', content: accumulated })
-      await speak(accumulated)
+    }
+
+    // Esperar a que la cola termine de reproducir antes de volver a 'ready'.
+    while (isPlayingQueueRef.current || speakQueueRef.current.length > 0) {
+      await new Promise((r) => setTimeout(r, 100))
+      if (cancelPlaybackRef.current) break
     }
 
     setState('ready')
-  }, [sessionId, onTranscript, onAssistantStreamStart, onAssistantStreamDelta, onAssistantStreamDone, speak])
+  }, [sessionId, onTranscript, onAssistantStreamStart, onAssistantStreamDelta, onAssistantStreamDone, flushSentencesIntoQueue, playFromQueue, synthesizeSentence])
 
   const handleServerEvent = useCallback((event: MessageEvent) => {
     try {
@@ -381,6 +454,8 @@ export function useVoiceChat({
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
+    cancelPlaybackRef.current = true
+    speakQueueRef.current = []
     stopPlayback()
     setState('ready')
     setError(null)
