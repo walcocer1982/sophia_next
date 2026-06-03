@@ -5,15 +5,15 @@
  * (Inicio/Proceso/Logrado/Destacado) se deriva de este número en lib/rubric.ts
  * vía gradeToRubricLevel().
  *
- * MODELO ACTUAL (2026-06-02 — escalada):
- * - El AI evalúa cada respuesta y devuelve understanding_level.
- * - Cuando la respuesta es parcial/cero, Sophia desglosa con sub-preguntas
- *   (hasta 3, o 1 para reflection). El nivel del estudiante puede ESCALAR
- *   con cada sub-respuesta: Inicio → Proceso → Logrado.
- * - Destacado solo se logra al 1er disparo, sin desglose.
- * - El grade final usa el nivel ESCALADO (último understanding_level registrado).
- * - El cap-by-attempts del modelo anterior se elimina: ya no hace falta porque
- *   la escalada se autorregula en el nivel.
+ * MODELO (2026-06-03):
+ * - El AI evalúa CADA respuesta del estudiante por actividad.
+ * - Cada respuesta recibe un understanding_level → score (25/50/75/100).
+ * - Score de actividad = PROMEDIO de los scores de todos sus intentos.
+ * - Grade final = PROMEDIO de los scores de todas las actividades.
+ *
+ * Esto refleja la consistencia del estudiante en toda la conversación, no
+ * solo el último intento. Un estudiante que arranca mal y termina bien
+ * promedia entre los dos extremos.
  */
 
 /** Nivel de dominio que devuelve el AI → score base.
@@ -45,21 +45,35 @@ export type ScorableActivity = {
 }
 
 /**
- * Score para una actividad: dominio del objetivo (nivel escalado).
+ * Score para una actividad = PROMEDIO de los scores de TODOS sus intentos.
+ *
+ * Cada intento (respuesta del estudiante) se evalúa por el AI y recibe un
+ * understanding_level (memorized/understood/applied/analyzed → 25/50/75/100).
+ * El score de la actividad es el promedio de esos valores.
+ *
+ * Ejemplo: actividad con 3 intentos [memorized(25), understood(50), applied(75)]
+ *   score = (25 + 50 + 75) / 3 = 50 → Proceso
+ *
  * Si el estudiante se fue por las ramas (>3 tangentes) se aplica una penalty
- * ligera. El conteo de attempts es informativo (se ve en el dashboard) pero
- * NO castiga el score — la escalada ya regula via understanding_level.
+ * ligera (×0.9) sobre el promedio.
+ *
+ * Si no hay intentos registrados, score = 0.
  */
 export function activityScore(ap: ScorableActivity): number {
   const evidence = ap.evidenceData as {
     attempts?: Array<{ analysis?: { understanding_level?: string } }>
   } | null
-  const lastAttempt = evidence?.attempts?.at(-1)
-  const level = lastAttempt?.analysis?.understanding_level || 'memorized'
-  const baseScore = COMPREHENSION_SCORES[level] ?? 40
+  const attempts = evidence?.attempts || []
+  if (attempts.length === 0) return 0
+
+  const scoresPerAttempt = attempts.map((att) => {
+    const level = att.analysis?.understanding_level || 'memorized'
+    return COMPREHENSION_SCORES[level] ?? 25
+  })
+  const avg = scoresPerAttempt.reduce((sum, s) => sum + s, 0) / scoresPerAttempt.length
 
   const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
-  return Math.round(baseScore * tangentPenalty)
+  return Math.round(avg * tangentPenalty)
 }
 
 /**
