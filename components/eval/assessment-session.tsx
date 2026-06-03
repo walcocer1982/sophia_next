@@ -15,6 +15,27 @@ import { ConversationDrawer } from '../learning/conversation-drawer'
 import type { OptimisticMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
 
+// Limpia markdown/listas/headings para que TTS suene natural.
+// Mismo criterio que usa la bienvenida: que el audio lea texto plano
+// sin asteriscos ni símbolos.
+function stripMarkdownForTts(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/^\s*[\d]+[.\)]\s*/gm, '')
+    .replace(/^\s*[-*•]\s+/gm, '')
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+\./g, '.')
+    .replace(/\.+/g, '.')
+    .trim()
+}
+
 interface FinishedData {
   participantId: string
   grade: number
@@ -203,6 +224,44 @@ export function AssessmentSession({
       setVisibleImageIdx(nextIdx)
     }
   }, [lastAssistantMessage?.content, activityImages, visibleImageIdx, textMentionsImage])
+
+  // TTS de la respuesta cuando el estudiante escribe (no habla). Antes solo
+  // se reproducía audio en el flujo de voz; si el usuario abría Escribir y
+  // mandaba texto, Sophia respondía SOLO en texto y se sentía mudo. Ahora
+  // también sintetiza voz para que la experiencia sea consistente.
+  // Bloquea el input mientras suena (avatarState='speaking') — el ChatInput
+  // ya respeta `disabled={avatarState === 'speaking'}`.
+  const speakReply = useCallback(async (text: string) => {
+    if (!voiceEnabled) return
+    const clean = stripMarkdownForTts(text)
+    if (!clean) return
+    setAvatarState('speaking')
+    let objectUrl: string | null = null
+    try {
+      const res = await fetch('/api/voice/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: clean }),
+      })
+      if (!res.ok) {
+        setAvatarState('idle')
+        return
+      }
+      const blob = await res.blob()
+      objectUrl = URL.createObjectURL(blob)
+      const audio = new Audio(objectUrl)
+      const cleanup = () => {
+        if (objectUrl) URL.revokeObjectURL(objectUrl)
+        setAvatarState('idle')
+      }
+      audio.onended = cleanup
+      audio.onerror = cleanup
+      await audio.play().catch(() => cleanup())
+    } catch {
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+      setAvatarState('idle')
+    }
+  }, [voiceEnabled])
 
   // Auto-play TTS callback (only when voice is enabled for this course)
   const playWelcomeAudio = useCallback(async (text: string) => {
@@ -406,6 +465,12 @@ export function AssessmentSession({
           ))
           // Sophia terminó de responder — recargar progreso por si verificó/avanzó actividad
           fetchProgress()
+          // Si la voz está habilitada, sintetizá también la respuesta. El usuario
+          // escribió por texto pero igual queremos audio para consistencia.
+          // speakReply maneja avatarState='speaking' → 'idle' internamente.
+          if (voiceEnabled) {
+            void speakReply(acc)
+          }
         },
         () => setMessages(prev => prev.filter(m => m.id !== assistantId))
       )
@@ -637,14 +702,15 @@ export function AssessmentSession({
                 exit={{ height: 0, opacity: 0 }}
                 className="shrink-0 overflow-hidden"
               >
-                <div className="mt-2 [&_textarea]:bg-white/5 [&_textarea]:text-white [&_textarea]:border-white/10">
+                <div className="mt-2">
                   <ChatInput
                     ref={chatInputRef}
+                    variant="dark"
                     onSend={handleSendMessage}
                     disabled={isLoading || welcomeLoading || avatarState === 'speaking'}
                     isGeneratingWelcome={welcomeLoading}
-                    isThinking={isLoading || avatarState === 'speaking'}
-                    isStreaming={avatarState === 'speaking'}
+                    isThinking={isLoading}
+                    isSpeaking={avatarState === 'speaking'}
                   />
                 </div>
               </motion.div>

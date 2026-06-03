@@ -22,6 +22,8 @@ interface ChatInputProps {
   isGeneratingWelcome?: boolean
   isThinking?: boolean
   isStreaming?: boolean
+  /** Audio TTS is currently playing — show "Sophia está hablando..." */
+  isSpeaking?: boolean
   /**
    * When true, paste is allowed regardless of the global env var
    * NEXT_PUBLIC_ALLOW_PASTE_INPUT. Set to true for admin/instructor
@@ -31,6 +33,12 @@ interface ChatInputProps {
   allowPaste?: boolean
   /** When true, shows the attach-file button (planner surfaces only). */
   allowAttachments?: boolean
+  /**
+   * Visual theme. 'light' (default) for /learn flow on light backgrounds;
+   * 'dark' for kiosko on dark glass background — adapts wrapper, textarea,
+   * focus ring, send button and kbd hints to the dark theme.
+   */
+  variant?: 'light' | 'dark'
 }
 
 // Imágenes y PDF (bloques nativos de Claude). Word/Excel quedan deshabilitados
@@ -57,7 +65,8 @@ export interface ChatInputRef {
 }
 
 export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
-  ({ onSend, onStop, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming, allowPaste, allowAttachments }, ref) => {
+  ({ onSend, onStop, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming, isSpeaking, allowPaste, allowAttachments, variant = 'light' }, ref) => {
+  const isDark = variant === 'dark'
   const [message, setMessage] = useState('')
   const [attachments, setAttachments] = useState<PlannerAttachment[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -161,31 +170,41 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
     console.log('[SECURITY] Intento de pegar bloqueado - usa tus propias palabras')
   }
 
-  // Determinar placeholder según estado con mejor feedback
+  // Determinar placeholder según estado con mejor feedback.
+  // Priority: welcome > speaking (audio) > thinking > streaming > custom > default.
   const effectivePlaceholder = isGeneratingWelcome
     ? 'Esperando mensaje de bienvenida...'
+    : isSpeaking
+    ? 'Sophia está hablando...'
     : isThinking
     ? 'Sophia está pensando...'
     : isStreaming
     ? 'Sophia está escribiendo...'
     : placeholder || 'Escribe tu mensaje...'
 
+  const hasContent = message.trim() || attachments.length > 0
+  const canSend = hasContent && !disabled
+
   return (
-    <div className="bg-slate-300 p-4">
-      <div className="max-w-4xl mx-auto">
+    <div className={isDark ? '' : 'bg-slate-300 p-4'}>
+      <div className={isDark ? '' : 'max-w-4xl mx-auto'}>
         {allowAttachments && attachments.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {attachments.map((a, i) => (
               <span
                 key={`${a.name}-${i}`}
-                className="inline-flex items-center gap-1 rounded-full bg-white border border-slate-300 px-2.5 py-1 text-xs text-slate-700"
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${
+                  isDark
+                    ? 'bg-white/10 border border-white/15 text-slate-200'
+                    : 'bg-white border border-slate-300 text-slate-700'
+                }`}
               >
-                <Paperclip className="h-3 w-3 text-slate-400" />
+                <Paperclip className={`h-3 w-3 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
                 <span className="max-w-[180px] truncate">{a.name}</span>
                 <button
                   type="button"
                   onClick={() => removeAttachment(i)}
-                  className="ml-0.5 text-slate-400 hover:text-red-500"
+                  className={`ml-0.5 ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-slate-400 hover:text-red-500'}`}
                   title="Quitar"
                 >
                   <X className="h-3 w-3" />
@@ -202,10 +221,14 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={effectivePlaceholder}
-            className={`w-full px-4 py-4 font-sans pr-16 border bg-white border-slate-300 rounded-3xl focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent resize-none text-base transition-all ${allowAttachments ? 'pl-14' : ''}`}
+            className={`w-full px-5 py-4 font-sans pr-16 border rounded-2xl focus:outline-none resize-none text-base leading-relaxed transition-all ${
+              isDark
+                ? 'bg-white/5 backdrop-blur text-white border-white/10 placeholder:text-slate-500 focus:ring-2 focus:ring-cyan-400/40 focus:border-cyan-400/50 disabled:opacity-60'
+                : 'bg-white border-slate-300 focus:ring-2 focus:ring-slate-600 focus:border-transparent'
+            } ${allowAttachments ? 'pl-14' : ''}`}
             style={{
-              minHeight: '80px',
-              maxHeight: '120px',
+              minHeight: isDark ? '92px' : '80px',
+              maxHeight: isDark ? '180px' : '120px',
               overflowY: 'auto',
               scrollbarWidth: 'thin'
             }}
@@ -227,7 +250,11 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={disabled || attachments.length >= MAX_ATTACHMENTS}
-                className="absolute bottom-3 left-3 p-2 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className={`absolute bottom-3 left-3 p-2 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                  isDark
+                    ? 'text-slate-400 hover:bg-white/10 hover:text-white'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                }`}
                 title="Adjuntar archivo (imagen o PDF)"
               >
                 <Paperclip className="h-5 w-5" />
@@ -239,7 +266,11 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
             {isStreaming && onStop ? (
               <button
                 onClick={onStop}
-                className="p-2 rounded-full transition-all bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md"
+                className={`p-2.5 rounded-full transition-all ${
+                  isDark
+                    ? 'bg-cyan-500 text-white hover:bg-cyan-400 shadow-lg shadow-cyan-500/30'
+                    : 'bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md'
+                }`}
                 title="Detener generación"
                 type="button"
               >
@@ -248,11 +279,15 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
             ) : (
               <button
                 onClick={handleSend}
-                disabled={disabled || (!message.trim() && attachments.length === 0)}
-                className={`p-2 rounded-full transition-all ${
-                  (message.trim() || attachments.length > 0) && !disabled
-                    ? 'bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md'
-                    : 'bg-slate-300 text-white cursor-not-allowed opacity-60'
+                disabled={disabled || !hasContent}
+                className={`p-2.5 rounded-full transition-all ${
+                  canSend
+                    ? isDark
+                      ? 'bg-cyan-500 text-white hover:bg-cyan-400 shadow-lg shadow-cyan-500/30 hover:shadow-cyan-400/50'
+                      : 'bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md'
+                    : isDark
+                      ? 'bg-white/10 text-slate-500 cursor-not-allowed'
+                      : 'bg-slate-300 text-white cursor-not-allowed opacity-60'
                 }`}
                 title="Enviar mensaje"
                 type="button"
@@ -263,13 +298,17 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
           </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+        <div className={`mt-2 flex items-center justify-between text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
           <span>
-            <kbd className="px-1.5 py-0.5 bg-slate-200 rounded border border-slate-400 font-mono text-[10px]">
+            <kbd className={`px-1.5 py-0.5 rounded border font-mono text-[10px] ${
+              isDark ? 'bg-white/10 border-white/15 text-slate-300' : 'bg-slate-200 border-slate-400'
+            }`}>
               Shift + Enter
             </kbd>{' '}
             saltar línea •{' '}
-            <kbd className="px-1.5 py-0.5 bg-slate-200 rounded border border-slate-400 font-mono text-[10px]">
+            <kbd className={`px-1.5 py-0.5 rounded border font-mono text-[10px] ${
+              isDark ? 'bg-white/10 border-white/15 text-slate-300' : 'bg-slate-200 border-slate-400'
+            }`}>
               Enter
             </kbd>{' '}
             para enviar
