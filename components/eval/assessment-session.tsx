@@ -65,6 +65,7 @@ export function AssessmentSession({
   const [isLoading, setIsLoading] = useState(false)
   const [welcomeLoading, setWelcomeLoading] = useState(true)
   const [showTextInput, setShowTextInput] = useState(!voiceEnabled)
+  const [isMobile, setIsMobile] = useState(false)
   const [avatarState, setAvatarState] = useState<AvatarState>('idle')
   const [lightboxImage, setLightboxImage] = useState<{ url: string; description: string } | null>(null)
   const [progressData, setProgressData] = useState<{ current: number; total: number; percentage: number; currentActivityId: string | null } | null>(null)
@@ -102,6 +103,16 @@ export function AssessmentSession({
     const interval = setInterval(fetchProgress, 8000)
     return () => clearInterval(interval)
   }, [fetchProgress])
+
+  // Detección de móvil en mount. En móvil la voz es problemática (red celular,
+  // autoplay de iOS, echo entre speakers y mic). Por eso: si es móvil, abrimos
+  // Escribir por default y mostramos un hint pidiendo usar texto.
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return
+    const mobile = /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    setIsMobile(mobile)
+    if (mobile) setShowTextInput(true)
+  }, [])
 
   // Force the Sophia animation to autoplay reliably even if the browser
   // throttles the declarative autoplay attribute.
@@ -579,6 +590,16 @@ export function AssessmentSession({
                 <MessageSquare className="h-3.5 w-3.5" />
                 Ver conversación ({messages.length} {messages.length === 1 ? 'mensaje' : 'mensajes'})
               </button>
+            </div>
+          )}
+
+          {/* Hint para móvil: la voz es problemática en celular (red, autoplay
+              de iOS, echo). Sugerimos Escribir antes de que sufran como Pepe. */}
+          {isMobile && voiceEnabled && (
+            <div className="shrink-0 flex items-center justify-center pt-2">
+              <p className="text-[11px] text-amber-300/80 bg-amber-500/10 border border-amber-400/20 rounded-full px-3 py-1">
+                📱 En móvil te recomendamos usar <strong>Escribir</strong> para mejor experiencia
+              </p>
             </div>
           )}
 
