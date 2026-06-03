@@ -259,13 +259,26 @@ export function ResourceManager({
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Error al guardar')
+        const errObj = err as { error?: string; details?: { fieldErrors?: Record<string, string[]>; formErrors?: string[] } }
+        let msg = errObj.error || `Error ${response.status}`
+        // Si Zod devolvió detalles, los mostramos para que el usuario sepa qué falló
+        if (errObj.details) {
+          const fieldErrs = Object.entries(errObj.details.fieldErrors || {})
+            .map(([k, v]) => `${k}: ${v.join(', ')}`)
+            .join(' | ')
+          const formErrs = (errObj.details.formErrors || []).join(', ')
+          if (fieldErrs || formErrs) {
+            msg = `${msg} → ${[fieldErrs, formErrs].filter(Boolean).join(' / ')}`
+          }
+        }
+        console.error('[ResourceSave] error:', err)
+        throw new Error(msg)
       }
 
       toast.success('Recursos guardados')
       router.push(`/planner/${courseId}`)
     } catch (error) {
-      toast.error((error as Error).message)
+      toast.error((error as Error).message, { duration: 8000 })
     } finally {
       setIsSaving(false)
     }

@@ -335,23 +335,13 @@ export function AssessmentSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft])
 
-  // Auto-finalizar cuando la lección llegue a 100% completada.
-  // Damos margen amplio para que el estudiante:
-  //   a) escuche/lea la última respuesta de Sophia
-  //   b) tenga tiempo si quiere responder algo más antes del cierre
-  // Si el estudiante envía un mensaje durante el countdown, el timer se resetea
-  // (porque isLoading vuelve a true).
-  useEffect(() => {
-    if (!progressData) return
-    if (progressData.percentage < 100) return
-    if (finishedRef.current) return
-    if (isLoading) return // todavía streameando — esperar
-    const t = setTimeout(() => {
-      finishAssessment()
-    }, 30000)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progressData?.percentage, isLoading])
+  // NOTA: auto-finalizar al llegar al 100% se removió. El usuario reportó
+  // múltiples veces que el timer cortaba antes de que pudiera dar la última
+  // respuesta. Ahora la clase termina SOLO cuando:
+  //   1. El usuario clickea "Salir" (handleFinishEarly)
+  //   2. Se acaba el tiempo límite (secondsLeft <= 0)
+  // Esto da control total al estudiante para responder lo que necesite,
+  // incluso después de que Sophia diga su cierre.
 
   const finishAssessment = async () => {
     if (finishedRef.current) return
