@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Clock, LogOut, Target, Lightbulb, ImageIcon, Type, X, BarChart3, MessageSquare } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { SophiaAvatar } from '../learning/sophia-avatar'
@@ -516,8 +518,22 @@ export function AssessmentSession({
                   exit={{ opacity: 0 }}
                   className="w-full max-w-2xl bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 max-h-[40vh] overflow-y-auto"
                 >
-                  <p className="text-sm sm:text-base text-slate-100 leading-relaxed">
-                    {lastAssistantMessage.content}
+                  <div className="text-sm sm:text-base text-slate-100 leading-relaxed">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ children }) => <p className="leading-relaxed mb-2 last:mb-0">{children}</p>,
+                        strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
+                        em: ({ children }) => <em className="italic">{children}</em>,
+                        hr: () => <hr className="my-2 border-white/10" />,
+                        ul: ({ children }) => <ul className="list-disc list-inside my-1.5 space-y-0.5">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal list-inside my-1.5 space-y-0.5">{children}</ol>,
+                        li: ({ children }) => <li className="ml-2">{children}</li>,
+                        code: ({ children }) => <code className="px-1 py-0.5 rounded bg-white/10 text-cyan-200 font-mono text-sm">{children}</code>,
+                      }}
+                    >
+                      {lastAssistantMessage.content}
+                    </ReactMarkdown>
                     {lastAssistantMessage.status === 'streaming' && (
                       <motion.span
                         animate={{ opacity: [1, 0.3, 1] }}
@@ -525,7 +541,7 @@ export function AssessmentSession({
                         className="inline-block ml-1 text-cyan-400"
                       >▊</motion.span>
                     )}
-                  </p>
+                  </div>
                 </motion.div>
               ) : null}
             </AnimatePresence>
