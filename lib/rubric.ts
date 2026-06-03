@@ -3,14 +3,14 @@
  *
  * Escala discreta 0-25-50-75-100 alineada con COMPREHENSION_SCORES:
  *
- * | Nivel              | Rango (100) | Score puro AI       |
- * |--------------------|-------------|---------------------|
- * | Logrado Destacado  | 88-100      | analyzed (100)      |
- * | Logrado            | 50-87       | understood / applied (50, 75) |
- * | En Proceso         | 26-49       | (entre memorized y understood) |
- * | En Inicio          | 0-25        | memorized (25)      |
+ * | Nivel              | Score puro AI       | Definición operacional        |
+ * |--------------------|---------------------|-------------------------------|
+ * | Logrado Destacado  | 100 (analyzed)      | sustenta su respuesta         |
+ * | Logrado            | 75 (applied)        | cumple 2+ criterios           |
+ * | En Proceso         | 50 (understood)     | intenta pero vago/incompleto  |
+ * | En Inicio          | 25 (memorized)      | básico, monosilábico o nada   |
  *
- * Passing grade: 50 (un estudiante que comprende correctamente está aprobado).
+ * Passing grade: 75 = Logrado (cumple criterios). Proceso (50) no aprueba.
  *
  * SOURCE OF TRUTH: la rúbrica se deriva del grade numérico calculado en
  * lib/grading.ts. Esta capa solo mapea el número al label.
@@ -19,13 +19,13 @@
 import { activityScore, type ScorableActivity } from './grading'
 
 export const GRADE_THRESHOLDS = {
-  LOGRADO_DESTACADO: 88,  // Solo analyzed (100) cae acá
-  LOGRADO: 50,            // understood (50) y applied (75) son Logrado
-  EN_PROCESO: 26,         // entre memorized (25) y understood (50)
-  EN_INICIO: 0,           // hasta memorized (25)
+  LOGRADO_DESTACADO: 88,  // Score 88+ (analyzed) → Destacado
+  LOGRADO: 63,            // Score 63+ (applied=75) → Logrado
+  EN_PROCESO: 38,         // Score 38+ (understood=50) → Proceso
+  EN_INICIO: 0,           // Score 0-37 (memorized=25) → Inicio
 } as const
 
-export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 50 = comprende = aprueba
+export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 63 = applied = Logrado
 
 export type RubricLevel = 'logrado_destacado' | 'logrado' | 'en_proceso' | 'en_inicio'
 

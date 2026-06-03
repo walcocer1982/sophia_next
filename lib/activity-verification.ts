@@ -73,24 +73,26 @@ CRITERIOS PARA PREGUNTA ABIERTA:
 
 REGLA PRINCIPAL: Si el estudiante muestra pensamiento crítico y engagement con el tema, es SUFICIENTE para avanzar. No busques una respuesta "perfecta".
 
-NIVELES DE DOMINIO (clasifica por LOGRO del objetivo, NO por estilo del lenguaje, NO por cobertura exhaustiva de criterios):
+NIVELES DE DOMINIO (4 niveles oficiales, definiciones operacionales claras):
 
-- "memorized" = EN INICIO: Respuesta con ERRORES conceptuales o tan vacía que NO demuestra dominio mínimo del tema. Solo si está EQUIVOCADO o NO RESPONDE.
+- "memorized" = EN INICIO: Responde muy básico, monosilábico, o A VECES NO RESPONDE. Repuesta vacía, irrelevante, o solo "sí/no/no sé". Mínimo de palabras y NO aborda lo que se preguntó.
 
-- "understood" = LOGRADO (BÁSICO): Comprende el concepto y lo expresa correctamente, aunque sea parcial. Cubre AL MENOS UNO de los criterios clave de la actividad sin errores conceptuales. ESTE es el nivel ESPERADO cuando responde bien — NO requiere cubrir todos los criterios, solo demostrar que entendió.
+- "understood" = EN PROCESO: TRATA de responder pero NO SE LE ENTIENDE BIEN. Respuesta vaga, confusa, o solo cubre 1 criterio de forma incompleta. Hay intento pero no claridad.
 
-- "applied" = LOGRADO (PLENO): Cumple la MAYORÍA de los criterios clave de la actividad (>= 60-70% del contenido esperado), aplica el concepto con coherencia, posiblemente con ejemplo o aplicación a un escenario.
+- "applied" = LOGRADO: Cumple MÁS DE UN criterio de la actividad. Cubre al menos 2 de los criterios "must_include" con claridad, sin errores conceptuales graves. Este es el nivel ESPERADO cuando responde bien.
 
-- "analyzed" = DESTACADO: Va MÁS ALLÁ de los criterios. Aporta ejemplo propio no requerido, conecta con otro tema, identifica matices, compara opciones, o propone variantes razonadas.
+- "analyzed" = DESTACADO: SUSTENTA su respuesta. Más allá de cumplir criterios, da una RAZÓN, una EXPLICACIÓN, un ARGUMENTO de por qué. Por ejemplo: "elijo X porque cuando pasa Y, entonces Z" — hay justificación clara.
 
-REGLAS CRÍTICAS PARA CLASIFICAR (sé GENEROSO, no estricto):
-- Si comprende el concepto pero solo menciona algunos elementos → "understood" (NO memorized).
-- Si cumple la mayoría de los criterios sin necesidad de tocarlos todos → "applied" (NO understood).
-- Memorizar correctamente una definición sin errores = MÍNIMO "understood" (Logrado).
-- Equivocarse o tener errores conceptuales = INICIO.
-- NO bajar a "memorized" solo porque faltan items de la lista — eso es "understood" o "applied".
-- "Profundidad cognitiva" NO es el criterio — el criterio es DOMINIO DEL OBJETIVO.
-- Ante duda entre dos niveles, elegir el SUPERIOR (no castigar respuestas correctas pero incompletas).
+REGLAS CRÍTICAS PARA CLASIFICAR:
+- Contá los criterios de "must_include" que la respuesta cubre con claridad:
+  * 0 criterios cubiertos + respuesta básica/vacía → memorized (INICIO)
+  * 1 criterio cubierto parcialmente, intento confuso → understood (PROCESO)
+  * 2 o más criterios cubiertos con claridad → applied (LOGRADO)
+  * Cualquier nivel + SUSTENTACIÓN/argumento del por qué → analyzed (DESTACADO)
+- La SUSTENTACIÓN es la marca de DESTACADO. Sin sustentación es máximo Logrado.
+- "Profundidad cognitiva" NO es el criterio — el criterio es CUMPLIR los criterios + SUSTENTAR.
+- Ante duda entre understood y applied: si cubre 2+ criterios claros → applied.
+- Ante duda entre applied y analyzed: si da el por qué (argumento, no solo lista) → analyzed.
 
 Responde en formato JSON con esta estructura EXACTA:
 {

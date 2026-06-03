@@ -18,21 +18,23 @@
 
 /** Nivel de dominio que devuelve el AI → score base.
  *
- * Escala discreta 0-25-50-75-100 (2026-06-03):
- * - 25  = memorized    → Inicio (memoriza con errores)
- * - 50  = understood   → Logrado (comprende correctamente)
- * - 75  = applied      → Logrado (aplica con ejemplo propio)
- * - 100 = analyzed     → Destacado (analiza, compara, evalúa)
+ * Escala discreta 0-25-50-75-100 alineada a los 4 niveles oficiales de
+ * la rúbrica peruana (sin sub-categorías):
  *
- * "Comprende correctamente" (understood) ya es Logrado — no Proceso. Un
- * estudiante que responde bien parafraseando lo enseñado merece Logrado.
- * Para llegar a Destacado necesita ir más allá (analyzed).
+ * - 25  = memorized   → Inicio    (errores conceptuales)
+ * - 50  = understood  → Proceso   (comprende parcialmente)
+ * - 75  = applied     → Logrado   (cumple la mayoría de criterios)
+ * - 100 = analyzed    → Destacado (va más allá)
+ *
+ * Para llegar a Logrado, el AI debe clasificar la respuesta como "applied".
+ * La generosidad de esa clasificación se controla en activity-verification.ts
+ * (cubrir ≥60% de criterios = applied, no understood).
  */
 export const COMPREHENSION_SCORES: Record<string, number> = {
-  memorized: 25,   // INICIO     (memoriza con errores conceptuales)
-  understood: 50,  // LOGRADO    (comprende correctamente, parafrasea bien)
-  applied: 75,     // LOGRADO    (aplica con ejemplo propio o escenario nuevo)
-  analyzed: 100,   // DESTACADO  (analiza, compara o evalúa con argumento)
+  memorized: 25,   // INICIO     (errores o no responde)
+  understood: 50,  // PROCESO    (comprende parcialmente, le faltan elementos)
+  applied: 75,     // LOGRADO    (cumple la mayoría de criterios)
+  analyzed: 100,   // DESTACADO  (analiza, compara, evalúa)
 }
 
 /** Minimal shape needed to score an activity. Compatible con ActivityProgress. */
