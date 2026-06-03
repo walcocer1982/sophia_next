@@ -21,6 +21,14 @@ interface FinishedData {
   participantName: string
 }
 
+interface ClassImage {
+  activityId: string
+  url: string
+  description: string
+  showWhen?: 'on_start' | 'on_reference' | 'on_demand'
+  order: number
+}
+
 interface AssessmentSessionProps {
   sessionId: string
   participantId: string
@@ -28,7 +36,7 @@ interface AssessmentSessionProps {
   lessonTitle: string
   lessonObjective: string
   keyPoints: string[]
-  galleryImages: { url: string; description: string }[]
+  galleryImages: ClassImage[]
   videoUrl?: string | null
   voiceEnabled?: boolean
   timeLimitMin: number
@@ -57,7 +65,10 @@ export function AssessmentSession({
   const [showTextInput, setShowTextInput] = useState(!voiceEnabled)
   const [avatarState, setAvatarState] = useState<AvatarState>('idle')
   const [lightboxImage, setLightboxImage] = useState<{ url: string; description: string } | null>(null)
-  const [progressData, setProgressData] = useState<{ current: number; total: number; percentage: number } | null>(null)
+  const [progressData, setProgressData] = useState<{ current: number; total: number; percentage: number; currentActivityId: string | null } | null>(null)
+  // Imagen visible AHORA — una sola a la vez, basada en (a) actividad actual
+  // y (b) lo que Sophia mencionó recientemente. Si null, no se muestra ninguna.
+  const [visibleImageIdx, setVisibleImageIdx] = useState<number>(0)
   const [showHistory, setShowHistory] = useState(false)
   const welcomeRequested = useRef(false)
   const finishedRef = useRef(false)
@@ -77,6 +88,7 @@ export function AssessmentSession({
         current: data.currentPosition ?? data.progress ?? 0,
         total: data.totalActivities ?? data.total ?? 0,
         percentage: data.percentage ?? 0,
+        currentActivityId: data.currentActivityId ?? null,
       })
     } catch {
       // silencio: la barra solo es info, si falla queda en 0%
@@ -97,12 +109,84 @@ export function AssessmentSession({
     }
   }, [videoUrl])
 
+  // Imágenes de la actividad ACTUAL ordenadas por su `order` original.
+  // Si no hay actividad detectada todavía (recién arranca), usamos las de
+  // la primera actividad que aparezca en galleryImages.
+  const activityImages = useMemo(() => {
+    const currentId = progressData?.currentActivityId
+    if (currentId) {
+      const filtered = galleryImages
+        .filter((img) => img.activityId === currentId)
+        .sort((a, b) => a.order - b.order)
+      if (filtered.length > 0) return filtered
+    }
+    // Fallback: primer activityId presente
+    const firstActId = galleryImages[0]?.activityId
+    return galleryImages
+      .filter((img) => img.activityId === firstActId)
+      .sort((a, b) => a.order - b.order)
+  }, [galleryImages, progressData?.currentActivityId])
+
+  // Cuando cambia la actividad, reseteo a la primera imagen `on_start`
+  // (o índice 0 si ninguna lo es).
+  useEffect(() => {
+    const startIdx = activityImages.findIndex((img) => img.showWhen === 'on_start')
+    setVisibleImageIdx(startIdx >= 0 ? startIdx : 0)
+  }, [progressData?.currentActivityId, activityImages])
+
+  // La imagen visible: una sola — del set de la actividad actual.
+  const visibleImage = activityImages[visibleImageIdx] ?? null
+
+  // Detector de "Sophia mencionó la próxima imagen". Toma palabras significativas
+  // (>3 chars, sin stop-words comunes) de la description y cuenta cuántas
+  // aparecen en el texto. Si ≥2 matches, considero que la mencionó.
+  const STOP_WORDS = useMemo(() => new Set([
+    'para', 'como', 'pero', 'esta', 'este', 'esto', 'eso', 'esa', 'ese',
+    'los', 'las', 'una', 'unos', 'unas', 'del', 'que', 'con', 'por',
+    'sobre', 'hace', 'hacer', 'tiene', 'tener', 'cada', 'todos', 'todas',
+  ]), [])
+
+  const textMentionsImage = useCallback((text: string, description: string): boolean => {
+    if (!text || !description) return false
+    const normalized = (s: string) =>
+      s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    const textNorm = normalized(text)
+    const keywords = normalized(description)
+      .split(/[\s,;.()→]+/)
+      .filter((w) => w.length > 3 && !STOP_WORDS.has(w))
+    let matches = 0
+    for (const k of keywords) {
+      if (textNorm.includes(k)) matches++
+      if (matches >= 2) return true
+    }
+    return false
+  }, [STOP_WORDS])
+
+  // Cada vez que el último mensaje de Sophia cambia (streaming o nuevo), miro
+  // si menciona alguna imagen NEXT-en-el-orden que tenga showWhen=on_reference.
+  // Si sí, avanzo el índice. Una imagen a la vez.
+
   const lastAssistantMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'assistant') return messages[i]
     }
     return null
   }, [messages])
+
+  // Avanza a la siguiente imagen cuando Sophia la menciona en su respuesta.
+  // Solo mira la última respuesta y solo avanza si la imagen siguiente es
+  // on_reference (las on_demand no aparecen solas; las on_start ya están).
+  useEffect(() => {
+    if (!lastAssistantMessage?.content) return
+    if (visibleImageIdx >= activityImages.length - 1) return
+    const nextIdx = visibleImageIdx + 1
+    const next = activityImages[nextIdx]
+    if (!next) return
+    if (next.showWhen === 'on_demand') return
+    if (textMentionsImage(lastAssistantMessage.content, next.description)) {
+      setVisibleImageIdx(nextIdx)
+    }
+  }, [lastAssistantMessage?.content, activityImages, visibleImageIdx, textMentionsImage])
 
   // Auto-play TTS callback (only when voice is enabled for this course)
   const playWelcomeAudio = useCallback(async (text: string) => {
@@ -538,33 +622,45 @@ export function AssessmentSession({
                 playsInline
               />
             </div>
-          ) : galleryImages.length === 0 ? (
-            <p className="text-xs text-slate-500 text-center py-8">Sin recursos para esta lección</p>
+          ) : !visibleImage ? (
+            <p className="text-xs text-slate-500 text-center py-8">Sin recursos para esta actividad</p>
           ) : (
-            <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-0">
-              {galleryImages.map((img, i) => (
-                <button
+            // UNA imagen visible a la vez. Cambia de imagen con animación cuando
+            // Sophia avanza a un nuevo concepto que matchee con la descripción
+            // de la siguiente imagen (textMentionsImage).
+            <div className="flex-1 min-h-0 flex flex-col gap-2">
+              <AnimatePresence mode="wait">
+                <motion.button
                   type="button"
-                  key={i}
-                  onClick={() => setLightboxImage(img)}
-                  className="block w-full text-left rounded-lg overflow-hidden border border-white/10 hover:border-cyan-400/40 transition-colors group"
+                  key={visibleImage.url}
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{ duration: 0.4 }}
+                  onClick={() => setLightboxImage({ url: visibleImage.url, description: visibleImage.description })}
+                  className="block w-full text-left rounded-lg overflow-hidden border border-white/10 hover:border-cyan-400/40 transition-colors group shrink-0"
                 >
                   <div className="relative w-full aspect-video bg-black/30">
                     <Image
-                      src={img.url}
-                      alt={img.description}
+                      src={visibleImage.url}
+                      alt={visibleImage.description}
                       fill
                       sizes="(max-width: 768px) 100vw, 25vw"
                       className="object-cover group-hover:scale-105 transition-transform"
                     />
                   </div>
-                  {img.description && (
-                    <p className="text-[10px] text-slate-400 leading-snug p-2 line-clamp-2 group-hover:text-slate-300">
-                      {img.description}
+                  {visibleImage.description && (
+                    <p className="text-[10px] text-slate-400 leading-snug p-2 line-clamp-3 group-hover:text-slate-300">
+                      {visibleImage.description}
                     </p>
                   )}
-                </button>
-              ))}
+                </motion.button>
+              </AnimatePresence>
+              {activityImages.length > 1 && (
+                <p className="text-[10px] text-slate-500 text-center shrink-0">
+                  Imagen {visibleImageIdx + 1} de {activityImages.length}
+                </p>
+              )}
             </div>
           )}
         </aside>

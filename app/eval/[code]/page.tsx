@@ -39,17 +39,23 @@ export default async function EvalPage({
     notFound()
   }
 
-  // Extract images from the first activity's teaching content
+  // Extract per-activity images con metadata (activityId + showWhen + orden).
+  // Antes se aplastaba todo + slice(0,3) — ahora preservamos el contexto para
+  // que el kiosko pueda filtrar por actividad actual y mostrar UNA imagen a
+  // la vez, sincronizada con lo que Sophia menciona en cada momento.
   const content = assessment.lesson.contentJson as unknown as LessonContent
-  const allImages: { url: string; description: string }[] = []
-  for (const activity of content?.activities || []) {
-    const imgs = activity.teaching?.images || []
-    for (const img of imgs) {
-      if (img.url) allImages.push({ url: img.url, description: img.description || '' })
-    }
-  }
-  // Limit to 3 images max for compact gallery
-  const galleryImages = allImages.slice(0, 3)
+  const galleryImages = (content?.activities || []).flatMap((a) => {
+    const imgs = a.teaching?.images || (a.teaching?.image ? [a.teaching.image] : [])
+    return imgs
+      .filter((img) => img.url)
+      .map((img, idx) => ({
+        activityId: a.id,
+        url: img.url,
+        description: img.description || '',
+        showWhen: img.showWhen || ('on_reference' as const),
+        order: idx,
+      }))
+  })
 
   return (
     <AssessmentKiosko

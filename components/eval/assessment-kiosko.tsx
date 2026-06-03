@@ -21,7 +21,13 @@ interface AssessmentInfo {
   lessonTitle: string
   lessonObjective: string
   keyPoints: string[]
-  galleryImages: { url: string; description: string }[]
+  galleryImages: {
+    activityId: string
+    url: string
+    description: string
+    showWhen?: 'on_start' | 'on_reference' | 'on_demand'
+    order: number
+  }[]
   videoUrl?: string | null
   voiceEnabled?: boolean
 }
