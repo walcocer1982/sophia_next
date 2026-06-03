@@ -1,16 +1,20 @@
 /**
  * 4-level rubric system para evaluación de actividades.
  *
- * Escala discreta 0-25-50-75-100 alineada con COMPREHENSION_SCORES:
+ * Escala discreta 0-25-50-75-100. Thresholds en los valores EXACTOS de
+ * cada nivel (sin rangos intermedios):
  *
- * | Nivel              | Score puro AI       | Definición operacional        |
- * |--------------------|---------------------|-------------------------------|
- * | Logrado Destacado  | 100 (analyzed)      | sustenta su respuesta         |
- * | Logrado            | 75 (applied)        | cumple 2+ criterios           |
- * | En Proceso         | 50 (understood)     | intenta pero vago/incompleto  |
- * | En Inicio          | 25 (memorized)      | básico, monosilábico o nada   |
+ * | Nivel              | Score requerido | Definición operacional        |
+ * |--------------------|-----------------|-------------------------------|
+ * | Logrado Destacado  | = 100           | sustenta su respuesta         |
+ * | Logrado            | >= 75           | cumple 2+ criterios           |
+ * | En Proceso         | >= 50           | intenta pero vago/incompleto  |
+ * | En Inicio          | < 50            | básico, monosilábico o nada   |
  *
- * Passing grade: 75 = Logrado (cumple criterios). Proceso (50) no aprueba.
+ * Passing grade: 75 = Logrado.
+ *
+ * Como el grade es un promedio, valores intermedios (ej: 62) caen al nivel
+ * inferior: 62 → Proceso (no llegó a 75 = Logrado).
  *
  * SOURCE OF TRUTH: la rúbrica se deriva del grade numérico calculado en
  * lib/grading.ts. Esta capa solo mapea el número al label.
@@ -19,13 +23,13 @@
 import { activityScore, type ScorableActivity } from './grading'
 
 export const GRADE_THRESHOLDS = {
-  LOGRADO_DESTACADO: 88,  // Score 88+ (analyzed) → Destacado
-  LOGRADO: 63,            // Score 63+ (applied=75) → Logrado
-  EN_PROCESO: 38,         // Score 38+ (understood=50) → Proceso
-  EN_INICIO: 0,           // Score 0-37 (memorized=25) → Inicio
+  LOGRADO_DESTACADO: 100,  // Score 100 (analyzed) → Destacado
+  LOGRADO: 75,             // Score 75 (applied) → Logrado
+  EN_PROCESO: 50,          // Score 50 (understood) → Proceso
+  EN_INICIO: 0,            // Score 0-49 (memorized=25) → Inicio
 } as const
 
-export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 63 = applied = Logrado
+export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 75 = applied = Logrado
 
 export type RubricLevel = 'logrado_destacado' | 'logrado' | 'en_proceso' | 'en_inicio'
 
