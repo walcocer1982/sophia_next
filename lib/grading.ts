@@ -5,15 +5,25 @@
  * (Inicio/Proceso/Logrado/Destacado) se deriva de este número en lib/rubric.ts
  * vía gradeToRubricLevel().
  *
- * MODELO (2026-06-03):
- * - El AI evalúa CADA respuesta del estudiante por actividad.
- * - Cada respuesta recibe un understanding_level → score (25/50/75/100).
- * - Score de actividad = PROMEDIO de los scores de todos sus intentos.
- * - Grade final = PROMEDIO de los scores de todas las actividades.
+ * MODELO (2026-06-03 v3 — penalty por intentos):
  *
- * Esto refleja la consistencia del estudiante en toda la conversación, no
- * solo el último intento. Un estudiante que arranca mal y termina bien
- * promedia entre los dos extremos.
+ * SI el estudiante alcanza Logrado (75) o Destacado (100) en algún intento:
+ *   score = MEJOR nivel alcanzado × penalty por intentos hasta lograrlo
+ *   Penalty:
+ *     1-2 intentos: ×1.00  (primer error perdonado — humano)
+ *     3 intentos:   ×0.95
+ *     4 intentos:   ×0.90
+ *     5+ intentos:  ×0.85
+ *
+ * SI nunca alcanza Logrado (max < 75):
+ *   score = PROMEDIO de todos los intentos
+ *   (refleja la consistencia en proceso/inicio)
+ *
+ * Grade final = PROMEDIO de scores de todas las actividades.
+ *
+ * Filosofía: premia a quien llega al objetivo (Logrado o Destacado), sin
+ * castigar demasiado al que tarda 1-2 intentos en llegar. Quien se queda
+ * en Proceso/Inicio promedia todo (no se beneficia ni perjudica).
  */
 
 /** Nivel de dominio que devuelve el AI → score base.
@@ -45,18 +55,17 @@ export type ScorableActivity = {
 }
 
 /**
- * Score para una actividad = PROMEDIO de los scores de TODOS sus intentos.
+ * Score para una actividad. Dos caminos según si alcanzó Logrado/Destacado:
  *
- * Cada intento (respuesta del estudiante) se evalúa por el AI y recibe un
- * understanding_level (memorized/understood/applied/analyzed → 25/50/75/100).
- * El score de la actividad es el promedio de esos valores.
+ * 1) Alcanzó Logrado (75) o Destacado (100) en algún intento:
+ *    score = mejor nivel × penalty por intentos hasta ese mejor nivel
+ *    Premia llegar al objetivo, con tolerancia a 1-2 errores antes.
  *
- * Ejemplo: actividad con 3 intentos [memorized(25), understood(50), applied(75)]
- *   score = (25 + 50 + 75) / 3 = 50 → Proceso
+ * 2) Nunca alcanzó Logrado (max < 75):
+ *    score = promedio de todos los intentos
+ *    Refleja la consistencia del estudiante en Proceso/Inicio.
  *
- * Si el estudiante se fue por las ramas (>3 tangentes) se aplica una penalty
- * ligera (×0.9) sobre el promedio.
- *
+ * Penalty por tangentes (>3 ramas) sigue aplicando ×0.9 sobre el resultado.
  * Si no hay intentos registrados, score = 0.
  */
 export function activityScore(ap: ScorableActivity): number {
@@ -70,9 +79,24 @@ export function activityScore(ap: ScorableActivity): number {
     const level = att.analysis?.understanding_level || 'memorized'
     return COMPREHENSION_SCORES[level] ?? 25
   })
-  const avg = scoresPerAttempt.reduce((sum, s) => sum + s, 0) / scoresPerAttempt.length
 
+  const maxScore = Math.max(...scoresPerAttempt)
   const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
+
+  // Camino 1: alcanzó Logrado (75) o más → max × penalty por intentos
+  if (maxScore >= 75) {
+    const firstReachedIdx = scoresPerAttempt.findIndex((s) => s === maxScore)
+    const attemptsToReach = firstReachedIdx + 1
+    let attemptPenalty: number
+    if (attemptsToReach >= 5) attemptPenalty = 0.85
+    else if (attemptsToReach === 4) attemptPenalty = 0.90
+    else if (attemptsToReach === 3) attemptPenalty = 0.95
+    else attemptPenalty = 1.00 // 1-2 intentos: primer error perdonado
+    return Math.round(maxScore * attemptPenalty * tangentPenalty)
+  }
+
+  // Camino 2: nunca alcanzó Logrado → promedio
+  const avg = scoresPerAttempt.reduce((sum, s) => sum + s, 0) / scoresPerAttempt.length
   return Math.round(avg * tangentPenalty)
 }
 
