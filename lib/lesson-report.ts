@@ -63,13 +63,16 @@ Actividad ${i + 1}: ${a.title}
 - Respuestas del estudiante: ${a.studentResponses.join(' | ') || 'N/A'}
 `).join('')}
 
+REGLA CRÍTICA — TOLERANCIA A ERRORES DE TRANSCRIPCIÓN DE VOZ:
+Las respuestas del estudiante pueden venir de Whisper (voz) y contener errores de homófonos o casi-homófonos. NO menciones estos errores como DEBILIDADES en el reporte — son artefactos técnicos de la transcripción, NO fallas conceptuales del estudiante. Si una palabra suena parecida a un término del tema, interpretala correctamente y procedé como si la hubiera dicho bien.
+
 Genera un reporte breve en español con este formato exacto:
 
 FORTALEZAS:
 • (2-3 puntos específicos basados en las respuestas)
 
 DEBILIDADES:
-• (2-3 puntos específicos, mencionar actividades donde tuvo dificultad)
+• (2-3 puntos específicos conceptuales/pedagógicos — NUNCA artefactos de transcripción de voz)
 
 NIVEL DE COMPRENSIÓN: (memorizado/comprendido/aplicado/analizado) — (explicación de 1 línea)
 

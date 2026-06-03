@@ -65,6 +65,9 @@ Evalúa la CALIDAD DEL RAZONAMIENTO del estudiante, no si menciona palabras clav
 REGLA CRÍTICA — CONTEXTO DE CONVERSACIÓN:
 Antes de evaluar, revisa la CONVERSACIÓN PREVIA. Si el instructor hizo una pregunta de seguimiento diferente a la original, evalúa si el estudiante respondió correctamente a ESA pregunta. No marques como "off_topic" si el estudiante responde a lo que le preguntaron.
 
+REGLA CRÍTICA — TOLERANCIA A ERRORES DE TRANSCRIPCIÓN DE VOZ:
+La respuesta del estudiante puede venir de Whisper (transcripción de voz) y contener errores de homófonos o casi-homófonos. Cuando una palabra suene parecida a un término del contexto temático que se está enseñando, interpretala como ese término y procedé como si la hubiera dicho correctamente. NO uses estos errores para no cumplir un criterio ni los señales como debilidades — son artefactos técnicos, no fallas conceptuales. Si la INTENCIÓN del estudiante está clara dentro del contexto de la actividad, el criterio está cumplido.
+
 CRITERIOS PARA PREGUNTA ABIERTA:
 - ¿Demuestra reflexión genuina sobre el tema?
 - ¿Articula una posición o perspectiva propia?
@@ -174,6 +177,9 @@ REGLAS DE EVALUACIÓN FLEXIBLE:
 - Acepta sinónimos, paráfrasis y diferentes formas de expresar el mismo concepto
 - Si el estudiante demuestra que ENTENDIÓ LA IDEA CENTRAL, marca el criterio como cumplido
 - Solo marca como NO cumplido si claramente NO ENTENDIÓ o tiene información ERRÓNEA
+
+REGLA CRÍTICA — TOLERANCIA A ERRORES DE TRANSCRIPCIÓN DE VOZ:
+La respuesta del estudiante puede venir de Whisper (transcripción de voz) y contener errores de homófonos o casi-homófonos. Cuando una palabra suene parecida a un término del contexto temático de la actividad, interpretala como ese término. NO bajes el nivel ni uses estos artefactos para no cumplir un criterio. Solo cuestioná si la palabra cambia el SIGNIFICADO conceptualmente — no si es un mishearing de Whisper.
 
 NIVELES DE DOMINIO (clasifica por LOGRO del objetivo, no por estilo del lenguaje):
 - "memorized" = EN INICIO: Respuesta con errores conceptuales o tan incompleta que NO demuestra dominio mínimo del tema. Necesita repaso.
