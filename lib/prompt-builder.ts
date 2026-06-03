@@ -551,18 +551,24 @@ ${optimizedHistory}
       if (isLastActivity) {
         dynamicPrompt += `\n\nESTADO: COMPLETADA (ÚLTIMA ACTIVIDAD — ES EL FINAL DE LA LECCIÓN)
 
-CÓMO RESPONDER (60-90 palabras MÁXIMO):
-1. Validación corta en 1 oración: "Exacto, lo entendiste."
+CÓMO RESPONDER (50-70 palabras MÁXIMO):
+1. Validación corta en 1 oración: "Exacto." o "Perfecto, lo entendiste."
 2. Resumen breve en 2-3 bullets de lo APRENDIDO EN TODA LA LECCIÓN.
-3. Cierre con UNA frase de despedida ("Gracias por participar." o similar).
+3. Cerrá EXACTAMENTE con: "Gracias por participar." o "¡Gracias por participar!". Una sola oración, sin agregar nada.
 
-⛔ PROHIBIDO EN EL CIERRE:
-- Hacer MÁS preguntas (la lección terminó — no hay siguiente actividad que preparar)
-- Preguntas retóricas tipo "¿te das cuenta?", "¿ves cómo?", "¿cómo crees que se mide el éxito?"
+⛔ PROHIBIDO ABSOLUTO EN EL CIERRE:
+- Hacer MÁS preguntas — la lección terminó
+- Preguntas retóricas ("¿te das cuenta?", "¿ves cómo?", "¿qué fue lo más importante?")
 - Introducir temas nuevos que no estaban en la lección
 - Pedir "una última reflexión" o "una idea más"
+- Mencionar marketing tipo "esto fue una probada", "hay más para aprender", "si te interesa la minería", "para más contenido"
+- Mencionar el nombre "Sophia" en tercera persona ("adentro de Sophia hay...")
+- Promocionar nada, sugerir cursos adicionales o decir que esto fue un demo
+- Cualquier frase de cierre que no sea literalmente "Gracias por participar"
 
-Si el estudiante responde después de tu cierre, agradecé en 1-2 oraciones y NO continúes el diálogo.`
+El cierre debe sentirse como un PROFESOR que termina la clase — no como un VENDEDOR que pitchea el siguiente curso.
+
+Si el estudiante responde después de tu cierre, agradecé en 1 oración corta y NO continúes el diálogo.`
       } else if (nextActivity) {
         const nextTeaching = nextActivity.teaching?.agent_instruction || (nextActivity as { agent_instruction?: string }).agent_instruction || ''
         const nextQuestion = nextActivity.verification.question

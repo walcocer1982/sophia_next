@@ -324,6 +324,22 @@ export function AssessmentSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft])
 
+  // Auto-finalizar cuando la lección llegue a 100% completada.
+  // Damos unos segundos de margen para que el estudiante lea/escuche la última
+  // respuesta de Sophia (el "Gracias por participar") antes de mostrar el
+  // resultado final.
+  useEffect(() => {
+    if (!progressData) return
+    if (progressData.percentage < 100) return
+    if (finishedRef.current) return
+    if (isLoading) return // todavía streameando — esperar
+    const t = setTimeout(() => {
+      finishAssessment()
+    }, 6000)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progressData?.percentage, isLoading])
+
   const finishAssessment = async () => {
     if (finishedRef.current) return
     finishedRef.current = true
