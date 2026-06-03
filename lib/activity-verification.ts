@@ -73,16 +73,24 @@ CRITERIOS PARA PREGUNTA ABIERTA:
 
 REGLA PRINCIPAL: Si el estudiante muestra pensamiento crítico y engagement con el tema, es SUFICIENTE para avanzar. No busques una respuesta "perfecta".
 
-NIVELES DE DOMINIO (clasifica por LOGRO, no por estilo del lenguaje):
-- "memorized" = EN INICIO: Respuesta con errores conceptuales o tan incompleta que NO demuestra dominio mínimo del tema. Necesita repaso.
-- "understood" = EN PROCESO: Parcialmente correcta. Idea general OK pero le faltan elementos clave o tiene confusiones menores. Va por buen camino.
-- "applied" = LOGRADO: Cumple los criterios de la actividad. Sabe el tema — sea por memoria correcta, paráfrasis o ejemplo. ESTE es el nivel esperado cuando responde bien.
-- "analyzed" = DESTACADO: Va MÁS ALLÁ de lo pedido. Aporta ejemplo propio no requerido, conecta con otro tema, identifica matices, o propone variantes.
+NIVELES DE DOMINIO (clasifica por LOGRO del objetivo, NO por estilo del lenguaje, NO por cobertura exhaustiva de criterios):
 
-IMPORTANTE:
-- Memorizar correctamente una definición = LOGRADO (no inicio).
+- "memorized" = EN INICIO: Respuesta con ERRORES conceptuales o tan vacía que NO demuestra dominio mínimo del tema. Solo si está EQUIVOCADO o NO RESPONDE.
+
+- "understood" = LOGRADO (BÁSICO): Comprende el concepto y lo expresa correctamente, aunque sea parcial. Cubre AL MENOS UNO de los criterios clave de la actividad sin errores conceptuales. ESTE es el nivel ESPERADO cuando responde bien — NO requiere cubrir todos los criterios, solo demostrar que entendió.
+
+- "applied" = LOGRADO (PLENO): Cumple la MAYORÍA de los criterios clave de la actividad (>= 60-70% del contenido esperado), aplica el concepto con coherencia, posiblemente con ejemplo o aplicación a un escenario.
+
+- "analyzed" = DESTACADO: Va MÁS ALLÁ de los criterios. Aporta ejemplo propio no requerido, conecta con otro tema, identifica matices, compara opciones, o propone variantes razonadas.
+
+REGLAS CRÍTICAS PARA CLASIFICAR (sé GENEROSO, no estricto):
+- Si comprende el concepto pero solo menciona algunos elementos → "understood" (NO memorized).
+- Si cumple la mayoría de los criterios sin necesidad de tocarlos todos → "applied" (NO understood).
+- Memorizar correctamente una definición sin errores = MÍNIMO "understood" (Logrado).
 - Equivocarse o tener errores conceptuales = INICIO.
+- NO bajar a "memorized" solo porque faltan items de la lista — eso es "understood" o "applied".
 - "Profundidad cognitiva" NO es el criterio — el criterio es DOMINIO DEL OBJETIVO.
+- Ante duda entre dos niveles, elegir el SUPERIOR (no castigar respuestas correctas pero incompletas).
 
 Responde en formato JSON con esta estructura EXACTA:
 {
