@@ -588,7 +588,7 @@ export function AssessmentSession({
               <VoiceButton
                 sessionId={sessionId}
                 autoStart
-                disabled={isLoading || welcomeLoading}
+                disabled={isLoading || welcomeLoading || avatarState === 'speaking'}
                 onMessage={(m) => setMessages(prev => [...prev, m])}
                 onStreamStart={(id) => {
                   setAvatarState('speaking')
@@ -630,10 +630,10 @@ export function AssessmentSession({
                   <ChatInput
                     ref={chatInputRef}
                     onSend={handleSendMessage}
-                    disabled={isLoading || welcomeLoading}
+                    disabled={isLoading || welcomeLoading || avatarState === 'speaking'}
                     isGeneratingWelcome={welcomeLoading}
-                    isThinking={isLoading}
-                    isStreaming={false}
+                    isThinking={isLoading || avatarState === 'speaking'}
+                    isStreaming={avatarState === 'speaking'}
                   />
                 </div>
               </motion.div>

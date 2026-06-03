@@ -109,7 +109,7 @@ export function VoiceButton({
       <Button
         type="button"
         onClick={handleMicClick}
-        disabled={!canStart && !isRecording}
+        disabled={disabled || (!canStart && !isRecording)}
         variant={isRecording ? 'destructive' : 'default'}
         size="sm"
         className={`gap-1.5 select-none ${isRecording ? 'animate-pulse' : ''}`}
@@ -118,8 +118,8 @@ export function VoiceButton({
         <span className="hidden sm:inline">
           {isRecording
             ? 'Click para enviar'
-            : isBusy
-              ? 'Espera...'
+            : isBusy || disabled
+              ? 'Sophia está hablando...'
               : 'Click para hablar'}
         </span>
       </Button>
