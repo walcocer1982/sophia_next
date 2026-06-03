@@ -16,12 +16,23 @@
  *   la escalada se autorregula en el nivel.
  */
 
-/** Nivel de dominio que devuelve el AI → score base 0-100. */
+/** Nivel de dominio que devuelve el AI → score base.
+ *
+ * Escala discreta 0-25-50-75-100 (2026-06-03):
+ * - 25  = memorized    → Inicio (memoriza con errores)
+ * - 50  = understood   → Logrado (comprende correctamente)
+ * - 75  = applied      → Logrado (aplica con ejemplo propio)
+ * - 100 = analyzed     → Destacado (analiza, compara, evalúa)
+ *
+ * "Comprende correctamente" (understood) ya es Logrado — no Proceso. Un
+ * estudiante que responde bien parafraseando lo enseñado merece Logrado.
+ * Para llegar a Destacado necesita ir más allá (analyzed).
+ */
 export const COMPREHENSION_SCORES: Record<string, number> = {
-  memorized: 40,   // EN INICIO    (errores o muy incompleto)
-  understood: 60,  // EN PROCESO   (parcial, sin errores graves)
-  applied: 80,     // LOGRADO      (cumple criterios)
-  analyzed: 100,   // DESTACADO    (va más allá, solo al 1er disparo)
+  memorized: 25,   // INICIO     (memoriza con errores conceptuales)
+  understood: 50,  // LOGRADO    (comprende correctamente, parafrasea bien)
+  applied: 75,     // LOGRADO    (aplica con ejemplo propio o escenario nuevo)
+  analyzed: 100,   // DESTACADO  (analiza, compara o evalúa con argumento)
 }
 
 /** Minimal shape needed to score an activity. Compatible con ActivityProgress. */

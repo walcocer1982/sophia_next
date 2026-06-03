@@ -1,31 +1,31 @@
 /**
  * 4-level rubric system para evaluación de actividades.
- * Aligned to Peruvian grading (base 20, pass = 13/20 = 65/100).
  *
- * | Nivel              | Rango (100) | Equivalente (20) |
- * |--------------------|-------------|------------------|
- * | Logrado Destacado  | 85-100      | 18-20            |
- * | Logrado            | 65-84       | 13-17            |
- * | En Proceso         | 50-64       | 11-12            |
- * | En Inicio          | 0-49        | 0-10             |
+ * Escala discreta 0-25-50-75-100 alineada con COMPREHENSION_SCORES:
  *
- * Passing grade: 65 (= 13/20)
+ * | Nivel              | Rango (100) | Score puro AI       |
+ * |--------------------|-------------|---------------------|
+ * | Logrado Destacado  | 88-100      | analyzed (100)      |
+ * | Logrado            | 50-87       | understood / applied (50, 75) |
+ * | En Proceso         | 26-49       | (entre memorized y understood) |
+ * | En Inicio          | 0-25        | memorized (25)      |
+ *
+ * Passing grade: 50 (un estudiante que comprende correctamente está aprobado).
  *
  * SOURCE OF TRUTH: la rúbrica se deriva del grade numérico calculado en
- * lib/grading.ts (activityScore aplica cap-por-intentos). Esta capa solo
- * mapea el número al label.
+ * lib/grading.ts. Esta capa solo mapea el número al label.
  */
 
 import { activityScore, type ScorableActivity } from './grading'
 
 export const GRADE_THRESHOLDS = {
-  LOGRADO_DESTACADO: 85,
-  LOGRADO: 65,           // Passing grade (13/20)
-  EN_PROCESO: 50,
-  EN_INICIO: 0,
+  LOGRADO_DESTACADO: 88,  // Solo analyzed (100) cae acá
+  LOGRADO: 50,            // understood (50) y applied (75) son Logrado
+  EN_PROCESO: 26,         // entre memorized (25) y understood (50)
+  EN_INICIO: 0,           // hasta memorized (25)
 } as const
 
-export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 65/100 = 13/20
+export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 50 = comprende = aprueba
 
 export type RubricLevel = 'logrado_destacado' | 'logrado' | 'en_proceso' | 'en_inicio'
 
