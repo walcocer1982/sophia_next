@@ -112,17 +112,20 @@ export function AssessmentSession({
   }, [videoUrl])
 
   // Imágenes de la actividad ACTUAL ordenadas por su `order` original.
-  // Si no hay actividad detectada todavía (recién arranca), usamos las de
-  // la primera actividad que aparezca en galleryImages.
+  // Si la actividad actual NO tiene imágenes → devolvemos [] (vacío). El render
+  // muestra "Sin recursos para esta actividad". NO caemos a las imágenes de
+  // otra actividad — eso confundía al estudiante (estaba en Act 3 sin imágenes
+  // y veía la imagen de Act 1 reapareciendo).
+  // Solo en el caso inicial (sin currentActivityId todavía, antes del primer
+  // fetch de progress) usamos la primera actividad que tenga imágenes.
   const activityImages = useMemo(() => {
     const currentId = progressData?.currentActivityId
     if (currentId) {
-      const filtered = galleryImages
+      return galleryImages
         .filter((img) => img.activityId === currentId)
         .sort((a, b) => a.order - b.order)
-      if (filtered.length > 0) return filtered
     }
-    // Fallback: primer activityId presente
+    // Estado inicial (sin progressData todavía): primer activityId presente
     const firstActId = galleryImages[0]?.activityId
     return galleryImages
       .filter((img) => img.activityId === firstActId)
