@@ -233,17 +233,11 @@ export function useVoiceChat({
   const processWithClaude = useCallback(async (userTranscript: string) => {
     onTranscript?.({ role: 'user', content: userTranscript })
 
-    // Guardar el mensaje del usuario en DB (vía /api/voice/message). Eso ya
-    // dispara verificación + actualiza ActivityProgress (commit bbc9cbd).
-    try {
-      await fetch('/api/voice/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, role: 'user', content: userTranscript }),
-      })
-    } catch (e) {
-      console.warn('[Voice] save user message failed:', e)
-    }
+    // NOTA: NO guardamos via /api/voice/message acá. Despues de la migracion
+    // a Whisper+Claude+TTS (commit 04c0e45), chat/stream es el unico responsable
+    // de guardar el user message Y disparar la verificacion. Llamar a ambos
+    // duplicaba el mensaje en DB e inflaba el conteo de intentos (caso real
+    // observado con Alcocer: cada mensaje aparecia 2 veces, attempts inflados).
 
     const assistantId = `voice-asst-${Date.now()}`
     onAssistantStreamStart?.(assistantId)
