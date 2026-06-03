@@ -146,7 +146,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
 
       {/* Content — flex-1 + min-h-0 para que el hijo (session/register) llene
           exactamente lo que queda tras el header, sin necesidad de scroll. */}
-      <main className={`flex-1 min-h-0 flex flex-col ${stage === 'register' ? 'items-center justify-center p-6' : ''}`}>
+      <main className={`flex-1 min-h-0 flex flex-col ${stage === 'register' || stage === 'finished' ? 'items-center justify-center p-6' : ''}`}>
         <AnimatePresence mode="wait">
           {stage === 'register' && (
             <motion.div
