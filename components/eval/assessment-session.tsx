@@ -325,9 +325,11 @@ export function AssessmentSession({
   }, [secondsLeft])
 
   // Auto-finalizar cuando la lección llegue a 100% completada.
-  // Damos unos segundos de margen para que el estudiante lea/escuche la última
-  // respuesta de Sophia (el "Gracias por participar") antes de mostrar el
-  // resultado final.
+  // Damos margen amplio para que el estudiante:
+  //   a) escuche/lea la última respuesta de Sophia
+  //   b) tenga tiempo si quiere responder algo más antes del cierre
+  // Si el estudiante envía un mensaje durante el countdown, el timer se resetea
+  // (porque isLoading vuelve a true).
   useEffect(() => {
     if (!progressData) return
     if (progressData.percentage < 100) return
@@ -335,7 +337,7 @@ export function AssessmentSession({
     if (isLoading) return // todavía streameando — esperar
     const t = setTimeout(() => {
       finishAssessment()
-    }, 6000)
+    }, 30000)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progressData?.percentage, isLoading])
