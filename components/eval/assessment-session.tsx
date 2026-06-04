@@ -670,6 +670,7 @@ export function AssessmentSession({
             {voiceEnabled && (
               <VoiceButton
                 sessionId={sessionId}
+                language={language}
                 autoStart
                 disabled={isLoading || welcomeLoading || avatarState === 'speaking'}
                 onMessage={(m) => setMessages(prev => [...prev, m])}

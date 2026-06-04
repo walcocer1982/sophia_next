@@ -41,6 +41,18 @@ export async function POST(request: Request) {
   }
 
   const text = body.text.trim().slice(0, 4000) // cap defensivo
+  // Idioma para steering del TTS. coral soporta ambos nativos. Antes esto
+  // estaba hardcoded a ES — causa por la que Pilar escuchó "Perfecto" cuando
+  // el texto decía "Perfect": el TTS leyó inglés con fonética española.
+  const lang: 'ES' | 'EN' = body.language === 'EN' ? 'EN' : 'ES'
+
+  const voiceInstructions = lang === 'EN'
+    ? 'Speak in clear, neutral American English with a warm, friendly, conversational tone. ' +
+      'Natural pace, not too slow, not too fast. Clear pronunciation, like an instructor ' +
+      'explaining something to a student. NO Spanish accent. Pronounce English words naturally.'
+    : 'Habla en español latinoamericano natural, con tono cálido y conversacional, ' +
+      'a un ritmo natural (ni muy lento ni muy rápido). Pronunciación clara y amigable, ' +
+      'como una instructora explicando algo a un estudiante. Sin acento neutro ni gringo.'
 
   // Llamar a OpenAI TTS con streaming activado (chunk transfer encoding).
   // El cliente recibe el audio en chunks y puede empezar a reproducir antes
@@ -55,12 +67,7 @@ export async function POST(request: Request) {
       model: 'gpt-4o-mini-tts',
       voice: 'coral',
       input: text,
-      // Instrucciones para steerability: TTS modula tono/velocidad/acento
-      // según este texto. Forzamos español latinoamericano natural.
-      instructions:
-        'Habla en español latinoamericano natural, con tono cálido y conversacional, ' +
-        'a un ritmo natural (ni muy lento ni muy rápido). Pronunciación clara y amigable, ' +
-        'como una instructora explicando algo a un estudiante. Sin acento neutro ni gringo.',
+      instructions: voiceInstructions,
       // opus = formato moderno comprimido, ideal para streaming de baja latencia
       response_format: 'opus',
     }),

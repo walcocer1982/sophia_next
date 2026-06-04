@@ -4,10 +4,15 @@ import { useEffect, useRef } from 'react'
 import { Mic, Loader2, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useVoiceChat } from '@/hooks/use-voice-chat'
+import { useT } from '@/lib/i18n/use-translation'
+import type { Locale } from '@/lib/i18n/strings'
 import type { OptimisticMessage } from '@/types/chat'
 
 interface VoiceButtonProps {
   sessionId: string
+  /** Idioma de la sesión — se propaga al TTS para que pronuncie en EN cuando
+   * corresponde (sin Spanish accent leakage). Default ES. */
+  language?: Locale
   onMessage?: (message: OptimisticMessage) => void
   onStreamStart?: (id: string) => void
   onStreamDelta?: (id: string, delta: string) => void
@@ -18,6 +23,7 @@ interface VoiceButtonProps {
 
 export function VoiceButton({
   sessionId,
+  language = 'ES',
   onMessage,
   onStreamStart,
   onStreamDelta,
@@ -25,6 +31,7 @@ export function VoiceButton({
   disabled,
   autoStart = false,
 }: VoiceButtonProps) {
+  const t = useT(language)
   const {
     state,
     error,
@@ -35,6 +42,7 @@ export function VoiceButton({
     forceReady,
   } = useVoiceChat({
     sessionId,
+    language,
     onTranscript: (t) => {
       // Only used for user transcripts (assistant uses streaming below)
       if (t.role === 'user') {
@@ -83,7 +91,7 @@ export function VoiceButton({
             <Mic className="h-4 w-4" />
           )}
           <span className="hidden sm:inline">
-            {state === 'connecting' ? 'Conectando...' : 'Activar voz'}
+            {state === 'connecting' ? t('voice_connecting') : t('voice_activate')}
           </span>
         </Button>
         {error && <span className="text-[10px] text-red-600">{error}</span>}
@@ -117,10 +125,10 @@ export function VoiceButton({
         <Mic className="h-4 w-4" />
         <span className="hidden sm:inline">
           {isRecording
-            ? 'Click para enviar'
+            ? t('voice_click_to_send')
             : isBusy || disabled
-              ? 'Sophia está hablando...'
-              : 'Click para hablar'}
+              ? t('session_speaking')
+              : t('voice_click_to_speak')}
         </span>
       </Button>
 
@@ -138,7 +146,7 @@ export function VoiceButton({
           title="Reiniciar si se trabó"
         >
           <RotateCw className="h-3 w-3 mr-1" />
-          Reiniciar
+          {t('voice_restart')}
         </Button>
       )}
     </div>

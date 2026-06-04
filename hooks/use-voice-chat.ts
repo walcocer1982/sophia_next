@@ -13,6 +13,9 @@ interface VoiceTranscript {
 
 interface UseVoiceChatArgs {
   sessionId: string
+  /** Idioma de la sesión — se pasa al endpoint TTS para que la voz coral
+   * pronuncie correctamente el inglés en vez de leerlo con acento español. */
+  language?: 'ES' | 'EN'
   onTranscript?: (transcript: VoiceTranscript) => void
   onAssistantStreamStart?: (messageId: string) => void
   onAssistantStreamDelta?: (messageId: string, delta: string) => void
@@ -37,6 +40,7 @@ interface UseVoiceChatArgs {
  */
 export function useVoiceChat({
   sessionId,
+  language = 'ES',
   onTranscript,
   onAssistantStreamStart,
   onAssistantStreamDelta,
@@ -129,7 +133,7 @@ export function useVoiceChat({
       const res = await fetch('/api/voice/speak', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, language }),
       })
       if (!res.ok) {
         console.warn('[Voice] TTS sentence failed:', res.status)
@@ -140,7 +144,7 @@ export function useVoiceChat({
       console.warn('[Voice] TTS sentence error:', e)
       return null
     }
-  }, [])
+  }, [language])
 
   /**
    * Loop que consume la cola: toma la próxima entrada {text, blobPromise},

@@ -51,6 +51,11 @@ export const STRINGS = {
     session_preparing: 'Sophia se está preparando...',
     session_thinking: 'Sophia está pensando...',
     session_speaking: 'Sophia está hablando...',
+    voice_activate: 'Activar voz',
+    voice_connecting: 'Conectando...',
+    voice_click_to_speak: 'Click para hablar',
+    voice_click_to_send: 'Click para enviar',
+    voice_restart: 'Reiniciar',
 
     // Pantalla de resultado
     result_title: 'Gracias por participar',
@@ -128,6 +133,11 @@ export const STRINGS = {
     session_preparing: 'Sophia is getting ready...',
     session_thinking: 'Sophia is thinking...',
     session_speaking: 'Sophia is speaking...',
+    voice_activate: 'Activate voice',
+    voice_connecting: 'Connecting...',
+    voice_click_to_speak: 'Click to speak',
+    voice_click_to_send: 'Click to send',
+    voice_restart: 'Restart',
 
     // Result screen
     result_title: 'Thanks for participating',
