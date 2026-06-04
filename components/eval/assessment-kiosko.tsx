@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { AssessmentSession } from './assessment-session'
 import { AssessmentResult } from './assessment-result'
+import { useT } from '@/lib/i18n/use-translation'
+import type { Locale } from '@/lib/i18n/strings'
 import Image from 'next/image'
 
 interface AssessmentInfo {
@@ -42,6 +44,8 @@ interface FinishedData {
   participantName: string
 }
 
+const LANG_STORAGE_KEY = 'sophia.kiosko.lang'
+
 export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo }) {
   const [stage, setStage] = useState<Stage>('register')
   const [participantId, setParticipantId] = useState<string | null>(null)
@@ -49,6 +53,24 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
   const [participantName, setParticipantName] = useState<string>('')
   const [finishedData, setFinishedData] = useState<FinishedData | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  // Idioma del kiosko. Persiste en localStorage para que el operador del
+  // stand no tenga que reseleccionar EN entre cada participante. Se aplica
+  // al participant.language + session.language al hacer registro.
+  const [language, setLanguage] = useState<Locale>('ES')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = localStorage.getItem(LANG_STORAGE_KEY)
+    if (stored === 'EN' || stored === 'ES') setLanguage(stored)
+  }, [])
+  const switchLanguage = (next: Locale) => {
+    setLanguage(next)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LANG_STORAGE_KEY, next)
+    }
+  }
+
+  const t = useT(language)
 
   // Form state
   const [firstName, setFirstName] = useState('')
@@ -58,11 +80,11 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
   const handleStart = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!firstName.trim()) {
-      toast.error('El nombre es obligatorio')
+      toast.error(t('register_error_missing_name'))
       return
     }
     if (assessment.collectDni && !dni.trim()) {
-      toast.error('DNI es obligatorio para esta clase')
+      toast.error(t('register_dni') + ' *')
       return
     }
 
@@ -71,11 +93,11 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
       const res = await fetch(`/api/eval/${assessment.code}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName, dni, email }),
+        body: JSON.stringify({ firstName, dni, email, language }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'No se pudo iniciar la clase')
+        throw new Error(err.error || t('register_error_generic'))
       }
       const data = await res.json()
       setParticipantId(data.participantId)
@@ -95,7 +117,6 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
   }
 
   const handleNextParticipant = async () => {
-    // Clear cookies via API
     await fetch(`/api/eval/${assessment.code}/end`, { method: 'POST' }).catch(() => {})
     setStage('register')
     setFirstName('')
@@ -104,6 +125,8 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
     setParticipantId(null)
     setSessionId(null)
     setFinishedData(null)
+    // language NO se resetea — el operador del stand probablemente quiera
+    // mantenerlo en EN si está en un evento internacional.
   }
 
   if (!assessment.isActive) {
@@ -111,8 +134,12 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
       <div className="min-h-screen flex items-center justify-center bg-[#0a1628] p-4">
         <div className="text-center max-w-md">
           <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={120} height={120} className="mx-auto mb-6 rounded-lg" />
-          <h1 className="text-2xl font-bold text-white mb-2">Clase cerrada</h1>
-          <p className="text-slate-400">Esta clase ya no está disponible.</p>
+          <h1 className="text-2xl font-bold text-white mb-2">
+            {language === 'EN' ? 'Class closed' : 'Clase cerrada'}
+          </h1>
+          <p className="text-slate-400">
+            {language === 'EN' ? 'This class is no longer available.' : 'Esta clase ya no está disponible.'}
+          </p>
         </div>
       </div>
     )
@@ -144,8 +171,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
         <div className="text-xs text-slate-400">Código: <span className="font-mono font-semibold text-white">{assessment.code}</span></div>
       </header>
 
-      {/* Content — flex-1 + min-h-0 para que el hijo (session/register) llene
-          exactamente lo que queda tras el header, sin necesidad de scroll. */}
+      {/* Content */}
       <main className={`flex-1 min-h-0 flex flex-col ${stage === 'register' || stage === 'finished' ? 'items-center justify-center p-6' : ''}`}>
         <AnimatePresence mode="wait">
           {stage === 'register' && (
@@ -160,20 +186,52 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
               <div className="absolute -inset-0.5 bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-2xl opacity-30 blur-md" />
 
               <div className="relative bg-[#0d1f3c]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-8">
+                {/* Toggle de idioma — chips ES/EN arriba del form.
+                    Solo visible en stage register; al pasar a session se
+                    pierde de vista para evitar switching mid-class. */}
+                <div className="flex items-center justify-center gap-2 mb-5" role="group" aria-label={t('language_switch_aria')}>
+                  <button
+                    type="button"
+                    onClick={() => switchLanguage('ES')}
+                    aria-pressed={language === 'ES'}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                      language === 'ES'
+                        ? 'bg-cyan-500 text-white border-cyan-400 shadow-lg shadow-cyan-500/30'
+                        : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                    }`}
+                  >
+                    🇪🇸 ES
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchLanguage('EN')}
+                    aria-pressed={language === 'EN'}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                      language === 'EN'
+                        ? 'bg-cyan-500 text-white border-cyan-400 shadow-lg shadow-cyan-500/30'
+                        : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                    }`}
+                  >
+                    🇬🇧 EN
+                  </button>
+                </div>
+
                 <div className="text-center mb-6">
                   <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={80} height={80} className="mx-auto mb-4 rounded-xl" />
-                  <h2 className="text-3xl font-bold text-white mb-1">Bienvenido</h2>
+                  <h2 className="text-3xl font-bold text-white mb-1">{t('register_title')}</h2>
                   <p className="text-sm text-cyan-400/80 font-medium">{assessment.lessonTitle}</p>
                 </div>
 
                 <form onSubmit={handleStart} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="firstName">Nombre *</label>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="firstName">
+                      {t('register_first_name')} *
+                    </label>
                     <Input
                       id="firstName"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
-                      placeholder="Tu nombre"
+                      placeholder={t('register_first_name')}
                       required
                       autoFocus
                       className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
@@ -181,7 +239,9 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                   </div>
                   {assessment.collectDni && (
                     <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="dni">DNI *</label>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="dni">
+                        {t('register_dni')} *
+                      </label>
                       <Input
                         id="dni"
                         value={dni}
@@ -195,21 +255,26 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                   )}
                   {assessment.collectEmail && (
                     <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="email">Correo (opcional)</label>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="email">
+                        {t('register_email')} {t('register_email_optional')}
+                      </label>
                       <Input
                         id="email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="tu@correo.com"
+                        placeholder="email@example.com"
                         className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
                       />
                     </div>
                   )}
 
                   <div className="text-xs text-slate-400 bg-cyan-500/5 border border-cyan-400/20 rounded-lg p-3">
-                    La clase dura aproximadamente <strong className="text-cyan-300">{assessment.timeLimitMin} minutos</strong>.
-                    Conversá con Sophia, ella te va guiando paso a paso.
+                    {language === 'EN' ? (
+                      <>The class takes about <strong className="text-cyan-300">{assessment.timeLimitMin} minutes</strong>. Talk with Sophia — she will guide you step by step.</>
+                    ) : (
+                      <>La clase dura aproximadamente <strong className="text-cyan-300">{assessment.timeLimitMin} minutos</strong>. Conversá con Sophia, ella te va guiando paso a paso.</>
+                    )}
                   </div>
 
                   <Button
@@ -220,10 +285,10 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                     {submitting ? (
                       <>
                         <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        Iniciando...
+                        {t('register_starting')}
                       </>
                     ) : (
-                      'Iniciar clase'
+                      t('register_start')
                     )}
                   </Button>
                 </form>
@@ -249,6 +314,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                 videoUrl={assessment.videoUrl}
                 voiceEnabled={assessment.voiceEnabled ?? true}
                 timeLimitMin={assessment.timeLimitMin}
+                language={language}
                 onFinished={handleSessionFinished}
               />
             </motion.div>
@@ -262,10 +328,12 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
               exit={{ opacity: 0 }}
             >
               <AssessmentResult
+                sessionId={sessionId ?? ''}
                 grade={finishedData.grade}
                 gradeOver20={finishedData.gradeOver20}
                 passed={finishedData.passed}
                 participantName={finishedData.participantName}
+                language={language}
                 onNext={handleNextParticipant}
               />
             </motion.div>

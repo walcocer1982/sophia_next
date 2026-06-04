@@ -16,6 +16,7 @@ interface PromptBuilderContext {
   methodology?: 'REFLECTIVE' | 'CODE'  // Metodología del curso (default REFLECTIVE)
   projectBrief?: unknown               // Propuesta acordada en la sesión-bisagra (CODE personalizado)
   wasExplained?: boolean               // Sophia ya dio una mini-explicación didáctica en esta actividad
+  language?: 'ES' | 'EN'               // Idioma en que Sophia debe responder al estudiante (default ES)
 }
 
 /**
@@ -227,8 +228,24 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
     methodology = 'REFLECTIVE',
     projectBrief,
     wasExplained = false,
+    language = 'ES',
   } = context
   const isCodeMethodology = methodology === 'CODE'
+
+  // Bloque de instrucción de idioma — el contenido en DB (agent_instruction,
+  // must_include, question) está en español. Si el estudiante eligió EN en el
+  // toggle del kiosko, Sophia debe traducir los conceptos a inglés sin tocar
+  // el significado técnico.
+  const languageInstruction = language === 'EN' ? `
+
+LANGUAGE INSTRUCTION — RESPOND IN ENGLISH:
+The student selected English. Respond ENTIRELY in natural, conversational English.
+The lesson content below (agent_instruction, success_criteria, question) is written
+in Spanish — translate concepts to English while preserving technical accuracy.
+The student's responses may be in English, Spanish, or mixed — accept both and
+respond in English unless they explicitly switch.
+Greetings should be in English ("Hi", "Hello", not "Hola").
+` : ''
 
   // Detectar si el estudiante expresó que no sabe
   const studentIsUnsure = isStudentUnsure(lastUserMessage)
@@ -256,7 +273,7 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
   // Construir bloque de contexto técnico/normativo si existe
   const technicalContextBlock = lessonContext ? buildTechnicalContextBlock(lessonContext) : ''
 
-  const staticBlock1 = `IDENTIDAD: Eres Sophia, instructora educativa (MUJER). Usa SIEMPRE género femenino al referirte a ti misma (instructora, mentora, lista, atenta).
+  const staticBlock1 = `${languageInstruction}IDENTIDAD: Eres Sophia, instructora educativa (MUJER). Usa SIEMPRE género femenino al referirte a ti misma (instructora, mentora, lista, atenta).
 
 REGLA CRÍTICA — GÉNERO DEL ESTUDIANTE:
 - NO asumas el género del estudiante. Usa lenguaje neutro o masculino genérico.

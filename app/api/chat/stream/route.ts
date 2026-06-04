@@ -449,6 +449,7 @@ export async function POST(request: Request) {
     methodology: lessonSession.lesson.course?.methodology ?? 'REFLECTIVE',
     projectBrief: lessonSession.projectBrief ?? undefined,
     wasExplained,
+    language: lessonSession.language,
   })
 
   // ═══════════════════════════════════════════════════════════════
@@ -783,7 +784,8 @@ export async function POST(request: Request) {
 
             // Generate AI report asynchronously (don't block the response).
             // Pasamos objective + keyPoints para que el reporte tenga el ALCANCE
-            // de la lección y no invente temas fuera de ese alcance.
+            // de la lección y no invente temas fuera de ese alcance. Language
+            // de la sesión decide en qué idioma se genera el reporte.
             generateLessonReport(
               lessonSession.id,
               lessonTitle,
@@ -792,6 +794,7 @@ export async function POST(request: Request) {
               allActivities,
               grade,
               contentJson,
+              lessonSession.language,
             ).catch((err: unknown) => {
               logger.error('chat.stream.report_generation_failed', { sessionId, error: String(err) })
             })

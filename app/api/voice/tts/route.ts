@@ -20,13 +20,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'OpenAI not configured' }, { status: 500 })
   }
 
-  const { text } = await request.json()
+  const { text, language } = await request.json() as { text?: string; language?: 'ES' | 'EN' }
   if (!text || typeof text !== 'string') {
     return NextResponse.json({ error: 'text required' }, { status: 400 })
   }
+  const lang: 'ES' | 'EN' = language === 'EN' ? 'EN' : 'ES'
 
   // Limit text length to avoid abuse / huge audio files
   const trimmedText = text.slice(0, 4000)
+
+  // Instrucciones de voz según idioma. shimmer soporta ambos nativos.
+  const voiceInstructions = lang === 'EN'
+    ? 'Speak in clear, neutral American English. Warm and friendly tone, like a young instructor talking to a student. Pace is calm and clear. Natural intonation, never robotic. Pronounce technical terms clearly.'
+    : 'Habla en español latinoamericano con acento peruano neutro. Tono cálido, amigable y natural, como una instructora joven hablando con un estudiante. Ritmo pausado y claro. Pronuncia "z" y "ce/ci" como "s" (seseo). NUNCA uses acento de España. NUNCA suenes robotizada.'
 
   try {
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
@@ -39,8 +45,7 @@ export async function POST(request: Request) {
         model: 'gpt-4o-mini-tts',
         voice: 'shimmer',
         input: trimmedText,
-        // Voice instructions only supported by gpt-4o-mini-tts
-        instructions: 'Habla en español latinoamericano con acento peruano neutro. Tono cálido, amigable y natural, como una instructora joven hablando con un estudiante. Ritmo pausado y claro. Pronuncia "z" y "ce/ci" como "s" (seseo). NUNCA uses acento de España. NUNCA suenes robotizada.',
+        instructions: voiceInstructions,
         response_format: 'mp3',
       }),
     })

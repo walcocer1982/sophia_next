@@ -6,6 +6,7 @@ import { ChatInput, type ChatInputRef } from './chat-input'
 import { VoiceButton } from './voice-button'
 import { TutorMode } from './tutor-mode'
 import { DevToolsModal } from './dev-tools-modal'
+import { SurveyModal } from './survey-modal'
 import { useProgress } from './progress-context'
 import type { ChatMessage, OptimisticMessage } from '@/types/chat'
 import type { PlannerAttachment } from '@/types/planner'
@@ -43,6 +44,10 @@ export function ChatInterface({
   const [isGeneratingWelcome, setIsGeneratingWelcome] = useState(
     initialMessages.length === 0
   )
+  // Survey: se abre 2s después de completar la última actividad. Si ya fue
+  // respondida (consultamos al montar), no se vuelve a abrir.
+  const [showSurvey, setShowSurvey] = useState(false)
+  const [surveyAlreadySubmitted, setSurveyAlreadySubmitted] = useState(false)
   const { progress, updateProgress } = useProgress()
   const streamingContentRef = useRef<string>('')
   const assistantIdRef = useRef<string>('')
@@ -73,6 +78,29 @@ export function ChatInterface({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Solo ejecutar una vez al montar
+
+  // Chequeo inicial: ¿ya respondió la encuesta de esta sesión?
+  // Si sí, no la mostramos de nuevo aunque la lección esté completa.
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/survey/${sessionId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return
+        if (data.submitted) setSurveyAlreadySubmitted(true)
+        // Si la sesión ya está completada y no contestó, mostramos el modal
+        // (caso: entró de nuevo a una sesión vieja sin haber respondido).
+        else if (data.completedAt) {
+          setTimeout(() => {
+            if (!cancelled) setShowSurvey(true)
+          }, 1500)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId])
 
   const generateWelcomeMessage = async () => {
     setIsGeneratingWelcome(true)
@@ -341,6 +369,12 @@ export function ChatInterface({
             toast.success('¡Felicitaciones!', {
               description: '¡Completaste toda la lección!',
             })
+            // 2s después abrimos el modal de encuesta — da tiempo a que
+            // Sophia termine de hablar/leer su cierre. Solo si no respondió
+            // antes (encuesta de la misma sessionId).
+            if (!surveyAlreadySubmitted) {
+              setTimeout(() => setShowSurvey(true), 2000)
+            }
           } else {
             toast.success('¡Completaste una actividad!', {
               description: 'Avanzando a la siguiente...',
@@ -499,6 +533,14 @@ export function ChatInterface({
           sessionId={sessionId}
         />
       )}
+
+      {/* Encuesta NPS post-lección */}
+      <SurveyModal
+        open={showSurvey}
+        onOpenChange={setShowSurvey}
+        sessionId={sessionId}
+        onSubmitted={() => setSurveyAlreadySubmitted(true)}
+      />
     </div>
   )
 }

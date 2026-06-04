@@ -14,6 +14,8 @@ import { ChatInput, type ChatInputRef } from '../learning/chat-input'
 import { ConversationDrawer } from '../learning/conversation-drawer'
 import type { OptimisticMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
+import { useT } from '@/lib/i18n/use-translation'
+import type { Locale } from '@/lib/i18n/strings'
 
 // Limpia markdown/listas/headings para que TTS suene natural.
 // Mismo criterio que usa la bienvenida: que el audio lea texto plano
@@ -63,6 +65,9 @@ interface AssessmentSessionProps {
   videoUrl?: string | null
   voiceEnabled?: boolean
   timeLimitMin: number
+  /** Idioma de la sesión (ES default). Solo afecta la UI — Sophia decide su
+   * idioma de respuesta en el backend leyendo lessonSession.language. */
+  language?: Locale
   onFinished: (data: FinishedData) => void
 }
 
@@ -79,8 +84,10 @@ export function AssessmentSession({
   videoUrl,
   voiceEnabled = true,
   timeLimitMin,
+  language = 'ES',
   onFinished,
 }: AssessmentSessionProps) {
+  const t = useT(language)
   const [secondsLeft, setSecondsLeft] = useState(timeLimitMin * 60)
   const [messages, setMessages] = useState<OptimisticMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -241,7 +248,7 @@ export function AssessmentSession({
       const res = await fetch('/api/voice/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: clean }),
+        body: JSON.stringify({ text: clean, language }),
       })
       if (!res.ok) {
         setAvatarState('idle')
@@ -272,7 +279,7 @@ export function AssessmentSession({
       const res = await fetch('/api/voice/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, language }),
       })
       if (!res.ok) return
       const blob = await res.blob()
@@ -345,7 +352,7 @@ export function AssessmentSession({
           const ttsRes = await fetch('/api/voice/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: cleanText }),
+            body: JSON.stringify({ text: cleanText, language }),
           })
           if (ttsRes.ok) {
             const blob = await ttsRes.blob()
@@ -482,7 +489,7 @@ export function AssessmentSession({
   }
 
   const handleFinishEarly = async () => {
-    if (!confirm('¿Querés salir de la clase?')) return
+    if (!confirm(t('session_exit_confirm'))) return
     await finishAssessment()
   }
 
@@ -497,11 +504,11 @@ export function AssessmentSession({
       {/* Top bar: participant + timer + finish */}
       <div className="shrink-0 flex items-center justify-between bg-[#0d1f3c]/80 backdrop-blur border border-white/10 rounded-xl px-4 py-2">
         <div className="text-sm text-slate-300">
-          <span className="text-slate-500">Participante:</span>{' '}
+          <span className="text-slate-500">{t('session_participant')}:</span>{' '}
           <strong className="text-white">{participantName}</strong>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 font-mono text-sm text-slate-400" title="Tiempo restante en la clase">
+          <div className="flex items-center gap-2 font-mono text-sm text-slate-400">
             <Clock className="h-4 w-4" />
             {timeLabel}
           </div>
@@ -513,7 +520,7 @@ export function AssessmentSession({
             className="gap-1.5 bg-white/5 border-white/20 text-slate-300 hover:bg-white/10 hover:text-white"
           >
             <LogOut className="h-4 w-4" />
-            Salir
+            {t('session_exit')}
           </Button>
         </div>
       </div>
@@ -527,7 +534,7 @@ export function AssessmentSession({
           <section className="shrink-0">
             <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-cyan-400/30">
               <Target className="h-4 w-4 text-cyan-400" />
-              <h3 className="text-sm sm:text-base font-semibold text-white">Aprendizaje Esperado</h3>
+              <h3 className="text-sm sm:text-base font-semibold text-white">{t('session_objective_label')}</h3>
             </div>
             <p className="text-sm sm:text-base text-slate-300 leading-relaxed">{lessonObjective}</p>
           </section>
@@ -535,7 +542,7 @@ export function AssessmentSession({
           <section className="flex-1 min-h-0 flex flex-col">
             <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-cyan-400/30 shrink-0">
               <Lightbulb className="h-4 w-4 text-cyan-400" />
-              <h3 className="text-sm sm:text-base font-semibold text-white">Puntos Clave</h3>
+              <h3 className="text-sm sm:text-base font-semibold text-white">{t('session_key_points_label')}</h3>
             </div>
             <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-0">
               {keyPoints.map((point, i) => (
@@ -554,13 +561,13 @@ export function AssessmentSession({
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2 text-sm text-slate-300">
                     <BarChart3 className="h-4 w-4 text-cyan-400" />
-                    <span>Progreso</span>
+                    <span>{t('session_progress_label')}</span>
                   </div>
                   <span className="text-sm font-semibold text-cyan-400">{progressData.percentage}%</span>
                 </div>
                 <Progress value={progressData.percentage} className="h-2 bg-white/10" />
                 <p className="text-xs text-slate-400 mt-2 text-center">
-                  Actividad {Math.max(1, progressData.current)} de {progressData.total}
+                  {t('session_activity_of', { current: Math.max(1, progressData.current), total: progressData.total })}
                 </p>
               </div>
             </section>
@@ -594,7 +601,7 @@ export function AssessmentSession({
                         />
                       ))}
                     </div>
-                    <span className="text-sm text-slate-400">Sophia se está preparando...</span>
+                    <span className="text-sm text-slate-400">{t('session_preparing')}</span>
                   </div>
                 </motion.div>
               ) : lastAssistantMessage?.content ? (
@@ -643,7 +650,7 @@ export function AssessmentSession({
                 className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-cyan-300 transition-colors"
               >
                 <MessageSquare className="h-3.5 w-3.5" />
-                Ver conversación ({messages.length} {messages.length === 1 ? 'mensaje' : 'mensajes'})
+                {t('session_view_conversation')} ({messages.length} {messages.length === 1 ? t('session_message') : t('session_messages')})
               </button>
             </div>
           )}
@@ -653,7 +660,7 @@ export function AssessmentSession({
           {isMobile && voiceEnabled && (
             <div className="shrink-0 flex items-center justify-center pt-2">
               <p className="text-[11px] text-amber-300/80 bg-amber-500/10 border border-amber-400/20 rounded-full px-3 py-1">
-                📱 En móvil te recomendamos usar <strong>Escribir</strong> para mejor experiencia
+                {t('session_writing_hint')}
               </p>
             </div>
           )}
@@ -689,7 +696,7 @@ export function AssessmentSession({
               className="gap-1.5 bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white"
             >
               <Type className="h-4 w-4" />
-              <span className="hidden sm:inline">{voiceEnabled ? (showTextInput ? 'Ocultar' : 'Escribir') : 'Escribir'}</span>
+              <span className="hidden sm:inline">{voiceEnabled ? (showTextInput ? t('session_hide_button') : t('session_write_button')) : t('session_write_button')}</span>
             </Button>
           </div>
 
@@ -722,7 +729,7 @@ export function AssessmentSession({
         <aside className="col-span-3 bg-[#0d1f3c]/60 backdrop-blur border border-white/10 rounded-xl p-3 overflow-hidden flex flex-col gap-2 min-h-0">
           <div className="flex items-center gap-2 pb-1.5 border-b border-cyan-400/30 shrink-0">
             <ImageIcon className="h-3.5 w-3.5 text-cyan-400" />
-            <h3 className="text-xs font-semibold text-white">Sophia</h3>
+            <h3 className="text-xs font-semibold text-white">{t('session_resources_label')}</h3>
           </div>
           {videoUrl ? (
             <div className="rounded-lg overflow-hidden bg-black flex items-center justify-center min-h-0">
@@ -737,7 +744,7 @@ export function AssessmentSession({
               />
             </div>
           ) : !visibleImage ? (
-            <p className="text-xs text-slate-500 text-center py-8">Sin recursos para esta actividad</p>
+            <p className="text-xs text-slate-500 text-center py-8">{t('session_no_resources')}</p>
           ) : (
             // UNA imagen visible a la vez. Cambia de imagen con animación cuando
             // Sophia avanza a un nuevo concepto que matchee con la descripción
@@ -772,7 +779,7 @@ export function AssessmentSession({
               </AnimatePresence>
               {activityImages.length > 1 && (
                 <p className="text-[10px] text-slate-500 text-center shrink-0">
-                  Imagen {visibleImageIdx + 1} de {activityImages.length}
+                  {t('session_image_counter', { current: visibleImageIdx + 1, total: activityImages.length })}
                 </p>
               )}
             </div>

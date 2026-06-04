@@ -27,7 +27,8 @@ export async function generateLessonReport(
   lessonKeyPoints: string[],
   activities: ActivityData[],
   grade: number,
-  contentJson: LessonContent
+  contentJson: LessonContent,
+  language: 'ES' | 'EN' = 'ES'
 ): Promise<void> {
   // Lookup por activityId (NO por idx de array) — session.activities viene en
   // orden de inserción del DB, que NO coincide con contentJson.activities en
@@ -97,9 +98,22 @@ REGLAS CRÍTICAS — LEER ANTES DE GENERAR:
 
 3. SUSTANTIVA, NO GENÉRICA: Cita criterios concretos del must_include y respuestas literales del estudiante. NO uses frases vacías como "necesita mejorar la comprensión" — sé específico.
 
-Genera un reporte breve en español con este formato exacto:
+${language === 'EN' ? `4. LANGUAGE: Generate the ENTIRE report in natural English. The lesson content (objective, key points, must_include criteria) is in Spanish — translate concepts to English while preserving technical accuracy. When citing student responses, keep them in their original language but reference them naturally.` : ''}
 
-FORTALEZAS:
+Genera un reporte breve en ${language === 'EN' ? 'inglés' : 'español'} con este formato exacto:
+
+${language === 'EN' ? `STRENGTHS:
+• (2-3 specific points — cite which criteria they met and in which activity)
+
+WEAKNESSES:
+• (2-3 specific points — cite which criteria they missed — ONLY within the taught scope)
+
+COMPREHENSION LEVEL: (Beginning/In Progress/Achieved/Outstanding) — (1 line justifying)
+
+RECOMMENDATION:
+(1-2 lines — only within the scope. If they mastered everything, say "Ready to advance to the next lesson". Do NOT invent next steps outside the syllabus.)
+
+Be concise and specific.` : `FORTALEZAS:
 • (2-3 puntos específicos — cita qué criterios cumplió y en qué actividad)
 
 DEBILIDADES:
@@ -110,7 +124,7 @@ NIVEL DE COMPRENSIÓN: (Inicio/Proceso/Logrado/Destacado) — (1 línea justific
 RECOMENDACIÓN:
 (1-2 líneas — solo dentro del alcance. Si dominó todo, decí "Lista/o para avanzar a la siguiente lección". NO inventes próximos pasos fuera del temario.)
 
-Sé conciso y específico.`
+Sé conciso y específico.`}`
 
   try {
     const response = await anthropic.messages.create({

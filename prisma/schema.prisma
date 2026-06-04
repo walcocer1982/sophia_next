@@ -157,6 +157,11 @@ model Lesson {
 // 3. APRENDIZAJE
 // ============================================
 
+enum Language {
+  ES // Español (default)
+  EN // English (kiosko internacional / ferias)
+}
+
 model LessonSession {
   id             String    @id @default(cuid())
   userId         String
@@ -179,6 +184,10 @@ model LessonSession {
   grade          Float?
   completedAt    DateTime?
   passed         Boolean   @default(false)
+  // Idioma de la sesión. En kiosko se setea en el registro (toggle ES/EN).
+  // En /learn queda ES por default. Se pasa al system prompt de Claude y
+  // al TTS para que Sophia responda en el idioma elegido.
+  language       Language  @default(ES)
 
   // Relaciones
   user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -186,11 +195,38 @@ model LessonSession {
   messages   Message[]
   activities ActivityProgress[]
   assessmentParticipant AssessmentParticipant?
+  survey     LessonSurvey?
 
   @@unique([userId, lessonId, sessionAttempt])
   @@index([userId])
   @@index([lessonId])
   @@index([sectionId])
+}
+
+// ============================================
+// 3.5 ENCUESTA NPS POST-LECCIÓN
+// ============================================
+
+enum SurveyUtility {
+  VERY_USEFUL    // "Muy útil — voy a usarlo"
+  USEFUL         // "Útil — algo me va a servir"
+  LOW_USEFUL     // "Poco útil — no sé cuándo lo usaré"
+  NOT_USEFUL     // "Nada útil — no me sirve"
+}
+
+model LessonSurvey {
+  id          String        @id @default(cuid())
+  sessionId   String        @unique  // 1 encuesta por sesión, sin duplicados
+  npsScore    Int                    // 1-10 (variante sin 0)
+  npsReason   String?       @db.Text // texto libre opcional, max ~300 chars
+  utility     SurveyUtility          // self-reported utilidad práctica
+  language    Language      @default(ES) // Idioma en que se respondió la encuesta
+  submittedAt DateTime      @default(now())
+
+  session LessonSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([npsScore])
+  @@index([submittedAt])
 }
 
 enum ActivityStatus {
@@ -351,6 +387,7 @@ model AssessmentParticipant {
   gradeOver20     Float?    // Nota final sobre 20
   passed          Boolean   @default(false)
   sessionId       String?   @unique // Link to the LessonSession of this participant
+  language        Language  @default(ES) // Idioma elegido en el toggle del registro
 
   assessment Assessment    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   session    LessonSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)

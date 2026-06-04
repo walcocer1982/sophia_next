@@ -16,7 +16,15 @@ export async function POST(
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params
-  const { firstName, lastName, dni, email } = await request.json()
+  const { firstName, lastName, dni, email, language } = await request.json() as {
+    firstName?: string
+    lastName?: string
+    dni?: string
+    email?: string
+    language?: 'ES' | 'EN'
+  }
+  // Idioma elegido en el toggle del registro. Default ES si no viene o es inválido.
+  const lang: 'ES' | 'EN' = language === 'EN' ? 'EN' : 'ES'
 
   // Solo el nombre es obligatorio. Apellido/DNI/email son opcionales para
   // simplificar el flujo de demos/convención (el admin puede pedirlos
@@ -56,6 +64,7 @@ export async function POST(
       userId: guestUser.id,
       lessonId: assessment.lessonId,
       isTest: false,
+      language: lang,
     },
   })
 
@@ -68,6 +77,7 @@ export async function POST(
       dni: dni?.trim().slice(0, 20) || null,
       email: email?.trim().slice(0, 100) || null,
       sessionId: lessonSession.id,
+      language: lang,
     },
   })
 

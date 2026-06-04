@@ -108,7 +108,14 @@ export async function POST(request: Request) {
       tangentCount: 0,
       lessonContext,
       methodology,
+      language: lessonSession.language,
     })
+
+    // El welcome se traduce al idioma de la sesión. Si EN, le decimos a Claude
+    // que genere todo el mensaje en inglés, incluyendo el saludo.
+    const welcomeLanguageRule = lessonSession.language === 'EN'
+      ? '\n\nLANGUAGE: The student selected English. Generate the ENTIRE welcome message in natural English. Greet with "Hi {name}" or "Hello {name}", NOT "Hola".'
+      : ''
 
     // Instrucción para mensaje de bienvenida - Presenta el tema e invita a aprender
     const greetingLine = participantFirstName
@@ -164,7 +171,7 @@ ${isCodeMethodology
 
 REGLA FINAL OBLIGATORIA: el mensaje DEBE terminar con UNA pregunta dirigida al estudiante. NUNCA con un statement neutro — eso deja al estudiante sin saber si tiene que responder.
 
-NO asumas el género del estudiante. Usa formas neutras.
+NO asumas el género del estudiante. Usa formas neutras.${welcomeLanguageRule}
 
 Genera el mensaje ahora, sin formato, conversacional.`
 
