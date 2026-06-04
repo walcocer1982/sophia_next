@@ -100,6 +100,7 @@ export default function CourseDashboardPage() {
   const [search, setSearch] = useState('')
   const [expandedFunnel, setExpandedFunnel] = useState<string | null>(null)
   const [selectedSection, setSelectedSection] = useState<string>('')
+  const [showAllAlerts, setShowAllAlerts] = useState(false)
 
   const role = session?.user?.role || 'STUDENT'
 
@@ -178,40 +179,63 @@ export default function CourseDashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {alerts.map(alert => (
-                <div
-                  key={alert.userId}
-                  className="flex items-center justify-between p-3 bg-white rounded-lg border border-amber-100"
-                >
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {alert.name || alert.email}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {alert.lessonTitle}
-                        {alert.activityIndex && alert.activityTotal && (
-                          <> — Act {alert.activityIndex}/{alert.activityTotal}</>
-                        )}
-                      </p>
-                    </div>
+            {(() => {
+              // Mostramos las primeras 10 más recientes. Si hay más, se
+              // colapsan detrás de un botón "Ver X más". Evita la pared de
+              // 30+ alertas que abruma al instructor.
+              const VISIBLE_LIMIT = 10
+              const visibleAlerts = showAllAlerts ? alerts : alerts.slice(0, VISIBLE_LIMIT)
+              const hiddenCount = alerts.length - VISIBLE_LIMIT
+              return (
+                <>
+                  <div className="space-y-2">
+                    {visibleAlerts.map(alert => (
+                      <div
+                        key={alert.userId}
+                        className="flex items-center justify-between p-3 bg-white rounded-lg border border-amber-100"
+                      >
+                        <div className="flex items-center gap-3">
+                          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {alert.name || alert.email}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {alert.lessonTitle}
+                              {alert.activityIndex && alert.activityTotal && (
+                                <> — Act {alert.activityIndex}/{alert.activityTotal}</>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-amber-700 font-medium bg-amber-100 px-2 py-1 rounded">
+                            {alert.hoursInactive}h inactivo
+                          </span>
+                          <Link
+                            href={`/dashboard/${courseId}/${alert.userId}`}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Ver detalle
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-amber-700 font-medium bg-amber-100 px-2 py-1 rounded">
-                      {alert.hoursInactive}h inactivo
-                    </span>
-                    <Link
-                      href={`/dashboard/${courseId}/${alert.userId}`}
-                      className="text-xs text-blue-600 hover:underline"
+                  {hiddenCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllAlerts((v) => !v)}
+                      className="mt-3 w-full text-sm text-amber-800 hover:text-amber-900 hover:bg-amber-100 py-2 rounded-lg border border-amber-200 transition-colors font-medium"
                     >
-                      Ver detalle
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
+                      {showAllAlerts
+                        ? `Mostrar solo las ${VISIBLE_LIMIT} más recientes`
+                        : `Ver ${hiddenCount} más`}
+                    </button>
+                  )}
+                </>
+              )
+            })()}
           </CardContent>
         </Card>
       )}

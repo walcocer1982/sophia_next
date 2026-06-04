@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
 import { checkAndGeneratePartialReports } from '@/lib/lesson-report'
+import { cleanupInactiveGuestsForCourse } from '@/lib/cleanup-guests'
 import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '@/lib/rubric'
 import { calculateGrade } from '@/lib/grading'
 import { logger } from '@/lib/logger'
@@ -89,6 +90,16 @@ export async function GET(
     })
     allowedStudentIds = new Set(enrollments.map(e => e.userId))
   }
+
+  // Limpieza de guests kiosko inactivos > 2 días ANTES de fetchear el course.
+  // Si no lo hacemos antes, las sesiones de esos guests aparecen en las
+  // "Alertas de Inactividad" y ensucian el dashboard con visitantes de feria
+  // (Hannah, Walther, Alcocer, etc — los del 03/06).
+  // Await: necesitamos que el course query NO vea esas sesiones.
+  await cleanupInactiveGuestsForCourse(courseId).catch((err: unknown) => {
+    // Si falla la limpieza, no rompemos el dashboard — solo log y seguimos.
+    logger.error('dashboard.cleanup_failed', { courseId, error: String(err) })
+  })
 
   // Get course with all published lessons and their sessions
   const course = await prisma.course.findUnique({
