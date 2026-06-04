@@ -26,10 +26,16 @@ export const STRINGS = {
     register_dni: 'DNI',
     register_email: 'Email',
     register_email_optional: '(opcional)',
+    register_dni_hint: 'opcional — te permite recuperar tu sesión si pierdes conexión',
     register_start: 'Comenzar',
     register_starting: 'Iniciando...',
     register_error_generic: 'No se pudo iniciar. Intenta de nuevo.',
     register_error_missing_name: 'Ingresa tu nombre',
+    register_recovered_toast: 'Recuperamos tu sesión, sigamos donde quedaste',
+    already_completed_title: 'Ya completaste esta clase',
+    already_completed_subtitle: 'Tu participación quedó registrada. Podés revisar tu resultado o empezar de nuevo.',
+    already_completed_view: 'Ver mi resultado',
+    already_completed_retake: 'Empezar de nuevo',
 
     // Pantalla de sesión
     session_participant: 'Participante',
@@ -108,10 +114,16 @@ export const STRINGS = {
     register_dni: 'ID number',
     register_email: 'Email',
     register_email_optional: '(optional)',
+    register_dni_hint: 'optional — lets you recover your session if you lose connection',
     register_start: 'Start',
     register_starting: 'Starting...',
     register_error_generic: 'Could not start. Please try again.',
     register_error_missing_name: 'Please enter your name',
+    register_recovered_toast: 'We recovered your session — let\'s pick up where you left off',
+    already_completed_title: 'You already completed this class',
+    already_completed_subtitle: 'Your attempt is on record. You can view your result or start over.',
+    already_completed_view: 'View my result',
+    already_completed_retake: 'Start over',
 
     // Session screen
     session_participant: 'Participant',

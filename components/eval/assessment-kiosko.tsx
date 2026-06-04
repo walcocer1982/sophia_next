@@ -139,11 +139,41 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || t('register_error_generic'))
       }
-      const data = await res.json()
+      const data = await res.json() as {
+        status: 'created' | 'recovered' | 'already_completed'
+        participantId: string
+        sessionId: string
+        grade?: number
+        gradeOver20?: number
+        passed?: boolean
+        participantName?: string
+        language?: 'ES' | 'EN'
+      }
+      // El idioma del recovery puede diferir del toggle actual — respetamos el
+      // de la sesión original para no romper el historial conversacional.
+      if (data.language && data.language !== language) {
+        switchLanguage(data.language)
+      }
       setParticipantId(data.participantId)
       setSessionId(data.sessionId)
-      setParticipantName(firstName.trim())
-      setStage('session')
+      setParticipantName(data.participantName || firstName.trim())
+
+      if (data.status === 'already_completed') {
+        // Saltar directo a la pantalla de resultado guardado
+        setFinishedData({
+          participantId: data.participantId,
+          grade: data.grade ?? 0,
+          gradeOver20: data.gradeOver20 ?? 0,
+          passed: data.passed ?? false,
+          participantName: data.participantName || firstName.trim(),
+        })
+        setStage('finished')
+      } else {
+        if (data.status === 'recovered') {
+          toast.success(t('register_recovered_toast'))
+        }
+        setStage('session')
+      }
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -282,22 +312,27 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                       className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
                     />
                   </div>
-                  {assessment.collectDni && (
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="dni">
-                        {t('register_dni')} *
-                      </label>
-                      <Input
-                        id="dni"
-                        value={dni}
-                        onChange={(e) => setDni(e.target.value)}
-                        placeholder="12345678"
-                        maxLength={20}
-                        required
-                        className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
-                      />
-                    </div>
-                  )}
+                  {/* DNI: opcional siempre — sirve como llave de recovery además
+                       del cookie. La línea "(opcional — ...)" le explica al
+                       visitante por qué darlo. El admin puede forzarlo via
+                       assessment.collectDni si su evento requiere registro. */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="dni">
+                      {t('register_dni')} {assessment.collectDni && '*'}
+                    </label>
+                    <Input
+                      id="dni"
+                      value={dni}
+                      onChange={(e) => setDni(e.target.value)}
+                      placeholder="12345678"
+                      maxLength={20}
+                      required={assessment.collectDni}
+                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                      {t('register_dni_hint')}
+                    </p>
+                  </div>
                   {assessment.collectEmail && (
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="email">

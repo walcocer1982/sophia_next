@@ -419,5 +419,10 @@ model AssessmentParticipant {
   assessment Assessment    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   session    LessonSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
+  // Nota: NO ponemos @@unique([assessmentId, dni]) porque hay datos legacy
+  // con DNIs duplicados de antes del feature de recovery. La unicidad se
+  // enforce en código (lib /api/eval/[code]/start) — si el DNI ya existe,
+  // se reusa el participant en vez de crear uno nuevo.
   @@index([assessmentId])
+  @@index([assessmentId, dni]) // index no-único para búsqueda rápida en recovery
 }

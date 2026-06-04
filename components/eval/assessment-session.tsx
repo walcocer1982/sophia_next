@@ -292,12 +292,40 @@ export function AssessmentSession({
     }
   }, [voiceEnabled])
 
-  // Generate welcome
+  // Cargar mensajes existentes (caso recovery) o generar welcome (sesión nueva)
   useEffect(() => {
     if (welcomeRequested.current) return
     welcomeRequested.current = true
 
-    const generate = async () => {
+    const initSession = async () => {
+      // Primero chequeamos si la sesión ya tiene mensajes (recovery)
+      try {
+        const histRes = await fetch(`/api/session/${sessionId}/messages`)
+        if (histRes.ok) {
+          const histData = await histRes.json() as { messages: Array<{
+            id: string; role: string; content: string; timestamp: string
+          }> }
+          if (histData.messages && histData.messages.length > 0) {
+            // Sesión recuperada — cargar historial y NO generar welcome
+            setMessages(histData.messages.map((m) => ({
+              id: m.id,
+              sessionId,
+              role: m.role as 'user' | 'assistant',
+              content: m.content,
+              createdAt: new Date(m.timestamp),
+              status: 'completed' as const,
+              isOptimistic: false,
+            })))
+            welcomeAudioPlayedRef.current = true // evitar TTS del welcome
+            setWelcomeLoading(false)
+            return
+          }
+        }
+      } catch {
+        // Si falla, seguimos con el flujo normal de welcome
+      }
+
+      // Sesión nueva — generar welcome
       const welcomeId = `welcome-${Date.now()}`
       setMessages([{
         id: welcomeId,
@@ -388,7 +416,7 @@ export function AssessmentSession({
         setWelcomeLoading(false)
       }
     }
-    generate()
+    initSession()
   }, [sessionId, playWelcomeAudio])
 
   useEffect(() => {
