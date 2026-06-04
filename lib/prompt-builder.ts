@@ -232,19 +232,47 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
   } = context
   const isCodeMethodology = methodology === 'CODE'
 
-  // Bloque de instrucción de idioma — el contenido en DB (agent_instruction,
-  // must_include, question) está en español. Si el estudiante eligió EN en el
-  // toggle del kiosko, Sophia debe traducir los conceptos a inglés sin tocar
-  // el significado técnico.
+  // Bloque de instrucción de idioma — STICKY: Sophia responde SIEMPRE en el
+  // idioma del toggle del kiosko, sin importar en qué idioma le escriba el
+  // estudiante. El bug a evitar es mezclar idiomas dentro de una sola
+  // respuesta (Claude tiende a "filtrar" español cuando el contenido fuente
+  // está en español). Reglas más agresivas + self-check.
   const languageInstruction = language === 'EN' ? `
 
-LANGUAGE INSTRUCTION — RESPOND IN ENGLISH:
-The student selected English. Respond ENTIRELY in natural, conversational English.
-The lesson content below (agent_instruction, success_criteria, question) is written
-in Spanish — translate concepts to English while preserving technical accuracy.
-The student's responses may be in English, Spanish, or mixed — accept both and
-respond in English unless they explicitly switch.
-Greetings should be in English ("Hi", "Hello", not "Hola").
+═══════════════════════════════════════════════════════════════
+LANGUAGE LOCK — CRITICAL ENFORCEMENT (READ FIRST)
+═══════════════════════════════════════════════════════════════
+The student selected ENGLISH for this kiosko session. This is LOCKED.
+
+OUTPUT LANGUAGE: 100% English. Every single word in every response.
+
+ABSOLUTE RULES — NO EXCEPTIONS:
+1. NEVER mix Spanish and English in the same response. Not one Spanish word.
+2. NEVER respond in Spanish — even if the student writes entirely in Spanish,
+   you understand them but reply in English.
+3. The lesson content below (agent_instruction, success_criteria, verification
+   question, key points) is written in Spanish. TRANSLATE all concepts to
+   English when referencing them in your reply. Never quote Spanish verbatim.
+4. Translate technical Spanish terms naturally:
+   - "perforación" → "drilling"
+   - "voladura" → "blasting"
+   - "ventilación" → "ventilation"
+   - "ciclo de minado" → "mining cycle"
+   - "fases" → "phases"
+   - "túnel" → "tunnel"
+5. Greetings: "Hi" or "Hello" — NEVER "Hola".
+6. Confirmations: "Right", "Exactly", "Got it" — NEVER "¿Sí?", "¿Verdad?",
+   "¿Claro?", "Vale", "Bueno", "Perfecto" (in Spanish), "Exacto".
+7. Connectors: "So", "Then", "Now" — NEVER "Entonces", "Bueno", "A ver".
+
+SELF-CHECK BEFORE SENDING (mandatory):
+Scan your response for any Spanish word. If you find one, rewrite the sentence
+in English. Common slip-ups to catch:
+- Ending a sentence with "¿no?" or "¿verdad?"
+- Mid-sentence "claro,", "bueno,", "a ver,"
+- Spanish technical terms not translated
+- Spanish accent marks (á, é, í, ó, ú, ñ) on non-proper-noun words
+═══════════════════════════════════════════════════════════════
 ` : ''
 
   // Detectar si el estudiante expresó que no sabe

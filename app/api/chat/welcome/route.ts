@@ -111,10 +111,21 @@ export async function POST(request: Request) {
       language: lessonSession.language,
     })
 
-    // El welcome se traduce al idioma de la sesión. Si EN, le decimos a Claude
-    // que genere todo el mensaje en inglés, incluyendo el saludo.
+    // El welcome se traduce al idioma de la sesión. Si EN, regla muy estricta
+    // para evitar que se filtre español. Lo agregamos AL FINAL del prompt porque
+    // los modelos pagan más atención a las últimas instrucciones.
     const welcomeLanguageRule = lessonSession.language === 'EN'
-      ? '\n\nLANGUAGE: The student selected English. Generate the ENTIRE welcome message in natural English. Greet with "Hi {name}" or "Hello {name}", NOT "Hola".'
+      ? `
+
+═══════════════════════════════════════════════════════════════
+LANGUAGE LOCK — CRITICAL:
+═══════════════════════════════════════════════════════════════
+Generate the welcome ENTIRELY in English. Every single word. No Spanish.
+- Greet with "Hi {name}" or "Hello {name}" — NEVER "Hola".
+- Translate the lesson topic from Spanish to English when introducing it.
+- Translate technical terms: "ciclo de minado" → "mining cycle", "fases" → "phases", etc.
+- The ending question MUST be in English too.
+- Self-check: scan your output for any Spanish word, rewrite if found.`
       : ''
 
     // Instrucción para mensaje de bienvenida - Presenta el tema e invita a aprender

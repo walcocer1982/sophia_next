@@ -148,9 +148,36 @@ model Lesson {
   sessions          LessonSession[]
   sectionSchedules  SectionLessonSchedule[]
   assessments       Assessment[]
+  translations      LessonContentTranslation[]
 
   @@index([slug])
   @@index([courseId])
+}
+
+/**
+ * Cache de traducción del contenido estático de una lección (title, objective,
+ * keyPoints, descripciones de imágenes). Se llena lazy: la primera vez que un
+ * visitante del kiosko elige EN para una lección, Haiku traduce y se guarda.
+ * Próximas veces se lee del cache — costo ~$0.001 por lección, una sola vez.
+ *
+ * NO incluye el contenido de las actividades (agent_instruction, must_include,
+ * verification.question). Esos se quedan en español como single source of
+ * truth — Claude los traduce on-the-fly via system prompt en cada respuesta.
+ */
+model LessonContentTranslation {
+  id                String   @id @default(cuid())
+  lessonId          String
+  language          Language
+  title             String
+  objective         String   @db.Text
+  keyPoints         String[]
+  imageDescriptions Json     @default("[]") // [{ url, description }]
+  generatedAt       DateTime @default(now())
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, language])
+  @@index([lessonId])
 }
 
 // ============================================

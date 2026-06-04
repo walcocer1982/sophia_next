@@ -20,6 +20,7 @@ interface AssessmentInfo {
   timeLimitMin: number
   collectEmail: boolean
   collectDni: boolean
+  lessonId: string
   lessonTitle: string
   lessonObjective: string
   keyPoints: string[]
@@ -32,6 +33,13 @@ interface AssessmentInfo {
   }[]
   videoUrl?: string | null
   voiceEnabled?: boolean
+}
+
+interface TranslatedContent {
+  title: string
+  objective: string
+  keyPoints: string[]
+  imageDescriptions: { url: string; description: string }[]
 }
 
 type Stage = 'register' | 'session' | 'finished'
@@ -71,6 +79,38 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
   }
 
   const t = useT(language)
+
+  // Traducción del contenido estático de la lección (title, objective,
+  // keyPoints, image descriptions). Se trae lazy cuando se elige EN.
+  // Cacheado del lado servidor en LessonContentTranslation, así que las
+  // próximas visitas EN para la misma lección son instantáneas.
+  const [translation, setTranslation] = useState<TranslatedContent | null>(null)
+  const [translating, setTranslating] = useState(false)
+  useEffect(() => {
+    if (language !== 'EN' || translation || translating) return
+    setTranslating(true)
+    fetch(`/api/lesson/${assessment.lessonId}/translation?language=EN`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && data.title) setTranslation(data)
+      })
+      .catch(() => {
+        // Si falla, el kiosko sigue funcionando con el contenido en español.
+      })
+      .finally(() => setTranslating(false))
+  }, [language, assessment.lessonId, translation, translating])
+
+  // Contenido a mostrar — si EN y hay traducción, usá la traducida; si no, original.
+  const displayObjective = language === 'EN' && translation ? translation.objective : assessment.lessonObjective
+  const displayKeyPoints = language === 'EN' && translation ? translation.keyPoints : assessment.keyPoints
+  const displayLessonTitle = language === 'EN' && translation ? translation.title : assessment.lessonTitle
+  // Mergeamos descripciones traducidas en las galleryImages preservando metadata.
+  const displayGalleryImages = language === 'EN' && translation
+    ? assessment.galleryImages.map((img) => {
+        const trans = translation.imageDescriptions.find((d) => d.url === img.url)
+        return { ...img, description: trans?.description ?? img.description }
+      })
+    : assessment.galleryImages
 
   // Form state
   const [firstName, setFirstName] = useState('')
@@ -219,7 +259,12 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                 <div className="text-center mb-6">
                   <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={80} height={80} className="mx-auto mb-4 rounded-xl" />
                   <h2 className="text-3xl font-bold text-white mb-1">{t('register_title')}</h2>
-                  <p className="text-sm text-cyan-400/80 font-medium">{assessment.lessonTitle}</p>
+                  <p className="text-sm text-cyan-400/80 font-medium">{displayLessonTitle}</p>
+                  {translating && (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {language === 'EN' ? 'Loading English content...' : 'Cargando contenido...'}
+                    </p>
+                  )}
                 </div>
 
                 <form onSubmit={handleStart} className="space-y-4">
@@ -307,10 +352,10 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                 sessionId={sessionId}
                 participantId={participantId}
                 participantName={participantName}
-                lessonTitle={assessment.lessonTitle}
-                lessonObjective={assessment.lessonObjective}
-                keyPoints={assessment.keyPoints}
-                galleryImages={assessment.galleryImages}
+                lessonTitle={displayLessonTitle}
+                lessonObjective={displayObjective}
+                keyPoints={displayKeyPoints}
+                galleryImages={displayGalleryImages}
                 videoUrl={assessment.videoUrl}
                 voiceEnabled={assessment.voiceEnabled ?? true}
                 timeLimitMin={assessment.timeLimitMin}

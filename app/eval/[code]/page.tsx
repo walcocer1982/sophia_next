@@ -22,6 +22,7 @@ export default async function EvalPage({
       timeLimitMin: true,
       collectEmail: true,
       collectDni: true,
+      lessonId: true,
       lesson: {
         select: {
           title: true,
@@ -67,6 +68,7 @@ export default async function EvalPage({
         timeLimitMin: assessment.timeLimitMin,
         collectEmail: assessment.collectEmail,
         collectDni: assessment.collectDni,
+        lessonId: assessment.lessonId,
         lessonTitle: assessment.lesson.title,
         lessonObjective: assessment.lesson.objective,
         keyPoints: assessment.lesson.keyPoints,
