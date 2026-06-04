@@ -296,11 +296,14 @@ export async function POST(request: Request) {
           needs_scaffolding: false,
           next_subquestion: undefined,
         })
-    // Solo skip verificación si la actividad YA está completada en DB
+    // Solo skip verificación si la actividad YA está completada en DB.
+    // criteriaMatched queda [] — antes era ["Actividad ya completada"] (string
+    // genérico) que contaminaba evidenceData y rompía el reporte (no podía
+    // distinguir qué must_include real cumplió).
     : activityAlreadyCompleted
       ? Promise.resolve({
           completed: true,
-          criteriaMatched: ['Actividad ya completada'],
+          criteriaMatched: [] as string[],
           criteriaMissing: [] as string[],
           completeness_percentage: 100,
           understanding_level: 'understood' as const,
@@ -778,8 +781,18 @@ export async function POST(request: Request) {
               duration: new Date().getTime() - new Date(lessonSession.startedAt).getTime(),
             })
 
-            // Generate AI report asynchronously (don't block the response)
-            generateLessonReport(lessonSession.id, lessonTitle, allActivities, grade, contentJson).catch((err: unknown) => {
+            // Generate AI report asynchronously (don't block the response).
+            // Pasamos objective + keyPoints para que el reporte tenga el ALCANCE
+            // de la lección y no invente temas fuera de ese alcance.
+            generateLessonReport(
+              lessonSession.id,
+              lessonTitle,
+              lessonObjective,
+              lessonKeyPoints,
+              allActivities,
+              grade,
+              contentJson,
+            ).catch((err: unknown) => {
               logger.error('chat.stream.report_generation_failed', { sessionId, error: String(err) })
             })
           }

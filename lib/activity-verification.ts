@@ -100,8 +100,8 @@ REGLAS CRÍTICAS PARA CLASIFICAR:
 Responde en formato JSON con esta estructura EXACTA:
 {
   "completed": boolean,
-  "criteriaMatched": [aspectos que el estudiante abordó],
-  "criteriaMissing": [aspectos que no abordó - NO penalizar fuertemente],
+  "criteriaMatched": [strings LITERALES de "ASPECTOS A OBSERVAR" arriba que la respuesta cubre con claridad — copia el texto tal cual],
+  "criteriaMissing": [strings LITERALES de "ASPECTOS A OBSERVAR" arriba que la respuesta NO cubre — copia el texto tal cual],
   "completeness_percentage": number (0-100),
   "understanding_level": "memorized" | "understood" | "applied" | "analyzed",
   "response_type": "correct" | "partial" | "incorrect" | "off_topic",
@@ -111,6 +111,8 @@ Responde en formato JSON con esta estructura EXACTA:
   "needs_scaffolding": boolean,
   "next_subquestion": "string o null"
 }
+
+REGLA CRÍTICA — criteriaMatched/criteriaMissing son strings LITERALES de la lista "ASPECTOS A OBSERVAR" de arriba. NO inventes descripciones genéricas como "Respuesta con reflexión" o "Buena participación". Copia el texto exacto del aspecto observado. Si un aspecto NO existe en la lista, NO lo agregues.
 
 REGLAS PARA ready_to_advance (PREGUNTA ABIERTA — más permisivo):
 - true si el estudiante demuestra reflexión genuina (completeness >= 40%)
@@ -195,8 +197,8 @@ IMPORTANTE:
 Responde en formato JSON con esta estructura EXACTA:
 {
   "completed": boolean,
-  "criteriaMatched": [lista de criterios cumplidos],
-  "criteriaMissing": [lista de criterios NO cumplidos],
+  "criteriaMatched": [strings LITERALES de "CRITERIOS DE ÉXITO" arriba que la respuesta cumple — copia el texto tal cual],
+  "criteriaMissing": [strings LITERALES de "CRITERIOS DE ÉXITO" arriba que la respuesta NO cumple — copia el texto tal cual],
   "completeness_percentage": number (0-100),
   "understanding_level": "memorized" | "understood" | "applied" | "analyzed",
   "response_type": "correct" | "partial" | "incorrect" | "off_topic",
@@ -401,16 +403,36 @@ function fallbackVerification(
   minCompleteness: number,
   isOpenEnded: boolean = false
 ): ActivityCompletionResult {
-  // Para preguntas abiertas en fallback: evaluar longitud y engagement mínimo
+  // Para preguntas abiertas en fallback: matchear contra must_include literales por
+  // keywords. Antes devolvía ["Respuesta con reflexión"] genérico que era inútil
+  // para el reporte. Ahora intenta dar crédito real por los criterios cubiertos.
   if (isOpenEnded) {
     const wordCount = userMessage.trim().split(/\s+/).length
-    const hasSubstance = wordCount >= 10 // Al menos 10 palabras
-    const completeness_percentage = hasSubstance ? 60 : 20
+    const hasSubstance = wordCount >= 10
+    const messageLower = userMessage.toLowerCase()
+    const criteria = activity.verification.success_criteria?.must_include || []
+
+    const criteriaMatched: string[] = []
+    const criteriaMissing: string[] = []
+    for (const criterion of criteria) {
+      const keywords = criterion
+        .toLowerCase()
+        .split(' ')
+        .filter((w) => w.length > 4)
+      const hasMatch = keywords.some((k) => messageLower.includes(k))
+      if (hasMatch) criteriaMatched.push(criterion)
+      else criteriaMissing.push(criterion)
+    }
+
+    const total = criteria.length
+    const completeness_percentage = total > 0
+      ? Math.round((criteriaMatched.length / total) * 100)
+      : (hasSubstance ? 60 : 20)
 
     return {
-      completed: hasSubstance,
-      criteriaMatched: hasSubstance ? ['Respuesta con reflexión'] : [],
-      criteriaMissing: hasSubstance ? [] : ['Respuesta necesita más desarrollo'],
+      completed: hasSubstance && criteriaMatched.length === total,
+      criteriaMatched,
+      criteriaMissing,
       completeness_percentage,
       understanding_level: hasSubstance ? 'understood' : 'memorized',
       response_type: hasSubstance ? 'correct' : 'partial',
