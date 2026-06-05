@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, Megaphone } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, Megaphone, CalendarDays } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PublishToggle } from '@/components/planner/publish-toggle'
 import { TestLessonButton } from '@/components/planner/test-lesson-button'
@@ -34,7 +34,7 @@ type CourseWithLessons = {
     isPublished: boolean
     availableAt: Date | null
     closesAfterHours: number
-    _count: { assessments: number }
+    _count: { assessments: number; sectionSchedules: number }
   }>
 }
 
@@ -78,7 +78,7 @@ export default async function CourseOverviewPage({
           isPublished: true,
           availableAt: true,
           closesAfterHours: true,
-          _count: { select: { assessments: true } },
+          _count: { select: { assessments: true, sectionSchedules: true } },
         },
       },
     },
@@ -238,12 +238,17 @@ export default async function CourseOverviewPage({
           const allVerified = isDesigned && json!.activities!.every((a) => a.verified === true)
           const isTested = testedLessonIds.has(lesson.id)
 
+          // "Lista" = los 4 checks del diseño están completos. Reemplaza
+          // "Publicada" (que era un flag manual confuso). La publicación
+          // real ahora vive en Programación (por sección) y Eventos
+          // (kioskos) — no en Diseño.
+          const isReady = !!isDesigned && !!allVerified && hasResources && isTested
           const badges = [
             { label: 'Diseñada', done: !!isDesigned },
             { label: 'Verificada', done: !!allVerified },
             { label: 'Recursos', done: hasResources },
             { label: 'Probada', done: isTested },
-            { label: 'Publicada', done: lesson.isPublished },
+            { label: isReady ? 'Lista' : 'Borrador', done: isReady, accent: true },
           ]
 
           return (
@@ -273,19 +278,48 @@ export default async function CourseOverviewPage({
                 </p>
                 {/* Status badges */}
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {badges.map((b) => (
-                    <span
-                      key={b.label}
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        b.done
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-gray-100 text-gray-400'
-                      }`}
+                  {badges.map((b) => {
+                    // El último badge (Lista/Borrador) tiene look distinto
+                    if (b.accent) {
+                      return (
+                        <span
+                          key={b.label}
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            b.done
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          {b.done && <Check className="mr-0.5 h-2.5 w-2.5" />}
+                          {b.label}
+                        </span>
+                      )
+                    }
+                    return (
+                      <span
+                        key={b.label}
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          b.done
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
+                        {b.done && <Check className="mr-0.5 h-2.5 w-2.5" />}
+                        {b.label}
+                      </span>
+                    )
+                  })}
+                  {/* Badge "Activa en N secciones" — solo si hay schedules */}
+                  {lesson._count.sectionSchedules > 0 && (
+                    <Link
+                      href="/programacion"
+                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                      title="Ver en Programación"
                     >
-                      {b.done && <Check className="mr-0.5 h-2.5 w-2.5" />}
-                      {b.label}
-                    </span>
-                  ))}
+                      <CalendarDays className="h-2.5 w-2.5" />
+                      Activa en {lesson._count.sectionSchedules} secc{lesson._count.sectionSchedules !== 1 ? 'iones' : 'ión'}
+                    </Link>
+                  )}
                 </div>
               </div>
 
@@ -353,12 +387,14 @@ export default async function CourseOverviewPage({
                             {lesson._count.assessments} evento{lesson._count.assessments !== 1 ? 's' : ''}
                           </Link>
                         )}
-                        <PublishToggle
-                          lessonId={lesson.id}
-                          initialPublished={lesson.isPublished}
-                          initialAvailableAt={lesson.availableAt?.toISOString() || null}
-                          initialClosesAfterHours={lesson.closesAfterHours}
-                        />
+                        {/* "Publicar" se mudó a Programación (por sección).
+                            Acá solo botón directo si querés ir allá rápido. */}
+                        <Link href="/programacion">
+                          <Button variant="outline" size="sm" className="gap-1.5" title="Abrir/cerrar lecciones por sección">
+                            <CalendarDays className="h-3.5 w-3.5" />
+                            Programar
+                          </Button>
+                        </Link>
                       </>
                     )}
                   </>
