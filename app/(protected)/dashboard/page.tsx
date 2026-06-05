@@ -21,6 +21,8 @@ interface LessonRow {
   careerId: string | null
   careerName: string
   instructor: string
+  track: 'REGULAR' | 'CONTINUA'
+  sedeCodes: string[]
   lessonId: string
   lessonTitle: string
   totalStudents: number
@@ -60,6 +62,9 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedLesson, setExpandedLesson] = useState<string | null>(null)
+  // Filtros: sede (codigo o 'all') + track (REGULAR / CONTINUA / 'all')
+  const [filterSede, setFilterSede] = useState<string>('all')
+  const [filterTrack, setFilterTrack] = useState<'all' | 'REGULAR' | 'CONTINUA'>('all')
 
   const role = session?.user?.role || 'STUDENT'
   const isSuperadmin = role === 'SUPERADMIN'
@@ -106,6 +111,25 @@ export default function DashboardPage() {
 
   const { stats, lessons, history } = data
 
+  // Sedes únicas presentes en los cursos (para el dropdown)
+  const allSedes = Array.from(
+    new Set(lessons.flatMap((l) => l.sedeCodes))
+  ).sort()
+
+  // Aplico filtros antes de agrupar
+  const filteredLessons = lessons.filter((l) => {
+    if (filterTrack !== 'all' && l.track !== filterTrack) return false
+    if (filterSede !== 'all') {
+      // 'no-sede' = cursos sin ninguna sede asignada
+      if (filterSede === 'no-sede') {
+        if (l.sedeCodes.length > 0) return false
+      } else if (!l.sedeCodes.includes(filterSede)) {
+        return false
+      }
+    }
+    return true
+  })
+
   // Group lessons by career > course
   const grouped: Record<string, {
     careerName: string
@@ -113,11 +137,13 @@ export default function DashboardPage() {
       courseTitle: string
       courseId: string
       instructor: string
+      track: 'REGULAR' | 'CONTINUA'
+      sedeCodes: string[]
       lessons: LessonRow[]
     }>
   }> = {}
 
-  for (const row of lessons) {
+  for (const row of filteredLessons) {
     const careerKey = row.careerId || 'sin-carrera'
     if (!grouped[careerKey]) {
       grouped[careerKey] = { careerName: row.careerName, courses: {} }
@@ -127,6 +153,8 @@ export default function DashboardPage() {
         courseTitle: row.courseTitle,
         courseId: row.courseId,
         instructor: row.instructor,
+        track: row.track,
+        sedeCodes: row.sedeCodes,
         lessons: [],
       }
     }
@@ -137,10 +165,57 @@ export default function DashboardPage() {
     <div className="p-8 max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Monitor</h1>
         <p className="text-sm text-gray-500 mt-1">
           {isSuperadmin ? 'Vista general de todos los cursos' : 'Monitorea el progreso de tus estudiantes'}
         </p>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Filtros:</span>
+
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-gray-600">Track:</span>
+          <select
+            value={filterTrack}
+            onChange={(e) => setFilterTrack(e.target.value as typeof filterTrack)}
+            className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          >
+            <option value="all">Todos</option>
+            <option value="REGULAR">Regular</option>
+            <option value="CONTINUA">Continua</option>
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-gray-600">Sede:</span>
+          <select
+            value={filterSede}
+            onChange={(e) => setFilterSede(e.target.value)}
+            className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 font-mono"
+          >
+            <option value="all">Todas</option>
+            {allSedes.map((code) => (
+              <option key={code} value={code}>{code}</option>
+            ))}
+            <option value="no-sede">Sin sede</option>
+          </select>
+        </label>
+
+        {(filterTrack !== 'all' || filterSede !== 'all') && (
+          <button
+            type="button"
+            onClick={() => { setFilterTrack('all'); setFilterSede('all') }}
+            className="text-xs text-indigo-600 hover:text-indigo-800 underline"
+          >
+            Limpiar filtros
+          </button>
+        )}
+
+        <span className="ml-auto text-xs text-gray-500">
+          {filteredLessons.length} de {lessons.length} lecciones
+        </span>
       </div>
 
       {/* Stat Cards */}
@@ -181,10 +256,29 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold text-gray-800 border-b pb-2">{careerName}</h2>
           )}
 
-          {Object.entries(courses).map(([courseId, { courseTitle, instructor, lessons: courseLessons }]) => (
+          {Object.entries(courses).map(([courseId, { courseTitle, instructor, track, sedeCodes, lessons: courseLessons }]) => (
             <div key={courseId} className="space-y-2">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <h3 className="text-base font-medium text-gray-700">{courseTitle}</h3>
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                  track === 'CONTINUA'
+                    ? 'bg-orange-100 text-orange-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {track === 'CONTINUA' ? 'CONTINUA' : 'REGULAR'}
+                </span>
+                {sedeCodes.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    {sedeCodes.map((code) => (
+                      <code
+                        key={code}
+                        className="text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded"
+                      >
+                        {code}
+                      </code>
+                    ))}
+                  </div>
+                )}
                 {isSuperadmin && (
                   <span className="text-xs text-gray-400">{instructor}</span>
                 )}

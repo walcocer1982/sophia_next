@@ -40,6 +40,8 @@ export async function GET() {
     select: {
       id: true,
       title: true,
+      track: true,
+      sedes: { select: { id: true, code: true } },
       career: {
         select: { id: true, name: true },
       },
@@ -100,6 +102,8 @@ export async function GET() {
     careerId: string | null
     careerName: string
     instructor: string
+    track: 'REGULAR' | 'CONTINUA'
+    sedeCodes: string[]
     lessonId: string
     lessonTitle: string
     totalStudents: number
@@ -184,6 +188,8 @@ export async function GET() {
         careerId: course.career?.id || null,
         careerName: course.career?.name || 'Sin carrera',
         instructor: course.user?.name || 'Sin instructor',
+        track: course.track,
+        sedeCodes: course.sedes.map((s) => s.code),
         lessonId: lesson.id,
         lessonTitle: lesson.title,
         totalStudents: uniqueStudents.size,
