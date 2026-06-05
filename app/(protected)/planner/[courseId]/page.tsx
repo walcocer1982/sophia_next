@@ -19,8 +19,10 @@ type CourseWithLessons = {
   isPublished: boolean
   voiceEnabled: boolean
   methodology: 'REFLECTIVE' | 'CODE'
+  track: 'REGULAR' | 'CONTINUA'
   allowPaste: boolean
   allowImagePaste: boolean
+  sedes: Array<{ id: string }>
   lessons: Array<{
     id: string
     title: string
@@ -45,7 +47,7 @@ export default async function CourseOverviewPage({
 
   const { courseId } = await params
 
-  const [course, careers] = await Promise.all([
+  const [course, careers, allSedes] = await Promise.all([
     prisma.course.findFirst({
     where: { id: courseId, deletedAt: null },
     select: {
@@ -56,10 +58,12 @@ export default async function CourseOverviewPage({
       isPublished: true,
       voiceEnabled: true,
       methodology: true,
+      track: true,
       allowPaste: true,
       allowImagePaste: true,
       userId: true,
       careerId: true,
+      sedes: { select: { id: true } },
       lessons: {
         orderBy: { order: 'asc' },
         select: {
@@ -80,6 +84,11 @@ export default async function CourseOverviewPage({
     prisma.career.findMany({
       orderBy: { name: 'asc' },
       select: { id: true, name: true },
+    }),
+    prisma.sede.findMany({
+      where: { isActive: true },
+      orderBy: { code: 'asc' },
+      select: { id: true, code: true, name: true },
     }),
   ])
 
@@ -169,8 +178,11 @@ export default async function CourseOverviewPage({
             {!isSectionInstructor && (
               <CourseConfigPanel
                 courseId={course.id}
+                availableSedes={allSedes}
                 initial={{
                   methodology: course.methodology,
+                  track: course.track,
+                  sedeIds: course.sedes.map((s) => s.id),
                   voiceEnabled: course.voiceEnabled,
                   allowPaste: course.allowPaste,
                   allowImagePaste: course.allowImagePaste,

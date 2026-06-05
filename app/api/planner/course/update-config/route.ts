@@ -20,6 +20,8 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     courseId?: string
     methodology?: 'REFLECTIVE' | 'CODE'
+    track?: 'REGULAR' | 'CONTINUA'
+    sedeIds?: string[]   // m:n: reemplaza el set completo de sedes
     voiceEnabled?: boolean
     allowPaste?: boolean
     allowImagePaste?: boolean
@@ -36,6 +38,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'methodology inválida' }, { status: 400 })
     }
     data.methodology = body.methodology
+  }
+  if (body.track !== undefined) {
+    if (body.track !== 'REGULAR' && body.track !== 'CONTINUA') {
+      return NextResponse.json({ error: 'track inválido' }, { status: 400 })
+    }
+    data.track = body.track
+  }
+  // sedeIds: reemplaza el set completo (m:n). Pasar [] vacía la relación.
+  if (Array.isArray(body.sedeIds)) {
+    data.sedes = { set: body.sedeIds.map((id) => ({ id })) }
   }
   if (typeof body.voiceEnabled === 'boolean') data.voiceEnabled = body.voiceEnabled
   if (typeof body.allowPaste === 'boolean') data.allowPaste = body.allowPaste
@@ -72,10 +84,12 @@ export async function POST(request: Request) {
     select: {
       id: true,
       methodology: true,
+      track: true,
       voiceEnabled: true,
       allowPaste: true,
       allowImagePaste: true,
       instructor: true,
+      sedes: { select: { id: true, code: true, name: true } },
     },
   })
 

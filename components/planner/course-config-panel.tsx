@@ -1,16 +1,25 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Settings, Loader2, Check } from 'lucide-react'
+import { Settings, Loader2, Check, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api-client'
 import { useAsyncOp } from '@/lib/hooks/use-async-op'
 
 type Methodology = 'REFLECTIVE' | 'CODE'
+type Track = 'REGULAR' | 'CONTINUA'
+
+interface SedeOption {
+  id: string
+  code: string
+  name: string
+}
 
 interface CourseConfig {
   methodology: Methodology
+  track: Track
+  sedeIds: string[]  // ids de las sedes asignadas al curso
   voiceEnabled: boolean
   allowPaste: boolean
   allowImagePaste: boolean
@@ -22,12 +31,19 @@ const METHODOLOGY_LABELS: Record<Methodology, string> = {
   CODE: 'Código / instruccional',
 }
 
+const TRACK_LABELS: Record<Track, string> = {
+  REGULAR: 'Regular (con sección + período)',
+  CONTINUA: 'Continua (eventos / kioskos)',
+}
+
 export function CourseConfigPanel({
   courseId,
   initial,
+  availableSedes,
 }: {
   courseId: string
   initial: CourseConfig
+  availableSedes: SedeOption[]
 }) {
   const [config, setConfig] = useState<CourseConfig>(initial)
   const [open, setOpen] = useState(false)
@@ -60,6 +76,14 @@ export function CourseConfigPanel({
     toast.success('Configuración actualizada')
   }
 
+  function toggleSede(sedeId: string) {
+    const isOn = config.sedeIds.includes(sedeId)
+    const nextIds = isOn
+      ? config.sedeIds.filter((id) => id !== sedeId)
+      : [...config.sedeIds, sedeId]
+    patch({ sedeIds: nextIds }, `sede-${sedeId}`)
+  }
+
   async function saveInstructor() {
     const next = instructorDraft.trim()
     if (next.length < 20) {
@@ -84,8 +108,74 @@ export function CourseConfigPanel({
 
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1 w-96 rounded-lg border border-gray-200 bg-white p-3 shadow-lg max-h-[80vh] overflow-y-auto">
+          {/* Track (Regular vs Continua) */}
+          <p className="mb-1.5 text-xs font-medium text-gray-700">Track del curso</p>
+          <div className="mb-3 space-y-1">
+            {(['REGULAR', 'CONTINUA'] as Track[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => t !== config.track && patch({ track: t }, 'track')}
+                disabled={isPending('track')}
+                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm ${
+                  config.track === t
+                    ? 'bg-indigo-50 font-medium text-indigo-700'
+                    : 'hover:bg-gray-50 text-gray-600'
+                }`}
+              >
+                {TRACK_LABELS[t]}
+                {config.track === t && <Check className="h-3.5 w-3.5" />}
+              </button>
+            ))}
+          </div>
+
+          {/* Sedes (multi-select) */}
+          <div className="mb-3 border-t border-gray-100 pt-2">
+            <div className="mb-1.5 flex items-center justify-between">
+              <p className="text-xs font-medium text-gray-700 flex items-center gap-1">
+                <Building2 className="h-3 w-3" />
+                Sedes donde se ofrece
+              </p>
+              <span className="text-[10px] text-gray-400">
+                {config.sedeIds.length} de {availableSedes.length}
+              </span>
+            </div>
+            <p className="mb-2 text-[10px] leading-snug text-gray-500">
+              Marca las sedes donde se dicta este curso. Los CONTINUA pueden no tener ninguna (delivery itinerante via eventos).
+            </p>
+            {availableSedes.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">No hay sedes creadas. Crealas en Config → Sedes.</p>
+            ) : (
+              <div className="space-y-0.5">
+                {availableSedes.map((sede) => {
+                  const isOn = config.sedeIds.includes(sede.id)
+                  const loading = isPending(`sede-${sede.id}`)
+                  return (
+                    <button
+                      key={sede.id}
+                      onClick={() => !loading && toggleSede(sede.id)}
+                      disabled={loading}
+                      className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs ${
+                        isOn ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-gray-50 text-gray-600'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <code className="font-mono font-semibold">{sede.code}</code>
+                        <span className="text-gray-500">{sede.name}</span>
+                      </span>
+                      {loading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                      ) : isOn ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Metodología */}
-          <p className="mb-1.5 text-xs font-medium text-gray-700">Metodología del curso</p>
+          <p className="mb-1.5 text-xs font-medium text-gray-700 border-t border-gray-100 pt-2">Metodología pedagógica</p>
           <div className="mb-3 space-y-1">
             {(['REFLECTIVE', 'CODE'] as Methodology[]).map((m) => (
               <button
