@@ -65,6 +65,10 @@ export async function GET() {
             id: true,
             title: true,
             track: true,
+            scope: true,
+            career: {
+              select: { id: true, code: true, name: true },
+            },
             lessons: {
               orderBy: { order: 'asc' },
               select: { id: true, title: true, order: true, isPublished: true },
@@ -106,6 +110,8 @@ export async function GET() {
       course: {
         id: s.course.id,
         title: s.course.title,
+        scope: s.course.scope,
+        career: s.course.career,
         lessons: s.course.lessons,
       },
       enrolledCount: s._count.enrollments,

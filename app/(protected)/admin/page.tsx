@@ -22,6 +22,8 @@ type CareerRow = {
   id: string
   name: string
   slug: string
+  code: string | null
+  sedes: { id: string; code: string; name: string }[]
   _count: { users: number; courses: number }
 }
 
@@ -45,11 +47,13 @@ export default async function AdminPage() {
       },
     }),
     prisma.career.findMany({
-      orderBy: { name: 'asc' },
+      orderBy: [{ code: 'asc' }, { name: 'asc' }],
       select: {
         id: true,
         name: true,
         slug: true,
+        code: true,
+        sedes: { select: { id: true, code: true, name: true } },
         _count: { select: { users: true, courses: true } },
       },
     }),
@@ -116,6 +120,8 @@ export default async function AdminPage() {
     id: c.id,
     name: c.name,
     slug: c.slug,
+    code: c.code,
+    sedes: c.sedes,
     _count: c._count,
   }))
 
@@ -150,8 +156,11 @@ export default async function AdminPage() {
 
       {/* Careers */}
       <div className="mb-8 rounded-lg border bg-white p-6">
-        <h2 className="mb-4 text-lg font-semibold">Carreras</h2>
-        <CareerManager careers={careers} />
+        <h2 className="mb-1 text-lg font-semibold">Carreras</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Programas académicos con su código (EOM, PM, SI, MMP, MSEII) y las sedes donde se dictan.
+        </p>
+        <CareerManager careers={careers} sedes={dbSedes.map((s) => ({ id: s.id, code: s.code, name: s.name }))} />
       </div>
 
       {/* User Table */}

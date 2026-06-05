@@ -17,12 +17,14 @@ export async function GET() {
   }
 
   const careers = await prisma.career.findMany({
-    orderBy: { name: 'asc' },
+    orderBy: [{ code: 'asc' }, { name: 'asc' }],
     select: {
       id: true,
       name: true,
       slug: true,
+      code: true,
       createdAt: true,
+      sedes: { select: { id: true, code: true, name: true } },
       _count: { select: { users: true, courses: true } },
     },
   })
@@ -42,36 +44,57 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { name } = (await request.json()) as { name?: string }
+  const body = (await request.json()) as {
+    name?: string
+    code?: string | null
+    sedeIds?: string[]
+  }
 
-  if (!name || name.trim().length < 3) {
+  const name = body.name?.trim() ?? ''
+  if (name.length < 3) {
     return NextResponse.json({ error: 'El nombre debe tener al menos 3 caracteres' }, { status: 400 })
   }
 
-  const trimmedName = name.trim()
-  const slug = trimmedName
+  const slug = name
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 
-  // Check if career already exists
+  const code = body.code?.trim().toUpperCase() || null
+
+  // Check duplicate por name o slug o code
   const existing = await prisma.career.findFirst({
-    where: { OR: [{ name: trimmedName }, { slug }] },
+    where: {
+      OR: [
+        { name },
+        { slug },
+        ...(code ? [{ code }] : []),
+      ],
+    },
   })
 
   if (existing) {
-    return NextResponse.json({ error: 'Ya existe una carrera con ese nombre' }, { status: 409 })
+    return NextResponse.json({ error: 'Ya existe una carrera con ese nombre o c\u00f3digo' }, { status: 409 })
   }
 
   const career = await prisma.career.create({
-    data: { name: trimmedName, slug },
+    data: {
+      name,
+      slug,
+      code,
+      sedes: body.sedeIds && body.sedeIds.length > 0
+        ? { connect: body.sedeIds.map((id) => ({ id })) }
+        : undefined,
+    },
     select: {
       id: true,
       name: true,
       slug: true,
+      code: true,
       createdAt: true,
+      sedes: { select: { id: true, code: true, name: true } },
       _count: { select: { users: true, courses: true } },
     },
   })
@@ -91,28 +114,56 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { id, name } = (await request.json()) as { id?: string; name?: string }
-
-  if (!id || !name || name.trim().length < 3) {
-    return NextResponse.json({ error: 'id y nombre (min 3 caracteres) son requeridos' }, { status: 400 })
+  const body = (await request.json()) as {
+    id?: string
+    name?: string
+    code?: string | null
+    sedeIds?: string[]
   }
 
-  const trimmedName = name.trim()
-  const slug = trimmedName
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
+  if (!body.id) {
+    return NextResponse.json({ error: 'id es requerido' }, { status: 400 })
+  }
+
+  const data: {
+    name?: string
+    slug?: string
+    code?: string | null
+    sedes?: { set: { id: string }[] }
+  } = {}
+
+  if (body.name !== undefined) {
+    const name = body.name.trim()
+    if (name.length < 3) {
+      return NextResponse.json({ error: 'El nombre debe tener al menos 3 caracteres' }, { status: 400 })
+    }
+    data.name = name
+    data.slug = name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+  }
+
+  if (body.code !== undefined) {
+    data.code = body.code?.trim().toUpperCase() || null
+  }
+
+  if (Array.isArray(body.sedeIds)) {
+    data.sedes = { set: body.sedeIds.map((id) => ({ id })) }
+  }
 
   const career = await prisma.career.update({
-    where: { id },
-    data: { name: trimmedName, slug },
+    where: { id: body.id },
+    data,
     select: {
       id: true,
       name: true,
       slug: true,
+      code: true,
       createdAt: true,
+      sedes: { select: { id: true, code: true, name: true } },
       _count: { select: { users: true, courses: true } },
     },
   })
