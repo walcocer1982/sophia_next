@@ -5,9 +5,10 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import {
   CalendarDays, Users, GraduationCap, Calendar, Lock, Unlock,
-  ChevronDown, ChevronRight, Loader2, Building2,
+  ChevronDown, ChevronRight, Loader2, Building2, Plus, Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -48,9 +49,17 @@ interface Sede {
   name: string
 }
 
+interface RegularCourse {
+  id: string
+  title: string
+}
+
 interface ProgramacionData {
+  currentUserRole: 'SUPERADMIN' | 'ADMIN' | 'INSTRUCTOR'
+  canCreate: boolean
   periods: Period[]
   sedes: Sede[]
+  regularCourses: RegularCourse[]
   sections: Section[]
 }
 
@@ -69,6 +78,8 @@ export default function ProgramacionPage() {
   const [loading, setLoading] = useState(true)
   const [activePeriodId, setActivePeriodId] = useState<string | null>(null)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+  const [showNewPeriod, setShowNewPeriod] = useState(false)
+  const [showNewSection, setShowNewSection] = useState(false)
 
   const refetch = useCallback(async (): Promise<void> => {
     try {
@@ -111,6 +122,39 @@ export default function ProgramacionPage() {
     }
     return grouped
   }, [data, activePeriodId])
+
+  const handleDeleteSection = async (sectionId: string, name: string) => {
+    if (!confirm(`¿Eliminar la sección "${name}"? Solo funciona si no tiene estudiantes inscriptos.`)) return
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success('Sección eliminada')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  const handleUpdateSectionSede = async (sectionId: string, sedeId: string | null) => {
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sedeId }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success('Sede actualizada')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
 
   const handleToggleLesson = async (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => {
     try {
@@ -158,10 +202,10 @@ export default function ProgramacionPage() {
         </p>
       </div>
 
-      {/* Selector de período */}
+      {/* Selector de período + acciones de creación */}
       <Card className="p-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <label className="text-sm font-medium text-gray-700">Período:</label>
             <select
               value={activePeriodId ?? ''}
@@ -175,12 +219,36 @@ export default function ProgramacionPage() {
                 </option>
               ))}
             </select>
+            {data.canCreate && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setShowNewPeriod(true)} className="gap-1.5">
+                  <Plus className="h-3.5 w-3.5" />
+                  Nuevo período
+                </Button>
+                {activePeriodId && (
+                  <Button size="sm" onClick={() => setShowNewSection(true)} className="gap-1.5">
+                    <Plus className="h-3.5 w-3.5" />
+                    Nueva sección
+                  </Button>
+                )}
+              </>
+            )}
           </div>
           <div className="text-xs text-gray-500">
             {totalSections} sección{totalSections !== 1 ? 'es' : ''} en este período
           </div>
         </div>
       </Card>
+
+      <NewPeriodModal open={showNewPeriod} onOpenChange={setShowNewPeriod} onCreated={refetch} />
+      <NewSectionModal
+        open={showNewSection}
+        onOpenChange={setShowNewSection}
+        periodId={activePeriodId}
+        sedes={data.sedes}
+        courses={data.regularCourses}
+        onCreated={refetch}
+      />
 
       {/* Si no hay secciones en este período */}
       {totalSections === 0 ? (
@@ -221,9 +289,13 @@ export default function ProgramacionPage() {
                     <SectionCard
                       key={sec.id}
                       section={sec}
+                      sedes={data.sedes}
+                      canEdit={data.canCreate}
                       isExpanded={expandedSections.has(sec.id)}
                       onToggleExpand={() => toggleExpand(sec.id)}
                       onToggleLesson={handleToggleLesson}
+                      onUpdateSede={handleUpdateSectionSede}
+                      onDelete={handleDeleteSection}
                     />
                   ))}
                 </div>
@@ -248,12 +320,16 @@ export default function ProgramacionPage() {
 }
 
 function SectionCard({
-  section, isExpanded, onToggleExpand, onToggleLesson,
+  section, sedes, canEdit, isExpanded, onToggleExpand, onToggleLesson, onUpdateSede, onDelete,
 }: {
   section: Section
+  sedes: Sede[]
+  canEdit: boolean
   isExpanded: boolean
   onToggleExpand: () => void
   onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => void
+  onUpdateSede: (sectionId: string, sedeId: string | null) => void
+  onDelete: (sectionId: string, name: string) => void
 }) {
   const totalLessons = section.course.lessons.length
   const openLessons = section.schedules.length
@@ -295,6 +371,33 @@ function SectionCard({
 
       {isExpanded && (
         <div className="border-t bg-gray-50/30 p-4 space-y-2">
+          {/* Acciones de admin */}
+          {canEdit && (
+            <div className="flex items-center gap-3 mb-3 pb-3 border-b border-gray-200">
+              <label className="text-xs font-medium text-gray-700">Sede:</label>
+              <select
+                value={section.sedeId ?? ''}
+                onChange={(e) => onUpdateSede(section.id, e.target.value || null)}
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+              >
+                <option value="">— sin sede —</option>
+                {sedes.map((s) => (
+                  <option key={s.id} value={s.id}>{s.code} · {s.name}</option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onDelete(section.id, section.name)}
+                className="ml-auto h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                title="Eliminar sección (solo si no tiene estudiantes)"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                Eliminar
+              </Button>
+            </div>
+          )}
+
           {/* Instructores */}
           {section.instructors.length > 0 && (
             <div className="mb-3 text-xs text-gray-600">
@@ -423,3 +526,186 @@ function LessonScheduleRow({
     </div>
   )
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Modales: crear período / crear sección
+// ═══════════════════════════════════════════════════════════════
+
+function NewPeriodModal({
+  open, onOpenChange, onCreated,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  onCreated: () => void | Promise<void>
+}) {
+  const [name, setName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!name.trim()) {
+      toast.error('Ingresá el nombre del período')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/admin/periods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success(`Período "${name.trim()}" creado`)
+      setName('')
+      onOpenChange(false)
+      await onCreated()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nuevo período académico</DialogTitle>
+          <DialogDescription>
+            Ej: 2026-1, 2026-2, Verano 2026. Sirve para agrupar todas las
+            secciones del mismo cuatrimestre.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-2">
+          <label className="text-xs font-medium text-gray-700 block mb-1">Nombre *</label>
+          <Input
+            placeholder="2026-1"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t pt-3">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancelar</Button>
+          <Button onClick={handleSubmit} disabled={submitting || !name.trim()}>
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Crear período'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function NewSectionModal({
+  open, onOpenChange, periodId, sedes, courses, onCreated,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  periodId: string | null
+  sedes: Sede[]
+  courses: RegularCourse[]
+  onCreated: () => void | Promise<void>
+}) {
+  const [courseId, setCourseId] = useState('')
+  const [name, setName] = useState('')
+  const [sedeId, setSedeId] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const reset = () => { setCourseId(''); setName(''); setSedeId('') }
+
+  const handleSubmit = async () => {
+    if (!periodId || !courseId || !name.trim()) {
+      toast.error('Curso, período y nombre son requeridos')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/admin/sections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId,
+          periodId,
+          name: name.trim(),
+          sedeId: sedeId || null,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success('Sección creada')
+      reset()
+      onOpenChange(false)
+      await onCreated()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nueva sección</DialogTitle>
+          <DialogDescription>
+            Una sección es un grupo de estudiantes que cursa un mismo curso
+            en una sede durante un período.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">Curso (REGULAR) *</label>
+            <select
+              value={courseId}
+              onChange={(e) => setCourseId(e.target.value)}
+              className="w-full text-sm border border-gray-300 rounded-md px-2 py-2 bg-white"
+            >
+              <option value="">— Elegir curso —</option>
+              {courses.map((c) => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </select>
+            {courses.length === 0 && (
+              <p className="text-[10px] text-amber-600 mt-1">
+                No hay cursos REGULAR. Cambiá el track de algún curso en Diseño.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">Nombre de la sección *</label>
+            <Input
+              placeholder="Salón Mañana A"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">Sede</label>
+            <select
+              value={sedeId}
+              onChange={(e) => setSedeId(e.target.value)}
+              className="w-full text-sm border border-gray-300 rounded-md px-2 py-2 bg-white"
+            >
+              <option value="">— sin sede asignada —</option>
+              {sedes.map((s) => (
+                <option key={s.id} value={s.id}>{s.code} · {s.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t pt-3">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancelar</Button>
+          <Button onClick={handleSubmit} disabled={submitting || !courseId || !name.trim()}>
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Crear sección'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+

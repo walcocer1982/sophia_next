@@ -36,14 +36,26 @@ export async function POST(request: Request) {
   const session = await requireRole('ADMIN')
   if (session instanceof NextResponse) return session
 
-  const { courseId, periodId, name } = (await request.json()) as {
+  const { courseId, periodId, name, sedeId } = (await request.json()) as {
     courseId: string
     periodId: string
     name: string
+    sedeId?: string | null
   }
 
   if (!courseId || !periodId || !name?.trim()) {
     return NextResponse.json({ error: 'courseId, periodId y nombre requeridos' }, { status: 400 })
+  }
+
+  // Validar sede si se provee (debe existir y estar activa)
+  if (sedeId) {
+    const sede = await prisma.sede.findUnique({
+      where: { id: sedeId },
+      select: { id: true, isActive: true },
+    })
+    if (!sede || !sede.isActive) {
+      return NextResponse.json({ error: 'Sede inválida o inactiva' }, { status: 400 })
+    }
   }
 
   // Verify course exists and user has access
@@ -73,9 +85,11 @@ export async function POST(request: Request) {
       courseId,
       periodId,
       name: name.trim(),
+      sedeId: sedeId || null,
     },
     include: {
       period: { select: { name: true } },
+      sede: { select: { id: true, code: true, name: true } },
     },
   })
 
