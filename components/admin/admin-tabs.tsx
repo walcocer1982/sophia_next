@@ -1,21 +1,23 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { Users, LayoutGrid } from 'lucide-react'
+import { Users, LayoutGrid, Building2 } from 'lucide-react'
 
 interface AdminTabsProps {
   usersContent: ReactNode
   sectionsContent: ReactNode
+  sedesContent: ReactNode
 }
 
 const tabs = [
   { id: 'users', label: 'Usuarios', icon: Users },
+  { id: 'sedes', label: 'Sedes', icon: Building2 },
   { id: 'sections', label: 'Secciones', icon: LayoutGrid },
 ] as const
 
 type TabId = (typeof tabs)[number]['id']
 
-export function AdminTabs({ usersContent, sectionsContent }: AdminTabsProps) {
+export function AdminTabs({ usersContent, sectionsContent, sedesContent }: AdminTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('users')
 
   return (
@@ -42,6 +44,7 @@ export function AdminTabs({ usersContent, sectionsContent }: AdminTabsProps) {
       </div>
 
       {activeTab === 'users' && usersContent}
+      {activeTab === 'sedes' && sedesContent}
       {activeTab === 'sections' && sectionsContent}
     </div>
   )

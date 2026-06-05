@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { UserTable } from '@/components/admin/user-table'
 import { CareerManager } from '@/components/admin/career-manager'
 import { SectionsManager } from '@/components/admin/sections-manager'
+import { SedeManager } from '@/components/admin/sede-manager'
 import { AdminTabs } from '@/components/admin/admin-tabs'
 
 type UserRow = {
@@ -28,7 +29,7 @@ export default async function AdminPage() {
   if (!session?.user?.id) redirect('/login')
   if (session.user.role !== 'SUPERADMIN') redirect('/lessons')
 
-  const [dbUsers, dbCareers, periods, courses, sections, instructors] = await Promise.all([
+  const [dbUsers, dbCareers, periods, courses, sections, instructors, dbSedes] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
       select: {
@@ -81,6 +82,14 @@ export default async function AdminPage() {
       where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, email: true },
+    }),
+    prisma.sede.findMany({
+      orderBy: [{ isActive: 'desc' }, { code: 'asc' }],
+      select: {
+        id: true, code: true, name: true, city: true, address: true,
+        isVirtual: true, isActive: true,
+        _count: { select: { courses: true, sections: true, users: true } },
+      },
     }),
   ])
 
@@ -154,14 +163,30 @@ export default async function AdminPage() {
     />
   )
 
+  const sedesContent = (
+    <div className="rounded-lg border bg-white p-6">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold">Sedes</h2>
+        <p className="text-sm text-gray-500">
+          Campus físicos (ABQ, IRQ, FCHB) y virtuales (ENTER). Una sede agrupa cursos, secciones y usuarios.
+        </p>
+      </div>
+      <SedeManager sedes={dbSedes} />
+    </div>
+  )
+
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
-        <h1 className="mb-1 text-3xl font-bold">Administracion</h1>
-        <p className="text-muted-foreground">Gestion de usuarios, roles, carreras y secciones</p>
+        <h1 className="mb-1 text-3xl font-bold">Configuración</h1>
+        <p className="text-muted-foreground">Catálogos del sistema: usuarios, sedes, carreras, secciones.</p>
       </div>
 
-      <AdminTabs usersContent={usersContent} sectionsContent={sectionsContent} />
+      <AdminTabs
+        usersContent={usersContent}
+        sectionsContent={sectionsContent}
+        sedesContent={sedesContent}
+      />
     </div>
   )
 }
