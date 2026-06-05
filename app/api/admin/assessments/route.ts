@@ -20,7 +20,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { lessonId, title, timeLimitMin, collectEmail, collectDni, expiresInDays } = await request.json()
+  const { lessonId, title, timeLimitMin, collectEmail, collectDni, expiresInDays, campaignId } = await request.json() as {
+    lessonId?: string
+    title?: string
+    timeLimitMin?: number
+    collectEmail?: boolean
+    collectDni?: boolean
+    expiresInDays?: number
+    campaignId?: string | null
+  }
 
   if (!lessonId || !title) {
     return NextResponse.json({ error: 'lessonId y title requeridos' }, { status: 400 })
@@ -54,6 +62,14 @@ export async function POST(request: Request) {
     ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
     : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Default 7 days
 
+  // Si pasaron campaignId, validar que exista (evita FK error con error feo).
+  if (campaignId) {
+    const campaign = await prisma.eventCampaign.findUnique({ where: { id: campaignId }, select: { id: true } })
+    if (!campaign) {
+      return NextResponse.json({ error: 'Campaña no encontrada' }, { status: 404 })
+    }
+  }
+
   const assessment = await prisma.assessment.create({
     data: {
       code,
@@ -64,6 +80,7 @@ export async function POST(request: Request) {
       collectEmail: !!collectEmail,
       collectDni: !!collectDni, // Default false (demos sin DNI)
       expiresAt,
+      campaignId: campaignId || null,
     },
   })
 

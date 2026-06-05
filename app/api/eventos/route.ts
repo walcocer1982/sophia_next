@@ -114,6 +114,18 @@ export async function GET() {
     }
   }
 
+  // Opciones para el form de crear nuevo kiosko: lecciones disponibles y
+  // campaigns activas (no archivadas).
+  const lessonsForOptions = await prisma.lesson.findMany({
+    where: { course: { deletedAt: null } },
+    orderBy: [{ course: { title: 'asc' } }, { order: 'asc' }],
+    select: {
+      id: true,
+      title: true,
+      course: { select: { id: true, title: true, track: true } },
+    },
+  })
+
   return NextResponse.json({
     campaigns: campaigns.map((c) => ({
       id: c.id,
@@ -127,5 +139,17 @@ export async function GET() {
       assessments: c.assessments.map(formatAssessment),
     })),
     orphanAssessments: orphans.map(formatAssessment),
+    options: {
+      lessons: lessonsForOptions.map((l) => ({
+        id: l.id,
+        title: l.title,
+        courseId: l.course.id,
+        courseTitle: l.course.title,
+        courseTrack: l.course.track,
+      })),
+      activeCampaigns: campaigns
+        .filter((c) => !c.isArchived)
+        .map((c) => ({ id: c.id, name: c.name, shortName: c.shortName })),
+    },
   })
 }

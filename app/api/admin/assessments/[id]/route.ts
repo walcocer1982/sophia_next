@@ -75,10 +75,21 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const updateData: { isActive?: boolean; closedAt?: Date | null } = {}
+  const updateData: { isActive?: boolean; closedAt?: Date | null; campaignId?: string | null } = {}
   if (typeof body.isActive === 'boolean') {
     updateData.isActive = body.isActive
     updateData.closedAt = body.isActive ? null : new Date()
+  }
+  // campaignId: null limpia la asignación; string asigna a esa campaign;
+  // undefined deja como está.
+  if (body.campaignId === null || typeof body.campaignId === 'string') {
+    if (body.campaignId) {
+      const exists = await prisma.eventCampaign.findUnique({ where: { id: body.campaignId }, select: { id: true } })
+      if (!exists) {
+        return NextResponse.json({ error: 'Campaña no encontrada' }, { status: 404 })
+      }
+    }
+    updateData.campaignId = body.campaignId
   }
 
   const updated = await prisma.assessment.update({

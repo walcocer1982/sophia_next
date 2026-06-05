@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, Users } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, Megaphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PublishToggle } from '@/components/planner/publish-toggle'
 import { TestLessonButton } from '@/components/planner/test-lesson-button'
@@ -34,6 +34,7 @@ type CourseWithLessons = {
     isPublished: boolean
     availableAt: Date | null
     closesAfterHours: number
+    _count: { assessments: number }
   }>
 }
 
@@ -77,6 +78,7 @@ export default async function CourseOverviewPage({
           isPublished: true,
           availableAt: true,
           closesAfterHours: true,
+          _count: { select: { assessments: true } },
         },
       },
     },
@@ -340,12 +342,17 @@ export default async function CourseOverviewPage({
                             title: a.teaching?.agent_instruction || '',
                           }))}
                         />
-                        <Link href={`/planner/${courseId}/${lesson.id}/assessments`}>
-                          <Button variant="outline" size="sm" className="gap-1.5">
-                            <Users className="h-3.5 w-3.5" />
-                            Clases
-                          </Button>
-                        </Link>
+                        {/* "Clases" se mudó a /eventos (todos los kioskos en un lugar). Acá solo badge informativo. */}
+                        {lesson._count.assessments > 0 && (
+                          <Link
+                            href="/eventos"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-orange-200 bg-orange-50 text-xs font-medium text-orange-700 hover:bg-orange-100 transition-colors"
+                            title="Ver en Eventos"
+                          >
+                            <Megaphone className="h-3 w-3" />
+                            {lesson._count.assessments} evento{lesson._count.assessments !== 1 ? 's' : ''}
+                          </Link>
+                        )}
                         <PublishToggle
                           lessonId={lesson.id}
                           initialPublished={lesson.isPublished}
