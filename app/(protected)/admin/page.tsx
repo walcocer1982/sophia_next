@@ -5,6 +5,7 @@ import { UserTable } from '@/components/admin/user-table'
 import { CareerManager } from '@/components/admin/career-manager'
 import { SectionsManager } from '@/components/admin/sections-manager'
 import { SedeManager } from '@/components/admin/sede-manager'
+import { CampaignManager } from '@/components/admin/campaign-manager'
 import { AdminTabs } from '@/components/admin/admin-tabs'
 
 type UserRow = {
@@ -29,7 +30,7 @@ export default async function AdminPage() {
   if (!session?.user?.id) redirect('/login')
   if (session.user.role !== 'SUPERADMIN') redirect('/lessons')
 
-  const [dbUsers, dbCareers, periods, courses, sections, instructors, dbSedes] = await Promise.all([
+  const [dbUsers, dbCareers, periods, courses, sections, instructors, dbSedes, dbCampaigns] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
       select: {
@@ -89,6 +90,14 @@ export default async function AdminPage() {
         id: true, code: true, name: true, city: true, address: true,
         isVirtual: true, isActive: true,
         _count: { select: { courses: true, sections: true, users: true } },
+      },
+    }),
+    prisma.eventCampaign.findMany({
+      orderBy: [{ isArchived: 'asc' }, { startDate: 'desc' }],
+      select: {
+        id: true, name: true, shortName: true, startDate: true, endDate: true,
+        location: true, url: true, isArchived: true, createdAt: true,
+        _count: { select: { assessments: true } },
       },
     }),
   ])
@@ -175,17 +184,46 @@ export default async function AdminPage() {
     </div>
   )
 
+  // Las dates vienen como Date desde Prisma — las serializamos para pasar al
+  // componente cliente. createdAt no se usa en CampaignManager pero se omite
+  // del tipo del componente (no se necesita en el client).
+  const campaignsForClient = dbCampaigns.map((c) => ({
+    id: c.id,
+    name: c.name,
+    shortName: c.shortName,
+    startDate: c.startDate.toISOString(),
+    endDate: c.endDate.toISOString(),
+    location: c.location,
+    url: c.url,
+    isArchived: c.isArchived,
+    _count: c._count,
+  }))
+
+  const campaignsContent = (
+    <div className="rounded-lg border bg-white p-6">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold">Campañas</h2>
+        <p className="text-sm text-gray-500">
+          Eventos contenedores (ferias, conferencias, congresos) que agrupan kioskos
+          relacionados — ej: &quot;27th World Mining Congress 2026&quot;, &quot;ProExplo Junio&quot;.
+        </p>
+      </div>
+      <CampaignManager campaigns={campaignsForClient} />
+    </div>
+  )
+
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="mb-1 text-3xl font-bold">Configuración</h1>
-        <p className="text-muted-foreground">Catálogos del sistema: usuarios, sedes, carreras, secciones.</p>
+        <p className="text-muted-foreground">Catálogos del sistema: usuarios, sedes, campañas, carreras, secciones.</p>
       </div>
 
       <AdminTabs
         usersContent={usersContent}
         sectionsContent={sectionsContent}
         sedesContent={sedesContent}
+        campaignsContent={campaignsContent}
       />
     </div>
   )
