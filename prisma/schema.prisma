@@ -86,11 +86,17 @@ model Career {
   id        String   @id @default(cuid())
   name      String   @unique
   slug      String   @unique
+  // Código corto oficial CETEMIN (EOM, PM, SI, MMP, MSEII). Opcional —
+  // los programas no académicos (Inducción, ENTER) pueden no tenerlo.
+  code      String?  @unique
   createdAt DateTime @default(now())
 
   // Relaciones
   users   User[]
   courses Course[]
+  // m:n con Sede: en qué sedes se dicta esta carrera.
+  // Ej: EOM se dicta en ABQ + FCHB, PM solo en ABQ.
+  sedes   Sede[]   @relation("CareerSedes")
 }
 
 // ============================================
@@ -109,6 +115,7 @@ model Sede {
 
   // Relaciones
   courses  Course[]  @relation("CourseSedes")  // m:n con cursos
+  careers  Career[]  @relation("CareerSedes")  // m:n con carreras (qué carreras se dictan acá)
   sections Section[]
   users    User[]
 
@@ -150,6 +157,14 @@ enum CourseTrack {
   CONTINUA // Cursos abiertos: kioskos/eventos sin estructura académica
 }
 
+enum CourseScope {
+  TRANSVERSAL    // Se dicta en TODAS las sedes que ofrecen carreras
+                 // (Empleabilidad, Plan de Tutoría, Inducción, Inglés básico).
+                 // No pertenece a una carrera específica.
+  SPECIALIZATION // Específico de UNA carrera (EOM, PM, etc.).
+                 // Pertenece a la carrera + se dicta en las sedes de esa carrera.
+}
+
 model Course {
   id          String   @id @default(cuid())
   title       String
@@ -163,6 +178,10 @@ model Course {
   //  - REGULAR: vive en Programación (sección + período + estudiantes)
   //  - CONTINUA: vive en Eventos (kioskos, sin estructura académica)
   track       CourseTrack @default(REGULAR)
+  // Scope: alcance del curso dentro del plan académico
+  //  - TRANSVERSAL: se dicta en todas las sedes (no requiere carrera).
+  //  - SPECIALIZATION: específico de la carrera asignada (careerId).
+  scope       CourseScope @default(SPECIALIZATION)
   // Metodología pedagógica del curso (todas sus lecciones la heredan):
   //  - REFLECTIVE: actividades con prompt de instrucción + verificación socrática (default actual)
   //  - CODE: instrucciones paso a paso, verificación binaria (hizo/no hizo), sin rúbrica de comprensión
@@ -187,6 +206,7 @@ model Course {
   @@index([userId])
   @@index([careerId])
   @@index([track])
+  @@index([scope])
   @@index([deletedAt])
 }
 
