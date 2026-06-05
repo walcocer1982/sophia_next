@@ -33,11 +33,14 @@ model User {
   avatar        String?
   role          UserRole  @default(STUDENT)
   careerId      String?
+  // Sede de pertenencia (opcional — superadmins pueden no tener sede)
+  sedeId        String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // Relaciones
   career             Career?              @relation(fields: [careerId], references: [id])
+  sede               Sede?                @relation(fields: [sedeId], references: [id])
   lessonSessions     LessonSession[]
   accounts           Account[]
   courses            Course[]
@@ -48,6 +51,7 @@ model User {
   @@index([email])
   @@index([googleId])
   @@index([careerId])
+  @@index([sedeId])
 }
 
 model Account {
@@ -75,6 +79,9 @@ model Account {
 // 2. CARRERAS / PROGRAMAS
 // ============================================
 
+// Career = Programa académico. Se mantiene el nombre "Career" en el schema
+// para no romper código existente, pero conceptualmente es "Programa"
+// (Inducción Académica, ENTER, etc.). En UI se renombrará gradualmente.
 model Career {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -87,12 +94,60 @@ model Career {
 }
 
 // ============================================
+// 2.5 SEDES (campus físicos + virtuales)
+// ============================================
+
+model Sede {
+  id        String   @id @default(cuid())
+  code      String   @unique  // "ABQ", "IRQ", "FCHB", "ENTER"
+  name      String            // "Alberto Benavides de la Quintana"
+  city      String?
+  address   String?
+  isVirtual Boolean  @default(false)  // ENTER = true, físicas = false
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Relaciones
+  courses  Course[]  @relation("CourseSedes")  // m:n con cursos
+  sections Section[]
+  users    User[]
+
+  @@index([code])
+}
+
+// ============================================
+// 2.6 EVENT CAMPAIGNS (ferias, conferencias, demos)
+// ============================================
+
+model EventCampaign {
+  id         String    @id @default(cuid())
+  name       String              // "27th World Mining Congress 2026"
+  shortName  String?             // "WMC 2026"
+  startDate  DateTime
+  endDate    DateTime
+  location   String?             // "Lima, Perú"
+  url        String?             // link al sitio del evento
+  isArchived Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  // Relaciones
+  assessments Assessment[]
+
+  @@index([startDate])
+}
+
+// ============================================
 // 3. CONTENIDO EDUCATIVO
 // ============================================
 
 enum CourseMethodology {
   REFLECTIVE // Actividades + verificación socrática (default)
   CODE       // Instrucciones paso a paso + verificación binaria
+}
+
+enum CourseTrack {
+  REGULAR  // Programa formal: sección + período + estudiante inscripto
+  CONTINUA // Cursos abiertos: kioskos/eventos sin estructura académica
 }
 
 model Course {
@@ -102,8 +157,12 @@ model Course {
   capacidad   String?  @db.Text  // Competencia general del curso
   instructor  String   @db.Text  // Personalidad del AI instructor
   userId      String?            // Instructor que creó el curso
-  careerId    String?            // Carrera a la que pertenece el curso
+  careerId    String?            // Programa académico (Career = Programa)
   voiceEnabled Boolean @default(true)  // Si false, el chat del curso oculta el botón de voz
+  // Track: cómo se entrega el curso
+  //  - REGULAR: vive en Programación (sección + período + estudiantes)
+  //  - CONTINUA: vive en Eventos (kioskos, sin estructura académica)
+  track       CourseTrack @default(REGULAR)
   // Metodología pedagógica del curso (todas sus lecciones la heredan):
   //  - REFLECTIVE: actividades con prompt de instrucción + verificación socrática (default actual)
   //  - CODE: instrucciones paso a paso, verificación binaria (hizo/no hizo), sin rúbrica de comprensión
@@ -120,10 +179,14 @@ model Course {
   career   Career?   @relation(fields: [careerId], references: [id])
   lessons  Lesson[]
   sections Section[]
+  // Un curso puede ofrecerse en VARIAS sedes (m:n). CONTINUA puede no tener
+  // ninguna (delivery itinerante via eventos).
+  sedes    Sede[]    @relation("CourseSedes")
 
   @@index([slug])
   @@index([userId])
   @@index([careerId])
+  @@index([track])
   @@index([deletedAt])
 }
 
@@ -319,10 +382,15 @@ model Section {
   name      String   // "Salón A", "Salón B"
   courseId   String
   periodId  String
+  // Sede física donde se dicta esta sección. Opcional inicialmente para no
+  // romper data legacy; el plan es hacerlo obligatorio una vez asignadas
+  // todas las sedes a las secciones existentes via script.
+  sedeId    String?
   createdAt DateTime @default(now())
 
   course      Course                  @relation(fields: [courseId], references: [id])
   period      AcademicPeriod          @relation(fields: [periodId], references: [id])
+  sede        Sede?                   @relation(fields: [sedeId], references: [id])
   instructors SectionInstructor[]
   enrollments Enrollment[]
   schedules   SectionLessonSchedule[]
@@ -330,6 +398,7 @@ model Section {
   @@unique([courseId, periodId, name])
   @@index([courseId])
   @@index([periodId])
+  @@index([sedeId])
 }
 
 model SectionInstructor {
@@ -389,16 +458,21 @@ model Assessment {
   timeLimitMin    Int       @default(10)  // Minutos por participante
   collectEmail    Boolean   @default(false) // Solicitar email opcional
   collectDni      Boolean   @default(true)  // Solicitar DNI
+  // Campaña que agrupa este kiosko (opcional). Ej: "27th World Mining Congress 2026".
+  // Permite agrupar visualmente varios kioskos del mismo evento.
+  campaignId      String?
   createdAt       DateTime  @default(now())
   closedAt        DateTime?
   expiresAt       DateTime? // Cuándo se borran los datos temporales
 
   lesson       Lesson                  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   createdBy    User                    @relation(fields: [createdById], references: [id])
+  campaign     EventCampaign?          @relation(fields: [campaignId], references: [id])
   participants AssessmentParticipant[]
 
   @@index([code])
   @@index([createdById])
+  @@index([campaignId])
 }
 
 model AssessmentParticipant {
