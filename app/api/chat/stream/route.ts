@@ -800,8 +800,17 @@ export async function POST(request: Request) {
             })
           }
         } else if (verification.response_type !== 'continuation' && !hallucinationCheck.isHallucination) {
-          // Incrementar attempts sin completar + guardar evidenceData.
-          // Skip si: continuación ("sí", "listo") o hallucination de voz — no son intentos reales.
+          // Guardar evidencia + (condicionalmente) incrementar attempts.
+          // Skip si: continuación ("sí", "listo") o hallucination de voz.
+          //
+          // FIX causa #13: cuando willScaffold === true significa que Sophia
+          // va a desglosar el tema en una sub-pregunta. La respuesta del
+          // estudiante NO es un intento fallido del criterio total — es
+          // progreso parcial pedido por Sophia. Si lo contamos como attempt,
+          // castigamos con penalty 0.90× a quien aprende incrementalmente
+          // (el bug observado con María Céspedes en el demo del 03/06).
+          // Solo incrementamos attempts cuando es un RETRY real del criterio
+          // (sin scaffolding en curso).
           const failedAttempt = {
             studentResponse: message,
             analysis: {
@@ -812,6 +821,7 @@ export async function POST(request: Request) {
               understanding_level: verification.understanding_level,
               response_type: verification.response_type,
               completeness_percentage: verification.completeness_percentage,
+              wasScaffolding: willScaffold, // marca para auditoría/scoring
             },
             timestamp: new Date().toISOString(),
           }
@@ -823,6 +833,9 @@ export async function POST(request: Request) {
             wasExplained: wasExplained || willExplainThisTurn,
           }))
 
+          // Si es turno de scaffolding, NO contamos attempt — solo evidencia.
+          const attemptsIncrement = willScaffold ? 0 : 1
+
           await prisma.activityProgress.upsert({
             where: {
               lessonSessionId_activityId: {
@@ -831,17 +844,26 @@ export async function POST(request: Request) {
               },
             },
             update: {
-              attempts: attempts + 1,
+              attempts: attempts + attemptsIncrement,
               evidenceData: failedEvidence,
             },
             create: {
               lessonSessionId: lessonSession.id,
               activityId: currentActivity.id,
               status: 'IN_PROGRESS',
-              attempts: attempts + 1,
+              attempts: attemptsIncrement,
               evidenceData: failedEvidence,
             },
           })
+
+          if (willScaffold) {
+            logger.info('chat.stream.scaffolding_progress', {
+              sessionId,
+              activityId: currentActivity.id,
+              scaffoldingTurns: scaffoldingTurns + 1,
+              attempts, // sin cambio
+            })
+          }
 
           // Forzar avance al llegar a 5 intentos
           // La IA ya dio la respuesta en el intento 5 (prompt-builder maneja esto)

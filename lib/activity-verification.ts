@@ -97,6 +97,45 @@ REGLAS CRÍTICAS PARA CLASIFICAR:
 - Ante duda entre understood y applied: si cubre 2+ criterios claros → applied.
 - Ante duda entre applied y analyzed: si da el por qué (argumento, no solo lista) → analyzed.
 
+⚠️ ANTI-SESGO CONSERVADOR — leelo antes de clasificar:
+Tendés a defaultear a "understood" por seguridad. NO LO HAGAS. Si la respuesta
+cumple los criterios, escalá al nivel que corresponde. Castigar a un estudiante
+con "understood" cuando demostró "applied" o "analyzed" es UN ERROR que afecta
+su nota final. Si dudás entre dos niveles, SUBÍ al más alto, no bajés al más bajo.
+
+EJEMPLOS DE ESCALACIÓN (estudia estos patrones):
+
+Ejemplo 1 — applied (LOGRADO):
+  Criterios: ["ventilación para evacuar gases", "desate de rocas sueltas", "sostenimiento"]
+  Respuesta: "Ventilar primero, después hacer el desate y poner pernos"
+  → criteriaMatched: 3/3 (los 3 criterios cubiertos con palabras propias)
+  → understanding_level: "applied"  ← NO "understood", cumple 2+ criterios
+  → Sin sustentación explícita del POR QUÉ → no llega a analyzed
+
+Ejemplo 2 — analyzed (DESTACADO):
+  Criterios: ["elige una fase específica", "la justifica con argumento razonado"]
+  Respuesta: "La perforación porque determina cuánto se avanza y qué tan fragmentada termina la roca"
+  → criteriaMatched: 2/2 (eligió "perforación" + dio argumento causal)
+  → understanding_level: "analyzed"  ← NO "understood", da una RELACIÓN
+     causa-efecto explícita ("determina X y Y")
+  → Es DESTACADO porque la justificación conecta causa con consecuencia
+
+Ejemplo 3 — understood (PROCESO):
+  Criterios: ["explicar diferencia entre perforación y voladura", "rol del orden de detonación"]
+  Respuesta: "Perforación hace agujeros y voladura los detona"
+  → criteriaMatched: 1/2 (diferencia OK, pero no mencionó el orden de detonación)
+  → understanding_level: "understood"  ← solo 1 criterio claro
+
+Ejemplo 4 — memorized (INICIO):
+  Criterios: ["6 fases del ciclo", "se repite con cada avance"]
+  Respuesta: "Donde la maquinaria pesada trabaja con seguridad"
+  → criteriaMatched: 0/2 (no menciona ninguna fase ni el ciclo)
+  → understanding_level: "memorized"  ← NO aborda los criterios
+
+PATRÓN CLAVE: una respuesta con relación CAUSA→CONSECUENCIA explícita
+("porque", "lo que hace que", "esto produce", "determina que") sobre 2+
+criterios = analyzed. NO bajes a understood por timidez.
+
 Responde en formato JSON con esta estructura EXACTA:
 {
   "completed": boolean,
@@ -193,6 +232,32 @@ IMPORTANTE:
 - Memorizar correctamente una definición = LOGRADO (no inicio).
 - Equivocarse o tener errores conceptuales = INICIO.
 - "Profundidad cognitiva" NO es el criterio — el criterio es DOMINIO DEL OBJETIVO.
+
+⚠️ ANTI-SESGO CONSERVADOR — leelo antes de clasificar:
+Tendés a defaultear a "understood" por seguridad. NO LO HAGAS. Si la respuesta
+cumple los criterios, escalá al nivel que corresponde. Castigar a un estudiante
+con "understood" cuando demostró "applied" o "analyzed" es UN ERROR que afecta
+su nota final. Si dudás entre dos niveles, SUBÍ al más alto, no bajés al más bajo.
+
+EJEMPLOS DE ESCALACIÓN:
+
+Ejemplo 1 — applied (LOGRADO):
+  Pregunta: "¿Qué pasos se ejecutan después de la voladura?"
+  Criterios: ["ventilación para evacuar gases", "desate de rocas", "sostenimiento"]
+  Respuesta: "Ventilar primero, después desate y poner pernos"
+  → criteriaMatched: 3/3 con palabras propias
+  → understanding_level: "applied"  ← NO "understood"
+
+Ejemplo 2 — analyzed (DESTACADO):
+  Pregunta: "¿Cuál fase decide la productividad y por qué?"
+  Criterios: ["elige fase específica", "justifica con argumento"]
+  Respuesta: "La perforación porque determina cuánto se avanza y qué tan fragmentada termina la roca"
+  → criteriaMatched: 2/2 + relación CAUSA→CONSECUENCIA explícita
+  → understanding_level: "analyzed"  ← NO "understood", da el POR QUÉ
+
+PATRÓN CLAVE: relación causa-efecto explícita ("porque", "determina que",
+"esto produce", "lo que hace que") sobre 2+ criterios = analyzed. NO bajes
+a understood por timidez.
 
 Responde en formato JSON con esta estructura EXACTA:
 {
@@ -326,7 +391,7 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022', // Usar Haiku para verificación (más rápido y económico)
+      model: 'claude-haiku-4-5-20251001', // Haiku 4.5 (3.5 fue deprecada). Rápido + económico.
       max_tokens: 500,
       messages: [
         {
