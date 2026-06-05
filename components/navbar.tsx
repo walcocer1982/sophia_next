@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, Home, BookOpen, Sparkles, Shield, LayoutDashboard } from 'lucide-react'
+import { User, LogOut, Settings, Home, BookOpen, Sparkles, Shield, LayoutDashboard, CalendarDays, Megaphone } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -93,7 +93,18 @@ export function Navbar() {
               }`}
             >
               <Sparkles className="h-4 w-4" />
-              Planificador
+              Diseño
+            </Link>
+            <Link
+              href="/programacion"
+              className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+                pathname.startsWith('/programacion')
+                  ? 'text-instructor-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <CalendarDays className="h-4 w-4" />
+              Programación
             </Link>
             <Link
               href="/dashboard"
@@ -104,7 +115,18 @@ export function Navbar() {
               }`}
             >
               <LayoutDashboard className="h-4 w-4" />
-              Dashboard
+              Monitor
+            </Link>
+            <Link
+              href="/eventos"
+              className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+                pathname.startsWith('/eventos')
+                  ? 'text-instructor-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Megaphone className="h-4 w-4" />
+              Eventos
             </Link>
           </>
         )}
@@ -118,7 +140,7 @@ export function Navbar() {
             }`}
           >
             <Shield className="h-4 w-4" />
-            Admin
+            Config
           </Link>
         )}
       </nav>
