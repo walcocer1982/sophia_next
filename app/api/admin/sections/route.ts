@@ -36,11 +36,13 @@ export async function POST(request: Request) {
   const session = await requireRole('ADMIN')
   if (session instanceof NextResponse) return session
 
-  const { courseId, periodId, name, sedeId } = (await request.json()) as {
+  const { courseId, periodId, name, sedeId, startDate, endDate } = (await request.json()) as {
     courseId: string
     periodId: string
     name: string
     sedeId?: string | null
+    startDate?: string | null
+    endDate?: string | null
   }
 
   if (!courseId || !periodId || !name?.trim()) {
@@ -108,12 +110,33 @@ export async function POST(request: Request) {
     select: { id: true, archivedAt: true },
   })
 
+  // Validar fechas: si vienen ambas, endDate >= startDate
+  let parsedStart: Date | null = null
+  let parsedEnd: Date | null = null
+  if (startDate) {
+    parsedStart = new Date(startDate)
+    if (isNaN(parsedStart.getTime())) {
+      return NextResponse.json({ error: 'Fecha de inicio inválida' }, { status: 400 })
+    }
+  }
+  if (endDate) {
+    parsedEnd = new Date(endDate)
+    if (isNaN(parsedEnd.getTime())) {
+      return NextResponse.json({ error: 'Fecha de fin inválida' }, { status: 400 })
+    }
+  }
+  if (parsedStart && parsedEnd && parsedEnd < parsedStart) {
+    return NextResponse.json({ error: 'La fecha de fin debe ser posterior a la de inicio' }, { status: 400 })
+  }
+
   const section = await prisma.section.create({
     data: {
       courseId,
       periodId,
       name: cleanName,
       sedeId: sedeId || null,
+      startDate: parsedStart,
+      endDate: parsedEnd,
     },
     include: {
       period: { select: { name: true } },

@@ -76,7 +76,11 @@ export async function GET(request: Request) {
     }),
     prisma.section.findMany({
       where: sectionWhere,
-      orderBy: [{ isArchived: 'asc' }, { name: 'asc' }],
+      orderBy: [
+        { isArchived: 'asc' },           // activas primero
+        { startDate: { sort: 'desc', nulls: 'last' } }, // las más recientes arriba; sin fecha al final
+        { name: 'asc' },
+      ],
       select: {
         id: true,
         name: true,
@@ -84,6 +88,8 @@ export async function GET(request: Request) {
         periodId: true,
         isArchived: true,
         archivedAt: true,
+        startDate: true,
+        endDate: true,
         course: {
           select: {
             id: true,
@@ -153,6 +159,8 @@ export async function GET(request: Request) {
       periodId: s.periodId,
       isArchived: s.isArchived,
       archivedAt: s.archivedAt,
+      startDate: s.startDate,
+      endDate: s.endDate,
       course: {
         id: s.course.id,
         title: s.course.title,

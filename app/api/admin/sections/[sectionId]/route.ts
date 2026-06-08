@@ -21,6 +21,8 @@ export async function PATCH(
     name?: string
     sedeId?: string | null
     isArchived?: boolean
+    startDate?: string | null
+    endDate?: string | null
   }
 
   const section = await prisma.section.findUnique({
@@ -41,6 +43,8 @@ export async function PATCH(
     sedeId?: string | null
     isArchived?: boolean
     archivedAt?: Date | null
+    startDate?: Date | null
+    endDate?: Date | null
   } = {}
 
   // Archivar / desarchivar es la ÚNICA mutación permitida en una sección ya
@@ -74,6 +78,37 @@ export async function PATCH(
       }
     }
     updateData.sedeId = body.sedeId
+  }
+
+  if (body.startDate !== undefined) {
+    if (body.startDate === null || body.startDate === '') {
+      updateData.startDate = null
+    } else {
+      const d = new Date(body.startDate)
+      if (isNaN(d.getTime())) {
+        return NextResponse.json({ error: 'Fecha de inicio inválida' }, { status: 400 })
+      }
+      updateData.startDate = d
+    }
+  }
+
+  if (body.endDate !== undefined) {
+    if (body.endDate === null || body.endDate === '') {
+      updateData.endDate = null
+    } else {
+      const d = new Date(body.endDate)
+      if (isNaN(d.getTime())) {
+        return NextResponse.json({ error: 'Fecha de fin inválida' }, { status: 400 })
+      }
+      updateData.endDate = d
+    }
+  }
+
+  // Validar coherencia start ≤ end (considerando el valor final tras el merge)
+  const finalStart = updateData.startDate !== undefined ? updateData.startDate : section.startDate
+  const finalEnd = updateData.endDate !== undefined ? updateData.endDate : section.endDate
+  if (finalStart && finalEnd && finalEnd < finalStart) {
+    return NextResponse.json({ error: 'La fecha de fin debe ser posterior a la de inicio' }, { status: 400 })
   }
 
   if (Object.keys(updateData).length === 0) {

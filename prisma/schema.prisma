@@ -406,6 +406,12 @@ model Section {
   // romper data legacy; el plan es hacerlo obligatorio una vez asignadas
   // todas las sedes a las secciones existentes via script.
   sedeId    String?
+  // Fechas reales de dictado de esta cohort dentro del período académico.
+  // Útil para cursos cortos (2-4 sem) que viven dentro de un ciclo de 12 sem.
+  // Opcional para no romper datos legacy. Cuando ambos están presentes,
+  // permite ordenar por inicio y archivar automáticamente las terminadas.
+  startDate DateTime?
+  endDate   DateTime?
   // Sección archivada = read-only histórico. La cohort terminó, los datos
   // se conservan pero no se permiten más mutaciones. Independiente del
   // período: un período activo puede tener secciones archivadas si esa

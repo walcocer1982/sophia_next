@@ -35,6 +35,8 @@ interface Section {
   periodId: string
   isArchived: boolean
   archivedAt: string | null
+  startDate: string | null
+  endDate: string | null
   course: {
     id: string
     title: string
@@ -66,7 +68,29 @@ function formatDate(iso: string) {
     day: '2-digit', month: 'short', year: 'numeric',
   })
 }
+function formatDateShort(iso: string) {
+  return new Date(iso).toLocaleDateString('es-PE', {
+    day: '2-digit', month: 'short',
+  })
+}
 function todayISO() { return new Date().toISOString().slice(0, 10) }
+function isoToInputDate(iso: string | null) {
+  return iso ? new Date(iso).toISOString().slice(0, 10) : ''
+}
+
+/** Estado visual de una sección según sus fechas: futura, en curso, terminada */
+function getSectionDateStatus(startDate: string | null, endDate: string | null): {
+  label: string
+  className: string
+} | null {
+  if (!startDate && !endDate) return null
+  const now = Date.now()
+  const start = startDate ? new Date(startDate).getTime() : null
+  const end = endDate ? new Date(endDate).getTime() : null
+  if (end && now > end) return { label: 'Terminada', className: 'bg-gray-100 text-gray-600 border-gray-300' }
+  if (start && now < start) return { label: 'Por iniciar', className: 'bg-blue-50 text-blue-700 border-blue-200' }
+  return { label: 'En curso', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+}
 
 export default function ProgramacionPage() {
   const [data, setData] = useState<ProgramacionData | null>(null)
@@ -320,6 +344,54 @@ export default function ProgramacionPage() {
     }
   }
 
+  const handleUpdateSectionDates = async (sectionId: string, startDate: string | null, endDate: string | null) => {
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate, endDate }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success('Fechas actualizadas')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  const handleBulkArchiveEnded = async () => {
+    if (!activePeriodId) return
+    // Primero dry-run para mostrar cuántas serían
+    try {
+      const dryRes = await fetch('/api/admin/sections/bulk-archive-ended', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ periodId: activePeriodId, dryRun: true }),
+      })
+      const dry = await dryRes.json()
+      const n = dry.wouldArchive ?? 0
+      if (n === 0) {
+        toast.success('No hay secciones terminadas hace +7 días para archivar')
+        return
+      }
+      if (!confirm(`¿Archivar ${n} sección${n !== 1 ? 'es' : ''} cuya fecha de fin pasó hace más de 7 días?`)) return
+      const res = await fetch('/api/admin/sections/bulk-archive-ended', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ periodId: activePeriodId }),
+      })
+      const out = await res.json()
+      if (!res.ok) throw new Error(out.error || 'Error')
+      toast.success(`${out.archived} sección${out.archived !== 1 ? 'es' : ''} archivada${out.archived !== 1 ? 's' : ''}`)
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
   const handleUpdateSectionSede = async (sectionId: string, sedeId: string | null) => {
     try {
       const res = await fetch(`/api/admin/sections/${sectionId}`, {
@@ -391,18 +463,30 @@ export default function ProgramacionPage() {
                   const period = data.periods.find((p) => p.id === activePeriodId)
                   if (!period) return null
                   return (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleTogglePeriodActive(period.id, period.isActive)}
-                      className={`gap-1.5 ${period.isActive ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50'}`}
-                      title={period.isActive ? 'Cerrar este período (se ocultan sus secciones)' : 'Reactivar este período'}
-                    >
-                      {period.isActive
-                        ? (<><Archive className="h-3.5 w-3.5" /> Cerrar período</>)
-                        : (<><ArchiveRestore className="h-3.5 w-3.5" /> Reactivar</>)
-                      }
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleBulkArchiveEnded}
+                        className="gap-1.5 text-gray-700 hover:bg-gray-50"
+                        title="Archivar todas las secciones cuya fecha de fin pasó hace +7 días"
+                      >
+                        <Archive className="h-3.5 w-3.5" />
+                        Archivar terminadas
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleTogglePeriodActive(period.id, period.isActive)}
+                        className={`gap-1.5 ${period.isActive ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50'}`}
+                        title={period.isActive ? 'Cerrar este período (se ocultan sus secciones)' : 'Reactivar este período'}
+                      >
+                        {period.isActive
+                          ? (<><Archive className="h-3.5 w-3.5" /> Cerrar período</>)
+                          : (<><ArchiveRestore className="h-3.5 w-3.5" /> Reactivar</>)
+                        }
+                      </Button>
+                    </>
                   )
                 })()}
               </>
@@ -473,6 +557,7 @@ export default function ProgramacionPage() {
                     onToggleLesson={handleToggleLesson}
                     onArchive={handleArchiveSection}
                     onDelete={handleDeleteSection}
+                    onUpdateDates={handleUpdateSectionDates}
                   />
                 ))}
               </div>
@@ -530,6 +615,7 @@ export default function ProgramacionPage() {
                               onToggleExpand={() => toggleExpand(sec.id, setExpandedSections)}
                               onToggleLesson={handleToggleLesson}
                               onUpdateSede={handleUpdateSectionSede}
+                              onUpdateDates={handleUpdateSectionDates}
                               onDelete={handleDeleteSection}
                               onArchive={handleArchiveSection}
                               onEnrollStudent={handleEnrollStudent}
@@ -565,7 +651,7 @@ export default function ProgramacionPage() {
 // ═══════════════════════════════════════════════════════════════
 function TransversalCard({
   sections, sedes, canEdit, isExpanded, onToggleExpand,
-  onBulkToggle, onToggleLesson, onArchive, onDelete,
+  onBulkToggle, onToggleLesson, onArchive, onDelete, onUpdateDates,
 }: {
   sections: Section[]
   sedes: Sede[]
@@ -576,6 +662,7 @@ function TransversalCard({
   onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => void
   onArchive: (sectionId: string, name: string, archive: boolean) => void
   onDelete: (sectionId: string, name: string) => void
+  onUpdateDates: (sectionId: string, startDate: string | null, endDate: string | null) => void
 }) {
   const course = sections[0].course
   const totalEnrolled = sections.reduce((s, sec) => s + sec.enrolledCount, 0)
@@ -649,13 +736,25 @@ function TransversalCard({
               Ver detalle por sección individual
             </summary>
             <div className="mt-2 space-y-2">
-              {sections.map((sec) => (
+              {sections.map((sec) => {
+                const secStatus = getSectionDateStatus(sec.startDate, sec.endDate)
+                return (
                 <div key={sec.id} className={`bg-white border border-gray-200 rounded p-2 ${sec.isArchived ? 'opacity-70 bg-gray-50' : ''}`}>
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <p className="text-[11px] font-semibold text-gray-700 flex items-center gap-1.5 flex-wrap">
                       {sec.name}
                       {sec.sedeId && <code className="font-mono text-emerald-700 text-[10px]">[{sedes.find((s) => s.id === sec.sedeId)?.code}]</code>}
                       <span className="text-gray-400 font-normal">· {sec.enrolledCount} estudiantes</span>
+                      {(sec.startDate || sec.endDate) && (
+                        <span className="text-gray-500 font-normal">
+                          · {sec.startDate ? formatDateShort(sec.startDate) : '—'} → {sec.endDate ? formatDateShort(sec.endDate) : '—'}
+                        </span>
+                      )}
+                      {secStatus && !sec.isArchived && (
+                        <Badge variant="outline" className={`text-[9px] uppercase ${secStatus.className}`}>
+                          {secStatus.label}
+                        </Badge>
+                      )}
                       {sec.isArchived && (
                         <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[9px] uppercase">
                           <Archive className="h-2 w-2 mr-0.5" />
@@ -665,6 +764,9 @@ function TransversalCard({
                     </p>
                     {canEdit && (
                       <div className="flex items-center gap-1 shrink-0">
+                        {!sec.isArchived && (
+                          <SubSectionDateEditor section={sec} onUpdateDates={onUpdateDates} />
+                        )}
                         <button
                           type="button"
                           onClick={() => onArchive(sec.id, sec.name, !sec.isArchived)}
@@ -703,12 +805,80 @@ function TransversalCard({
                     })}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </details>
         </div>
       )}
     </Card>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SubSectionDateEditor: mini-popover para editar fechas de una sección
+// dentro del TransversalCard sin abrir un modal completo.
+// ═══════════════════════════════════════════════════════════════
+function SubSectionDateEditor({
+  section, onUpdateDates,
+}: {
+  section: Section
+  onUpdateDates: (sectionId: string, startDate: string | null, endDate: string | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [startInput, setStartInput] = useState(isoToInputDate(section.startDate))
+  const [endInput, setEndInput] = useState(isoToInputDate(section.endDate))
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setStartInput(isoToInputDate(section.startDate))
+          setEndInput(isoToInputDate(section.endDate))
+          setOpen(true)
+        }}
+        className="text-[10px] px-1.5 py-0.5 rounded text-indigo-700 hover:bg-indigo-50"
+        title="Editar fechas de inicio/fin"
+      >
+        Fechas
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1 bg-white border border-indigo-200 rounded px-1 py-0.5">
+      <Input
+        type="date"
+        value={startInput}
+        onChange={(e) => setStartInput(e.target.value)}
+        className="h-6 w-28 text-[10px] px-1"
+      />
+      <span className="text-gray-400 text-[10px]">→</span>
+      <Input
+        type="date"
+        value={endInput}
+        onChange={(e) => setEndInput(e.target.value)}
+        className="h-6 w-28 text-[10px] px-1"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          onUpdateDates(section.id, startInput || null, endInput || null)
+          setOpen(false)
+        }}
+        className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+      >
+        OK
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        className="text-[10px] px-1 text-gray-500 hover:text-gray-700"
+      >
+        ✕
+      </button>
+    </div>
   )
 }
 
@@ -890,7 +1060,7 @@ function SectionCard({
   section, sedes, canEdit,
   availableStudents, availableInstructors,
   isExpanded, onToggleExpand,
-  onToggleLesson, onUpdateSede, onDelete, onArchive,
+  onToggleLesson, onUpdateSede, onUpdateDates, onDelete, onArchive,
   onEnrollStudent, onUnenrollStudent, onAssignInstructor, onUnassignInstructor,
 }: {
   section: Section
@@ -902,6 +1072,7 @@ function SectionCard({
   onToggleExpand: () => void
   onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => void
   onUpdateSede: (sectionId: string, sedeId: string | null) => void
+  onUpdateDates: (sectionId: string, startDate: string | null, endDate: string | null) => void
   onDelete: (sectionId: string, name: string) => void
   onArchive: (sectionId: string, name: string, archive: boolean) => void
   onEnrollStudent: (sectionId: string, userId: string) => void
@@ -912,6 +1083,10 @@ function SectionCard({
   const totalLessons = section.course.lessons.length
   const openLessons = section.schedules.length
   const hasEnrollments = section.enrolledCount > 0
+  const dateStatus = getSectionDateStatus(section.startDate, section.endDate)
+  const [editingDates, setEditingDates] = useState(false)
+  const [startInput, setStartInput] = useState(isoToInputDate(section.startDate))
+  const [endInput, setEndInput] = useState(isoToInputDate(section.endDate))
   // Sección archivada → read-only en TODA la UI (no editar sede, no inscribir,
   // no asignar instructores, no abrir/cerrar lecciones).
   const writable = canEdit && !section.isArchived
@@ -931,6 +1106,11 @@ function SectionCard({
                 {section.name}
               </h4>
               <span className="text-xs text-gray-500">· {section.course.title}</span>
+              {dateStatus && !section.isArchived && (
+                <Badge variant="outline" className={`text-[10px] uppercase tracking-wider ${dateStatus.className}`}>
+                  {dateStatus.label}
+                </Badge>
+              )}
               {section.isArchived && (
                 <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase tracking-wider">
                   <Archive className="h-2.5 w-2.5 mr-1" />
@@ -938,11 +1118,18 @@ function SectionCard({
                 </Badge>
               )}
             </div>
-            {section.isArchived && section.archivedAt && (
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Archivada el {formatDate(section.archivedAt)} · read-only
-              </p>
-            )}
+            <div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
+              {(section.startDate || section.endDate) && (
+                <span>
+                  {section.startDate ? formatDateShort(section.startDate) : '—'}
+                  {' → '}
+                  {section.endDate ? formatDateShort(section.endDate) : '—'}
+                </span>
+              )}
+              {section.isArchived && section.archivedAt && (
+                <span>· archivada el {formatDate(section.archivedAt)}</span>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-600 shrink-0">
@@ -996,6 +1183,67 @@ function SectionCard({
                   <Trash2 className="h-3.5 w-3.5 mr-1" />
                   Eliminar
                 </Button>
+              )}
+            </div>
+          )}
+
+          {/* Fechas de dictado */}
+          {canEdit && (
+            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200 flex-wrap text-xs">
+              <label className="font-medium text-gray-700">Fechas:</label>
+              {editingDates ? (
+                <>
+                  <Input
+                    type="date"
+                    value={startInput}
+                    onChange={(e) => setStartInput(e.target.value)}
+                    className="h-7 w-36 text-xs"
+                    placeholder="inicio"
+                  />
+                  <span className="text-gray-400">→</span>
+                  <Input
+                    type="date"
+                    value={endInput}
+                    onChange={(e) => setEndInput(e.target.value)}
+                    className="h-7 w-36 text-xs"
+                    placeholder="fin"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      onUpdateDates(section.id, startInput || null, endInput || null)
+                      setEditingDates(false)
+                    }}
+                    className="h-7"
+                  >
+                    OK
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingDates(false)} className="h-7">
+                    ✕
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="text-gray-700">
+                    {section.startDate ? formatDateShort(section.startDate) : 'sin inicio'}
+                    {' → '}
+                    {section.endDate ? formatDateShort(section.endDate) : 'sin fin'}
+                  </span>
+                  {!section.isArchived && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setStartInput(isoToInputDate(section.startDate))
+                        setEndInput(isoToInputDate(section.endDate))
+                        setEditingDates(true)
+                      }}
+                      className="h-6 px-2 text-[11px] text-indigo-700 hover:bg-indigo-50"
+                    >
+                      Editar
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -1332,9 +1580,13 @@ function NewSectionModal({ open, onOpenChange, periodId, sedes, courses, onCreat
   const [courseId, setCourseId] = useState('')
   const [name, setName] = useState('')
   const [sedeId, setSedeId] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const reset = () => { setCourseId(''); setName(''); setSedeId('') }
+  const reset = () => {
+    setCourseId(''); setName(''); setSedeId(''); setStartDate(''); setEndDate('')
+  }
 
   const handleSubmit = async () => {
     if (!periodId || !courseId || !name.trim()) {
@@ -1346,7 +1598,14 @@ function NewSectionModal({ open, onOpenChange, periodId, sedes, courses, onCreat
       const res = await fetch('/api/admin/sections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseId, periodId, name: name.trim(), sedeId: sedeId || null }),
+        body: JSON.stringify({
+          courseId,
+          periodId,
+          name: name.trim(),
+          sedeId: sedeId || null,
+          startDate: startDate || null,
+          endDate: endDate || null,
+        }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -1389,6 +1648,19 @@ function NewSectionModal({ open, onOpenChange, periodId, sedes, courses, onCreat
               {sedes.map((s) => (<option key={s.id} value={s.id}>{s.code} · {s.name}</option>))}
             </select>
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs font-medium text-gray-700 block mb-1">Fecha de inicio</label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 block mb-1">Fecha de fin</label>
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-500">
+            Las fechas son opcionales pero recomendadas: permiten ordenar las cohorts por inicio y archivar automáticamente las que ya terminaron.
+          </p>
         </div>
         <div className="flex justify-end gap-2 border-t pt-3">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancelar</Button>
