@@ -72,22 +72,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 
-  // Check duplicate solo contra secciones NO archivadas — una archivada con el
-  // mismo nombre no debe bloquear la creación de una nueva cohort (caso típico
-  // de cohorts cíclicas: archivás "Junio 2025" y creás "Junio" para 2026).
+  // Check duplicate solo contra secciones NO archivadas Y de la misma sede.
+  // "Junio" puede existir simultáneamente en ABQ y en IRQ — son cohorts
+  // distintas porque la sede las diferencia. Lo que NO se permite: dos
+  // "Junio" activas en la misma sede del mismo curso+período.
   const cleanName = name.trim()
+  const normalizedSedeId = sedeId || null
   const activeDup = await prisma.section.findFirst({
-    where: { courseId, periodId, name: cleanName, isArchived: false },
+    where: {
+      courseId,
+      periodId,
+      name: cleanName,
+      sedeId: normalizedSedeId,
+      isArchived: false,
+    },
     select: { id: true },
   })
   if (activeDup) {
-    return NextResponse.json({ error: 'Ya existe una sección activa con ese nombre en este curso y período' }, { status: 409 })
+    const scope = normalizedSedeId ? 'en esta sede' : 'sin sede asignada'
+    return NextResponse.json(
+      { error: `Ya existe una sección activa "${cleanName}" ${scope} en este curso y período` },
+      { status: 409 }
+    )
   }
 
-  // Si hay una archivada con el mismo nombre, avisamos para que el usuario
-  // sepa que puede reactivarla en vez de crear una nueva (opcional).
+  // Si hay una archivada con el mismo nombre+sede, avisamos como hint (no error).
   const archivedDup = await prisma.section.findFirst({
-    where: { courseId, periodId, name: cleanName, isArchived: true },
+    where: {
+      courseId,
+      periodId,
+      name: cleanName,
+      sedeId: normalizedSedeId,
+      isArchived: true,
+    },
     select: { id: true, archivedAt: true },
   })
 

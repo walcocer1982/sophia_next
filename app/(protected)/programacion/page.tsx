@@ -466,10 +466,13 @@ export default function ProgramacionPage() {
                     key={courseId}
                     sections={sections}
                     sedes={data.sedes}
+                    canEdit={data.canCreate}
                     isExpanded={expandedTransversales.has(courseId)}
                     onToggleExpand={() => toggleExpand(courseId, setExpandedTransversales)}
                     onBulkToggle={handleBulkToggle}
                     onToggleLesson={handleToggleLesson}
+                    onArchive={handleArchiveSection}
+                    onDelete={handleDeleteSection}
                   />
                 ))}
               </div>
@@ -561,14 +564,18 @@ export default function ProgramacionPage() {
 // permite "Abrir todas" a la vez por lección.
 // ═══════════════════════════════════════════════════════════════
 function TransversalCard({
-  sections, sedes, isExpanded, onToggleExpand, onBulkToggle, onToggleLesson,
+  sections, sedes, canEdit, isExpanded, onToggleExpand,
+  onBulkToggle, onToggleLesson, onArchive, onDelete,
 }: {
   sections: Section[]
   sedes: Sede[]
+  canEdit: boolean
   isExpanded: boolean
   onToggleExpand: () => void
   onBulkToggle: (lessonId: string, sectionIds: string[], publish: boolean, availableAt?: string) => void
   onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => void
+  onArchive: (sectionId: string, name: string, archive: boolean) => void
+  onDelete: (sectionId: string, name: string) => void
 }) {
   const course = sections[0].course
   const totalEnrolled = sections.reduce((s, sec) => s + sec.enrolledCount, 0)
@@ -643,10 +650,42 @@ function TransversalCard({
             </summary>
             <div className="mt-2 space-y-2">
               {sections.map((sec) => (
-                <div key={sec.id} className="bg-white border border-gray-200 rounded p-2">
-                  <p className="text-[11px] font-semibold text-gray-700 mb-1">
-                    {sec.name} {sec.sedeId && <code className="font-mono text-emerald-700 text-[10px]">[{sedes.find((s) => s.id === sec.sedeId)?.code}]</code>}
-                  </p>
+                <div key={sec.id} className={`bg-white border border-gray-200 rounded p-2 ${sec.isArchived ? 'opacity-70 bg-gray-50' : ''}`}>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-[11px] font-semibold text-gray-700 flex items-center gap-1.5 flex-wrap">
+                      {sec.name}
+                      {sec.sedeId && <code className="font-mono text-emerald-700 text-[10px]">[{sedes.find((s) => s.id === sec.sedeId)?.code}]</code>}
+                      <span className="text-gray-400 font-normal">· {sec.enrolledCount} estudiantes</span>
+                      {sec.isArchived && (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[9px] uppercase">
+                          <Archive className="h-2 w-2 mr-0.5" />
+                          Archivada
+                        </Badge>
+                      )}
+                    </p>
+                    {canEdit && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onArchive(sec.id, sec.name, !sec.isArchived)}
+                          className={`text-[10px] px-1.5 py-0.5 rounded ${sec.isArchived ? 'text-emerald-700 hover:bg-emerald-50' : 'text-amber-700 hover:bg-amber-50'}`}
+                          title={sec.isArchived ? 'Reactivar' : 'Archivar (queda read-only)'}
+                        >
+                          {sec.isArchived ? 'Reactivar' : 'Archivar'}
+                        </button>
+                        {sec.enrolledCount === 0 && !sec.isArchived && (
+                          <button
+                            type="button"
+                            onClick={() => onDelete(sec.id, sec.name)}
+                            className="text-[10px] px-1.5 py-0.5 rounded text-red-600 hover:bg-red-50"
+                            title="Eliminar definitivamente (sin estudiantes)"
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <div className="space-y-1">
                     {lessons.map((lesson, idx) => {
                       const schedule = sec.schedules.find((s) => s.lessonId === lesson.id)
@@ -657,6 +696,7 @@ function TransversalCard({
                           lesson={lesson}
                           isOpen={!!schedule}
                           schedule={schedule}
+                          readOnly={sec.isArchived}
                           onToggle={(open, availableAt) => onToggleLesson(sec.id, lesson.id, open, availableAt)}
                         />
                       )
