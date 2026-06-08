@@ -12,6 +12,7 @@ interface ChatMessageProps {
   timestamp?: Date
   isLastMessage?: boolean
   isStreaming?: boolean
+  isError?: boolean
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -20,6 +21,7 @@ export const ChatMessage = memo(function ChatMessage({
   timestamp,
   isLastMessage,
   isStreaming = false,
+  isError = false,
 }: ChatMessageProps) {
   const isUser = role === 'user'
 
@@ -54,6 +56,21 @@ export const ChatMessage = memo(function ChatMessage({
     )
   }
 
+
+  // AI - estado de error: mostrar burbuja visible en vez de un mensaje vacío
+  // (antes un stream fallido se renderizaba en blanco → parecía "no avanza").
+  if (isError) {
+    return (
+      <div className='flex flex-col gap-2'>
+        <div className='flex gap-3 items-start'>
+          <AvatarInstructor name="Sophia" state="idle" />
+          <div className='rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'>
+            {content?.trim() || 'No se pudo generar la respuesta. Intenta enviar tu mensaje de nuevo.'}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // AI:
   return (

@@ -20,7 +20,10 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
   const storageKey = courseContext
     ? `planner-${courseContext.courseId}-${courseContext.lessonId}`
     : 'planner-new'
-  const planner = usePlannerState(courseContext, storageKey)
+  // Modo edición: la lección ya tiene diseño guardado. La DB es la fuente de
+  // verdad, cada sección se autosalva, y NO se corre el welcome ni se regenera.
+  const isEditMode = !!courseContext?.savedData && courseContext.savedData.activities.length > 0
+  const planner = usePlannerState(courseContext, storageKey, { disablePersistence: isEditMode })
   const router = useRouter()
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -127,6 +130,9 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
     if (hasInitialized.current) return
     hasInitialized.current = true
 
+    // Modo edición: sin auto-stream ni regeneración (la DB ya tiene el diseño).
+    if (isEditMode) return
+
     // Skip welcome if we restored from localStorage
     if (planner.hasRestoredState) return
 
@@ -167,8 +173,37 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
     }
   }
 
+  // En modo edición, cada cambio de sección se persiste directo a la DB
+  // (autosave por sección). Los nombres de campo de PlannerData coinciden con
+  // SessionUpdateSchema (tema, objetivo, instrucciones, keyPoints,
+  // contenidoTecnico, activities).
+  const persistField = useCallback(
+    async (field: keyof PlannerData, value: unknown) => {
+      if (!courseContext) return
+      try {
+        const res = await fetch('/api/planner/session/update', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lessonId: courseContext.lessonId, [field]: value }),
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error((err as { error?: string }).error || 'Error al guardar')
+        }
+        toast.success('Cambio guardado')
+      } catch (error) {
+        toast.error((error as Error).message)
+      }
+    },
+    [courseContext]
+  )
+
   const handlePanelEdit = (field: keyof PlannerData, value: unknown) => {
     planner.updateField(field, value as PlannerData[keyof PlannerData])
+    if (isEditMode) {
+      void persistField(field, value)
+    }
   }
 
   const isSessionComplete = planner.data.activities.length > 0
@@ -226,8 +261,9 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
           title={title}
         />
 
-        {/* Save button when session design is complete */}
-        {courseContext && isSessionComplete && (
+        {/* Save button when session design is complete (solo en modo creación;
+            en edición cada sección se autosalva). */}
+        {courseContext && !isEditMode && isSessionComplete && (
           <div className="shrink-0 border-t bg-emerald-50 px-4 py-3">
             <div className="flex items-center justify-between">
               <p className="text-sm text-emerald-700">

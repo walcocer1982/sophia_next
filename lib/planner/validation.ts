@@ -199,5 +199,22 @@ export const SessionSaveSchema = z.object({
   contentJson: z.object({
     // Mismo rango que GeneratedStructureSchema (2-8): permite clases cortas.
     activities: z.array(ActivitySchema).min(2).max(8),
+    // Opcionales: VerificationManager solo manda activities; el planner manda
+    // las 3. Antes se descartaban (Zod strip) y nunca llegaban a la DB.
+    instrucciones: z.array(z.string()).optional(),
+    contenidoTecnico: z.array(KeyPointContenidoSchema).optional(),
   }),
+})
+
+// Actualización PARCIAL de una sesión ya diseñada (modo edición). Todos los
+// campos de contenido son opcionales: el endpoint hace merge sobre lo existente
+// (no pisa subkeys de contentJson). Mapea tema→title, objetivo→objective.
+export const SessionUpdateSchema = z.object({
+  lessonId: z.string().min(1),
+  tema: z.string().min(3).max(200).optional(),
+  objetivo: z.string().min(10).max(500).optional(),
+  instrucciones: z.array(z.string()).optional(),
+  keyPoints: z.array(z.string().min(1)).min(2).max(8).optional(),
+  contenidoTecnico: z.array(KeyPointContenidoSchema).optional(),
+  activities: z.array(ActivitySchema).min(2).max(8).optional(),
 })

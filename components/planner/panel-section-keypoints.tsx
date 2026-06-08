@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Check, Plus, X } from 'lucide-react'
@@ -13,6 +13,13 @@ interface Props {
 
 export function PanelSectionKeypoints({ value, isEditing, onSave }: Props) {
   const [draft, setDraft] = useState<string[]>(value)
+
+  // Re-sincronizar el draft con el valor actual al abrir edición.
+  // Sin esto, el draft queda con el valor del primer montaje (stale).
+  useEffect(() => {
+    if (isEditing) setDraft(value)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing])
 
   if (value.length === 0 && !isEditing) {
     return <p className="text-xs text-gray-400 italic">Pendiente</p>

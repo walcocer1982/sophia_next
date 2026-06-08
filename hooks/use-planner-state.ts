@@ -82,11 +82,17 @@ function computeStatuses(
 
 // ── Hook ──
 
-export function usePlannerState(courseContext?: CourseContext, storageKey?: string) {
+export function usePlannerState(
+  courseContext?: CourseContext,
+  storageKey?: string,
+  options?: { disablePersistence?: boolean }
+) {
   const hasCourseContext = !!courseContext
+  const disablePersistence = options?.disablePersistence ?? false
 
-  // Try to restore from localStorage
-  const savedState = useRef(loadSavedState(storageKey))
+  // Try to restore from localStorage. En modo edición la fuente de verdad es
+  // la DB, así que se ignora localStorage (evita estado desfasado).
+  const savedState = useRef(loadSavedState(disablePersistence ? undefined : storageKey))
   const hasRestoredState = !!savedState.current && savedState.current.messages.length > 0
 
   // Check if lesson has previously saved data in DB
@@ -138,6 +144,7 @@ export function usePlannerState(courseContext?: CourseContext, storageKey?: stri
   // Persist to localStorage on changes (debounced to avoid blocking main thread)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
+    if (disablePersistence) return
     if (!isLoading) {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => {
@@ -145,7 +152,7 @@ export function usePlannerState(courseContext?: CourseContext, storageKey?: stri
       }, 500)
     }
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
-  }, [storageKey, step, data, messages, isLoading])
+  }, [storageKey, step, data, messages, isLoading, disablePersistence])
 
   const sectionStatuses = useMemo(
     () => computeStatuses(step, data, hasCourseContext),

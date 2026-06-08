@@ -67,6 +67,7 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
               timestamp={message.createdAt}
               isLastMessage={isLastMessage}
               isStreaming={message.status === 'streaming' && message.content.length > 0}
+              isError={message.status === 'error'}
             />
           )
         })}
