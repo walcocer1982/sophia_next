@@ -49,8 +49,22 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
           credentials: 'include',
         })
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          throw new Error((err as { error?: string }).error || 'Error al guardar')
+          const err = (await res.json().catch(() => ({}))) as {
+            error?: string
+            details?: { fieldErrors?: Record<string, string[]> }
+          }
+          // Surface el detalle de validación (qué campo y por qué) en la Console
+          // y en el toast, para diagnosticar sin abrir la pestaña Network.
+          const fieldErrors = err.details?.fieldErrors
+          const detail = fieldErrors
+            ? Object.entries(fieldErrors)
+                .map(([k, v]) => `${k}: ${(v || []).join(', ')}`)
+                .join(' | ')
+            : ''
+          console.error('[persistField] PATCH falló — campo:', field, '| respuesta:', err)
+          throw new Error(
+            `${err.error || 'Error al guardar'}${detail ? ` — ${detail}` : ''}`
+          )
         }
         toast.success('Cambio guardado')
       } catch (error) {
