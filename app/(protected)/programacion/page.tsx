@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import {
   CalendarDays, Users, GraduationCap, Calendar, Lock,
-  ChevronDown, ChevronRight, Loader2, Building2, Plus, Trash2, Sparkles,
+  ChevronDown, ChevronRight, Loader2, Building2, Plus, Trash2, Sparkles, Check,
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -398,15 +398,6 @@ function TransversalCard({
   const course = sections[0].course
   const totalEnrolled = sections.reduce((s, sec) => s + sec.enrolledCount, 0)
   const lessons = course.lessons
-  const sectionIds = sections.map((s) => s.id)
-
-  // Cuántas secciones tienen abierta cada lección
-  const openCountByLesson = new Map<string, number>()
-  for (const sec of sections) {
-    for (const sch of sec.schedules) {
-      openCountByLesson.set(sch.lessonId, (openCountByLesson.get(sch.lessonId) ?? 0) + 1)
-    }
-  }
 
   return (
     <Card className="overflow-hidden border-purple-200">
@@ -449,27 +440,24 @@ function TransversalCard({
             </div>
           </div>
 
-          {/* Calendario consolidado con "Abrir todas" */}
+          {/* Calendario consolidado: por lección, una fila por SEDE con check + fecha propia */}
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wider text-purple-700 mb-2">
-              📅 Calendario consolidado
+              📅 Calendario por sede
             </h4>
-            <div className="space-y-1.5">
-              {lessons.map((lesson, idx) => {
-                const openCount = openCountByLesson.get(lesson.id) ?? 0
-                return (
-                  <BulkLessonRow
-                    key={lesson.id}
-                    index={idx + 1}
-                    lesson={lesson}
-                    openCount={openCount}
-                    totalSections={sections.length}
-                    onBulkToggle={(publish, availableAt) =>
-                      onBulkToggle(lesson.id, sectionIds, publish, availableAt)
-                    }
-                  />
-                )
-              })}
+            <div className="space-y-3">
+              {lessons.map((lesson, idx) => (
+                <BulkLessonRow
+                  key={lesson.id}
+                  index={idx + 1}
+                  lesson={lesson}
+                  sections={sections}
+                  sedes={sedes}
+                  onBulkToggle={(sectionIds, publish, availableAt) =>
+                    onBulkToggle(lesson.id, sectionIds, publish, availableAt)
+                  }
+                />
+              ))}
             </div>
           </div>
 
@@ -510,76 +498,172 @@ function TransversalCard({
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BulkLessonRow: una lección en el calendario consolidado de un transversal
+// BulkLessonRow: una lección con UNA FILA POR SEDE. Cada sede tiene su
+// propia fecha de apertura. Click en el toggle aplica para esa sede
+// (todas sus secciones a la vez).
 // ═══════════════════════════════════════════════════════════════
+interface SedeGroup {
+  key: string
+  sedeId: string | null
+  code: string
+  name: string
+  sectionIds: string[]
+  openSectionIds: string[]
+  defaultDate: string
+}
+
+function groupSectionsBySede(
+  sections: Section[],
+  sedes: Sede[],
+  lessonId: string,
+): SedeGroup[] {
+  const map = new Map<string | null, Section[]>()
+  for (const s of sections) {
+    const arr = map.get(s.sedeId) ?? []
+    arr.push(s)
+    map.set(s.sedeId, arr)
+  }
+  return Array.from(map.entries()).map(([sedeId, secs]) => {
+    const sede = sedes.find((x) => x.id === sedeId)
+    const openSecs = secs.filter((s) =>
+      s.schedules.some((sch) => sch.lessonId === lessonId)
+    )
+    // Fecha por defecto: la de la 1ra sección abierta, o hoy.
+    const firstOpen = openSecs[0]?.schedules.find((sch) => sch.lessonId === lessonId)
+    const defaultDate = firstOpen
+      ? new Date(firstOpen.availableAt).toISOString().slice(0, 10)
+      : todayISO()
+    return {
+      key: sedeId ?? 'no-sede',
+      sedeId,
+      code: sede?.code ?? '—',
+      name: sede?.name ?? 'Sin sede',
+      sectionIds: secs.map((s) => s.id),
+      openSectionIds: openSecs.map((s) => s.id),
+      defaultDate,
+    }
+  })
+}
+
 function BulkLessonRow({
-  index, lesson, openCount, totalSections, onBulkToggle,
+  index, lesson, sections, sedes, onBulkToggle,
 }: {
   index: number
   lesson: Lesson
-  openCount: number
-  totalSections: number
-  onBulkToggle: (publish: boolean, availableAt?: string) => void
+  sections: Section[]
+  sedes: Sede[]
+  onBulkToggle: (sectionIds: string[], publish: boolean, availableAt?: string) => void
 }) {
-  const [editing, setEditing] = useState(false)
-  const [dateInput, setDateInput] = useState(todayISO())
-  const [submitting, setSubmitting] = useState(false)
-  const allOpen = openCount === totalSections
-  const noneOpen = openCount === 0
+  const sedeGroups = groupSectionsBySede(sections, sedes, lesson.id)
+  const totalOpen = sedeGroups.reduce((sum, g) => sum + g.openSectionIds.length, 0)
+  const totalSections = sedeGroups.reduce((sum, g) => sum + g.sectionIds.length, 0)
+  const isCompact = sedeGroups.length === 1
 
-  const handleOpenAll = async () => {
-    setSubmitting(true)
-    await onBulkToggle(true, dateInput)
-    setSubmitting(false)
-    setEditing(false)
-  }
-  const handleCloseAll = async () => {
-    if (!confirm(`¿Cerrar "${lesson.title}" en todas las ${totalSections} secciones?`)) return
-    setSubmitting(true)
-    await onBulkToggle(false)
-    setSubmitting(false)
+  return (
+    <div className="border border-gray-200 rounded-md p-3 bg-white">
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="text-[11px] text-gray-400 w-5 shrink-0 font-mono">{index}</span>
+        <p className="text-sm font-medium text-gray-900 flex-1">{lesson.title}</p>
+        <span className="text-[10px] text-gray-500 shrink-0">
+          {totalOpen}/{totalSections} secc. abiertas
+        </span>
+      </div>
+      <div className={isCompact ? 'ml-7' : 'ml-7 space-y-1.5'}>
+        {sedeGroups.map((g) => (
+          <SedeToggleRow
+            key={g.key}
+            group={g}
+            lessonTitle={lesson.title}
+            onToggle={(publish, availableAt) =>
+              onBulkToggle(g.sectionIds, publish, availableAt)
+            }
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SedeToggleRow({
+  group, lessonTitle, onToggle,
+}: {
+  group: SedeGroup
+  lessonTitle: string
+  onToggle: (publish: boolean, availableAt?: string) => void
+}) {
+  const [date, setDate] = useState(group.defaultDate)
+  const [submitting, setSubmitting] = useState(false)
+
+  const total = group.sectionIds.length
+  const open = group.openSectionIds.length
+  const allOpen = total > 0 && open === total
+  const noneOpen = open === 0
+  const partial = open > 0 && open < total
+
+  const handleClick = async () => {
+    if (allOpen) {
+      if (!confirm(`¿Cerrar "${lessonTitle}" en ${group.code} (${total} secc${total !== 1 ? 'iones' : 'ión'})?`)) return
+      setSubmitting(true)
+      await onToggle(false)
+      setSubmitting(false)
+    } else {
+      // open all (partial → completar)
+      setSubmitting(true)
+      await onToggle(true, date)
+      setSubmitting(false)
+    }
   }
 
   return (
-    <div className={`flex items-center gap-2 p-2 rounded-md ${
+    <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-sm ${
       allOpen ? 'bg-green-50 border border-green-200' :
-      noneOpen ? 'bg-white border border-gray-200' :
-      'bg-amber-50 border border-amber-200'
+      partial ? 'bg-amber-50 border border-amber-200' :
+      'bg-gray-50 border border-gray-200'
     }`}>
-      <span className="text-[10px] text-gray-400 w-5 shrink-0 font-mono">{index}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 truncate">{lesson.title}</p>
-        <p className="text-[11px] text-gray-500">
-          Abierta en <strong className={allOpen ? 'text-green-700' : noneOpen ? 'text-gray-500' : 'text-amber-700'}>
-            {openCount}/{totalSections}
-          </strong> secciones
-        </p>
-      </div>
+      {/* Checkbox visual */}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={submitting}
+        className="shrink-0"
+        title={allOpen ? 'Cerrar en esta sede' : 'Abrir en esta sede'}
+      >
+        {submitting ? (
+          <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+        ) : allOpen ? (
+          <div className="h-4 w-4 rounded bg-green-600 flex items-center justify-center">
+            <Check className="h-3 w-3 text-white" strokeWidth={3} />
+          </div>
+        ) : partial ? (
+          <div className="h-4 w-4 rounded bg-amber-500 flex items-center justify-center">
+            <div className="h-1.5 w-1.5 bg-white rounded-sm" />
+          </div>
+        ) : (
+          <div className="h-4 w-4 rounded border-2 border-gray-300 bg-white" />
+        )}
+      </button>
 
-      {editing ? (
-        <div className="flex items-center gap-2">
-          <Input type="date" value={dateInput} onChange={(e) => setDateInput(e.target.value)} className="text-xs h-8 w-36" />
-          <Button size="sm" onClick={handleOpenAll} disabled={submitting} className="h-8">
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Abrir todas'}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setEditing(false)} className="h-8">Cancelar</Button>
-        </div>
-      ) : (
-        <div className="flex gap-1.5">
-          {!allOpen && (
-            <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="h-8 gap-1 text-green-700 hover:bg-green-50">
-              <Calendar className="h-3.5 w-3.5" />
-              Abrir todas
-            </Button>
-          )}
-          {openCount > 0 && (
-            <Button size="sm" variant="outline" onClick={handleCloseAll} disabled={submitting} className="h-8 gap-1 text-amber-700 hover:bg-amber-50">
-              {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
-              Cerrar todas
-            </Button>
-          )}
-        </div>
-      )}
+      {/* Sede code + name */}
+      <code className="font-mono font-bold text-xs text-emerald-700 w-12 shrink-0">{group.code}</code>
+
+      {/* Status count */}
+      <span className={`text-[11px] tabular-nums w-16 shrink-0 ${
+        allOpen ? 'text-green-700 font-semibold' :
+        partial ? 'text-amber-700 font-semibold' :
+        'text-gray-500'
+      }`}>
+        {open}/{total} secc
+      </span>
+
+      {/* Date picker — ancho consistente */}
+      <Input
+        type="date"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+        disabled={submitting}
+        className="h-7 text-xs w-36 ml-auto"
+        title={allOpen ? 'Fecha actual (cambiar requiere cerrar + reabrir)' : 'Fecha al abrir'}
+      />
     </div>
   )
 }
