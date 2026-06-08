@@ -34,6 +34,32 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
 
   const extra = courseContext ? { courseContext } : undefined
 
+  // En modo edición, persiste un campo directo a la DB (autosave). Los nombres
+  // de campo de PlannerData coinciden con SessionUpdateSchema (tema, objetivo,
+  // instrucciones, keyPoints, contenidoTecnico, activities). Definido aquí
+  // arriba para poder reusarlo tanto en el panel como en el callback del chat.
+  const persistField = useCallback(
+    async (field: keyof PlannerData, value: unknown) => {
+      if (!courseContext) return
+      try {
+        const res = await fetch('/api/planner/session/update', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lessonId: courseContext.lessonId, [field]: value }),
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error((err as { error?: string }).error || 'Error al guardar')
+        }
+        toast.success('Cambio guardado')
+      } catch (error) {
+        toast.error((error as Error).message)
+      }
+    },
+    [courseContext]
+  )
+
   const handleStop = useCallback(() => {
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
@@ -76,6 +102,11 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
       },
       (field, value) => {
         planner.updateField(field as keyof PlannerData, value as PlannerData[keyof PlannerData])
+        // En modo edición, persistir también lo que aplica el chat: la IA
+        // regenera y el instructor aprueba ("si") → debe guardarse a la DB.
+        if (isEditMode) {
+          void persistField(field as keyof PlannerData, value)
+        }
       },
       (newStep) => {
         const typedStep = newStep as PlannerStep
@@ -108,7 +139,7 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
     )
 
     return pendingStepRef.current
-  }, [planner, extra])
+  }, [planner, extra, isEditMode, persistField])
 
   const sendFollowUp = useCallback(async (newStep: PlannerStep) => {
     await new Promise(r => setTimeout(r, 100))
@@ -172,32 +203,6 @@ export function PlannerLayout({ courseContext }: PlannerLayoutProps) {
       await sendFollowUp(nextStep)
     }
   }
-
-  // En modo edición, cada cambio de sección se persiste directo a la DB
-  // (autosave por sección). Los nombres de campo de PlannerData coinciden con
-  // SessionUpdateSchema (tema, objetivo, instrucciones, keyPoints,
-  // contenidoTecnico, activities).
-  const persistField = useCallback(
-    async (field: keyof PlannerData, value: unknown) => {
-      if (!courseContext) return
-      try {
-        const res = await fetch('/api/planner/session/update', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lessonId: courseContext.lessonId, [field]: value }),
-          credentials: 'include',
-        })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          throw new Error((err as { error?: string }).error || 'Error al guardar')
-        }
-        toast.success('Cambio guardado')
-      } catch (error) {
-        toast.error((error as Error).message)
-      }
-    },
-    [courseContext]
-  )
 
   const handlePanelEdit = (field: keyof PlannerData, value: unknown) => {
     planner.updateField(field, value as PlannerData[keyof PlannerData])
