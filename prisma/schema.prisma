@@ -421,7 +421,11 @@ model Section {
   enrollments Enrollment[]
   schedules   SectionLessonSchedule[]
 
-  @@unique([courseId, periodId, name])
+  // NOTA: no usamos @@unique sobre (courseId, periodId, name) porque romperia
+  // el caso normal de cohorts cíclicas: archivás "Junio 2025-A" y luego querés
+  // crear "Junio 2026-A" — el archivado seguiría reservando el slot. La unicidad
+  // se valida en el endpoint POST solo contra secciones no archivadas.
+  @@index([courseId, periodId, name])
   @@index([courseId])
   @@index([periodId])
   @@index([sedeId])

@@ -72,19 +72,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 
-  // Check duplicate
-  const existing = await prisma.section.findUnique({
-    where: { courseId_periodId_name: { courseId, periodId, name: name.trim() } },
+  // Check duplicate solo contra secciones NO archivadas — una archivada con el
+  // mismo nombre no debe bloquear la creación de una nueva cohort (caso típico
+  // de cohorts cíclicas: archivás "Junio 2025" y creás "Junio" para 2026).
+  const cleanName = name.trim()
+  const activeDup = await prisma.section.findFirst({
+    where: { courseId, periodId, name: cleanName, isArchived: false },
+    select: { id: true },
   })
-  if (existing) {
-    return NextResponse.json({ error: 'Esta sección ya existe' }, { status: 409 })
+  if (activeDup) {
+    return NextResponse.json({ error: 'Ya existe una sección activa con ese nombre en este curso y período' }, { status: 409 })
   }
+
+  // Si hay una archivada con el mismo nombre, avisamos para que el usuario
+  // sepa que puede reactivarla en vez de crear una nueva (opcional).
+  const archivedDup = await prisma.section.findFirst({
+    where: { courseId, periodId, name: cleanName, isArchived: true },
+    select: { id: true, archivedAt: true },
+  })
 
   const section = await prisma.section.create({
     data: {
       courseId,
       periodId,
-      name: name.trim(),
+      name: cleanName,
       sedeId: sedeId || null,
     },
     include: {
@@ -93,5 +104,15 @@ export async function POST(request: Request) {
     },
   })
 
-  return NextResponse.json(section, { status: 201 })
+  return NextResponse.json(
+    {
+      ...section,
+      // Hint para el cliente: si había una archivada con el mismo nombre, lo
+      // mencionamos como info (no es un error).
+      _hint: archivedDup
+        ? `Nota: existe una sección archivada con este mismo nombre (id: ${archivedDup.id}).`
+        : null,
+    },
+    { status: 201 }
+  )
 }
