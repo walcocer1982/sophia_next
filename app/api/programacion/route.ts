@@ -28,7 +28,8 @@ export async function GET(request: Request) {
   }
 
   // ?includeArchived=true incluye los períodos cerrados (isActive=false)
-  // y sus secciones. Default: false para mantener la vista limpia.
+  // Y las secciones archivadas (isArchived=true). Default: false.
+  // Filtros independientes pero compartidos en una flag — UI más simple.
   const { searchParams } = new URL(request.url)
   const includeArchived = searchParams.get('includeArchived') === 'true'
 
@@ -37,6 +38,7 @@ export async function GET(request: Request) {
     course: { track: 'REGULAR'; deletedAt: null }
     id?: { in: string[] }
     period?: { isActive: boolean }
+    isArchived?: boolean
   } = {
     course: { track: 'REGULAR', deletedAt: null },
   }
@@ -51,9 +53,14 @@ export async function GET(request: Request) {
     }
   }
 
-  // Si no se incluye archived, filtrar secciones de períodos cerrados.
+  // Si no se incluye archived, filtrar secciones de períodos cerrados Y
+  // secciones individualmente archivadas.
   if (!includeArchived) {
-    sectionWhere = { ...sectionWhere, period: { isActive: true } }
+    sectionWhere = {
+      ...sectionWhere,
+      period: { isActive: true },
+      isArchived: false,
+    }
   }
 
   const [periods, sedes, sections] = await Promise.all([
@@ -69,12 +76,14 @@ export async function GET(request: Request) {
     }),
     prisma.section.findMany({
       where: sectionWhere,
-      orderBy: [{ name: 'asc' }],
+      orderBy: [{ isArchived: 'asc' }, { name: 'asc' }],
       select: {
         id: true,
         name: true,
         sedeId: true,
         periodId: true,
+        isArchived: true,
+        archivedAt: true,
         course: {
           select: {
             id: true,
@@ -91,7 +100,11 @@ export async function GET(request: Request) {
           },
         },
         instructors: {
-          select: { user: { select: { id: true, name: true } } },
+          select: { user: { select: { id: true, name: true, email: true } } },
+        },
+        enrollments: {
+          orderBy: { user: { name: 'asc' } },
+          select: { user: { select: { id: true, name: true, email: true } } },
         },
         schedules: {
           select: { lessonId: true, availableAt: true, closesAfterHours: true },
@@ -111,6 +124,22 @@ export async function GET(request: Request) {
       })
     : []
 
+  // Usuarios disponibles para inscribir / asignar como instructor
+  const [availableStudents, availableInstructors] = canCreate
+    ? await Promise.all([
+        prisma.user.findMany({
+          where: { role: 'STUDENT' },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, email: true },
+        }),
+        prisma.user.findMany({
+          where: { role: { in: ['ADMIN', 'SUPERADMIN', 'INSTRUCTOR'] } },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, email: true, role: true },
+        }),
+      ])
+    : [[], []]
+
   return NextResponse.json({
     currentUserRole: role,
     canCreate,
@@ -122,6 +151,8 @@ export async function GET(request: Request) {
       name: s.name,
       sedeId: s.sedeId,
       periodId: s.periodId,
+      isArchived: s.isArchived,
+      archivedAt: s.archivedAt,
       course: {
         id: s.course.id,
         title: s.course.title,
@@ -130,9 +161,15 @@ export async function GET(request: Request) {
         lessons: s.course.lessons,
       },
       enrolledCount: s._count.enrollments,
+      enrolledStudents: s.enrollments.map((e) => ({
+        id: e.user.id,
+        name: e.user.name,
+        email: e.user.email,
+      })),
       instructors: s.instructors.map((i) => ({
         id: i.user.id,
         name: i.user.name,
+        email: i.user.email,
       })),
       schedules: s.schedules.map((sch) => ({
         lessonId: sch.lessonId,
@@ -140,5 +177,7 @@ export async function GET(request: Request) {
         closesAfterHours: sch.closesAfterHours,
       })),
     })),
+    availableStudents,
+    availableInstructors,
   })
 }

@@ -35,6 +35,18 @@ export async function POST(request: Request) {
 
   // === SECTION-SPECIFIC PUBLISH ===
   if (sectionId) {
+    // Verify section is not archived (read-only)
+    const sectionRow = await prisma.section.findUnique({
+      where: { id: sectionId },
+      select: { isArchived: true },
+    })
+    if (sectionRow?.isArchived) {
+      return NextResponse.json(
+        { error: 'Sección archivada (read-only). Desarchivala para programar lecciones.' },
+        { status: 409 }
+      )
+    }
+
     // Verify user is lead/superadmin, career-match admin, or section instructor
     const isLead = isOwnerOrSuperadmin(session, lesson.course.userId)
     const isCareerAdmin = isAdminSameCareer(session, lesson.course.careerId)

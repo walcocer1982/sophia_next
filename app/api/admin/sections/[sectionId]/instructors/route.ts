@@ -29,18 +29,25 @@ export async function POST(
     return NextResponse.json({ error: 'Sección no encontrada' }, { status: 404 })
   }
 
+  if (section.isArchived) {
+    return NextResponse.json(
+      { error: 'Sección archivada (read-only). Desarchivala para asignar instructores.' },
+      { status: 409 }
+    )
+  }
+
   if (!isOwnerOrSuperadmin(session, section.course.userId)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 
-  // Verify target user is ADMIN
+  // Verify target user has a staff role
   const targetUser = await prisma.user.findUnique({
     where: { id: userId },
     select: { role: true },
   })
 
-  if (!targetUser || (targetUser.role !== 'ADMIN' && targetUser.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'El usuario debe ser instructor' }, { status: 400 })
+  if (!targetUser || !['INSTRUCTOR', 'ADMIN', 'SUPERADMIN'].includes(targetUser.role)) {
+    return NextResponse.json({ error: 'El usuario debe tener rol de instructor o superior' }, { status: 400 })
   }
 
   const assignment = await prisma.sectionInstructor.upsert({
@@ -71,6 +78,13 @@ export async function DELETE(
 
   if (!section) {
     return NextResponse.json({ error: 'Sección no encontrada' }, { status: 404 })
+  }
+
+  if (section.isArchived) {
+    return NextResponse.json(
+      { error: 'Sección archivada (read-only). Desarchivala para modificar instructores.' },
+      { status: 409 }
+    )
   }
 
   if (!isOwnerOrSuperadmin(session, section.course.userId)) {

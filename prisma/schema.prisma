@@ -406,7 +406,13 @@ model Section {
   // romper data legacy; el plan es hacerlo obligatorio una vez asignadas
   // todas las sedes a las secciones existentes via script.
   sedeId    String?
-  createdAt DateTime @default(now())
+  // Sección archivada = read-only histórico. La cohort terminó, los datos
+  // se conservan pero no se permiten más mutaciones. Independiente del
+  // período: un período activo puede tener secciones archivadas si esa
+  // cohort acabó antes que las demás del mismo período.
+  isArchived Boolean   @default(false)
+  archivedAt DateTime?
+  createdAt DateTime  @default(now())
 
   course      Course                  @relation(fields: [courseId], references: [id])
   period      AcademicPeriod          @relation(fields: [periodId], references: [id])
@@ -419,6 +425,7 @@ model Section {
   @@index([courseId])
   @@index([periodId])
   @@index([sedeId])
+  @@index([isArchived])
 }
 
 model SectionInstructor {

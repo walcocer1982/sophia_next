@@ -50,6 +50,13 @@ export async function POST(
     return NextResponse.json({ error: 'Sección no encontrada' }, { status: 404 })
   }
 
+  if (section.isArchived) {
+    return NextResponse.json(
+      { error: 'Sección archivada (read-only). Desarchivala para inscribir.' },
+      { status: 409 }
+    )
+  }
+
   if (!isOwnerOrSuperadmin(session, section.course.userId)) {
     // Also allow section instructors
     const isSectionInstructor = await prisma.sectionInstructor.findUnique({
@@ -93,6 +100,13 @@ export async function DELETE(
 
   if (!section) {
     return NextResponse.json({ error: 'Sección no encontrada' }, { status: 404 })
+  }
+
+  if (section.isArchived) {
+    return NextResponse.json(
+      { error: 'Sección archivada (read-only). Desarchivala para modificar inscripciones.' },
+      { status: 409 }
+    )
   }
 
   if (!isOwnerOrSuperadmin(session, section.course.userId)) {

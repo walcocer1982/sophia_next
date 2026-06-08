@@ -60,6 +60,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No autorizado para este curso' }, { status: 403 })
   }
 
+  // Excluir secciones archivadas — silenciosamente las saltamos para que el
+  // bulk no falle si una sola está archivada. UI debería filtrarlas igual.
+  const liveSections = await prisma.section.findMany({
+    where: { id: { in: body.sectionIds }, isArchived: false },
+    select: { id: true },
+  })
+  const liveSectionIds = liveSections.map((s) => s.id)
+  if (liveSectionIds.length === 0) {
+    return NextResponse.json(
+      { error: 'Todas las secciones seleccionadas están archivadas (read-only)' },
+      { status: 409 }
+    )
+  }
+
   const closesAfterHours = body.closesAfterHours && body.closesAfterHours > 0 ? body.closesAfterHours : 3
 
   if (body.publish) {
@@ -68,9 +82,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'availableAt inválida' }, { status: 400 })
     }
 
-    // Upsert por cada sectionId
+    // Upsert por cada sectionId (solo secciones activas)
     const results = await Promise.all(
-      body.sectionIds.map((sectionId) =>
+      liveSectionIds.map((sectionId) =>
         prisma.sectionLessonSchedule.upsert({
           where: { sectionId_lessonId: { sectionId, lessonId: body.lessonId! } },
           create: { sectionId, lessonId: body.lessonId!, availableAt, closesAfterHours },
@@ -97,11 +111,11 @@ export async function POST(request: Request) {
       action: 'opened',
     })
   } else {
-    // Cerrar: deleteMany
+    // Cerrar: deleteMany (solo secciones activas)
     const result = await prisma.sectionLessonSchedule.deleteMany({
       where: {
         lessonId: body.lessonId,
-        sectionId: { in: body.sectionIds },
+        sectionId: { in: liveSectionIds },
       },
     })
 

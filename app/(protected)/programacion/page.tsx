@@ -26,11 +26,15 @@ interface Schedule {
   closesAfterHours: number
 }
 interface CareerMini { id: string; code: string | null; name: string }
+interface UserMini { id: string; name: string | null; email: string }
+interface InstructorOption { id: string; name: string | null; email: string; role: string }
 interface Section {
   id: string
   name: string
   sedeId: string | null
   periodId: string
+  isArchived: boolean
+  archivedAt: string | null
   course: {
     id: string
     title: string
@@ -39,7 +43,8 @@ interface Section {
     lessons: Lesson[]
   }
   enrolledCount: number
-  instructors: { id: string; name: string | null }[]
+  enrolledStudents: UserMini[]
+  instructors: UserMini[]
   schedules: Schedule[]
 }
 interface Period { id: string; name: string; isActive: boolean }
@@ -52,6 +57,8 @@ interface ProgramacionData {
   sedes: Sede[]
   regularCourses: RegularCourse[]
   sections: Section[]
+  availableStudents: UserMini[]
+  availableInstructors: InstructorOption[]
 }
 
 function formatDate(iso: string) {
@@ -203,7 +210,7 @@ export default function ProgramacionPage() {
   }
 
   const handleDeleteSection = async (sectionId: string, name: string) => {
-    if (!confirm(`¿Eliminar la sección "${name}"? Solo funciona si no tiene estudiantes.`)) return
+    if (!confirm(`¿Eliminar la sección "${name}"? Solo funciona si no tiene estudiantes (es definitivo).`)) return
     try {
       const res = await fetch(`/api/admin/sections/${sectionId}`, { method: 'DELETE' })
       if (!res.ok) {
@@ -211,6 +218,102 @@ export default function ProgramacionPage() {
         throw new Error(err.error || 'Error')
       }
       toast.success('Sección eliminada')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  const handleArchiveSection = async (sectionId: string, name: string, archive: boolean) => {
+    const msg = archive
+      ? `¿Archivar la sección "${name}"? Quedará read-only (histórico). Los datos se conservan y podés desarchivarla cuando quieras.`
+      : `¿Reactivar la sección "${name}"? Volverá a ser editable.`
+    if (!confirm(msg)) return
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isArchived: archive }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success(archive ? 'Sección archivada' : 'Sección reactivada')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  const handleEnrollStudent = async (sectionId: string, userId: string) => {
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}/enrollments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: [userId] }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success('Estudiante inscripto')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  const handleUnenrollStudent = async (sectionId: string, userId: string, name: string) => {
+    if (!confirm(`¿Quitar a "${name || userId}" de la sección?`)) return
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}/enrollments`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success('Estudiante removido')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  const handleAssignInstructor = async (sectionId: string, userId: string) => {
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}/instructors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success('Instructor asignado')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  const handleUnassignInstructor = async (sectionId: string, userId: string, name: string) => {
+    if (!confirm(`¿Quitar a "${name || userId}" como instructor?`)) return
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}/instructors`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success('Instructor removido')
       await refetch()
     } catch (e) {
       toast.error((e as Error).message)
@@ -313,7 +416,7 @@ export default function ProgramacionPage() {
                 onChange={(e) => setIncludeArchived(e.target.checked)}
                 className="rounded"
               />
-              <span>Ver también períodos cerrados</span>
+              <span>Ver también períodos y secciones archivados</span>
             </label>
             <span>
               {totalSections} sección{totalSections !== 1 ? 'es' : ''} ·{' '}
@@ -418,11 +521,18 @@ export default function ProgramacionPage() {
                               section={sec}
                               sedes={data.sedes}
                               canEdit={data.canCreate}
+                              availableStudents={data.availableStudents}
+                              availableInstructors={data.availableInstructors}
                               isExpanded={expandedSections.has(sec.id)}
                               onToggleExpand={() => toggleExpand(sec.id, setExpandedSections)}
                               onToggleLesson={handleToggleLesson}
                               onUpdateSede={handleUpdateSectionSede}
                               onDelete={handleDeleteSection}
+                              onArchive={handleArchiveSection}
+                              onEnrollStudent={handleEnrollStudent}
+                              onUnenrollStudent={handleUnenrollStudent}
+                              onAssignInstructor={handleAssignInstructor}
+                              onUnassignInstructor={handleUnassignInstructor}
                             />
                           ))}
                         </div>
@@ -737,22 +847,37 @@ function SedeToggleRow({
 // SectionCard: sección REGULAR (SPECIALIZATION) con su calendario individual
 // ═══════════════════════════════════════════════════════════════
 function SectionCard({
-  section, sedes, canEdit, isExpanded, onToggleExpand, onToggleLesson, onUpdateSede, onDelete,
+  section, sedes, canEdit,
+  availableStudents, availableInstructors,
+  isExpanded, onToggleExpand,
+  onToggleLesson, onUpdateSede, onDelete, onArchive,
+  onEnrollStudent, onUnenrollStudent, onAssignInstructor, onUnassignInstructor,
 }: {
   section: Section
   sedes: Sede[]
   canEdit: boolean
+  availableStudents: UserMini[]
+  availableInstructors: InstructorOption[]
   isExpanded: boolean
   onToggleExpand: () => void
   onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => void
   onUpdateSede: (sectionId: string, sedeId: string | null) => void
   onDelete: (sectionId: string, name: string) => void
+  onArchive: (sectionId: string, name: string, archive: boolean) => void
+  onEnrollStudent: (sectionId: string, userId: string) => void
+  onUnenrollStudent: (sectionId: string, userId: string, name: string) => void
+  onAssignInstructor: (sectionId: string, userId: string) => void
+  onUnassignInstructor: (sectionId: string, userId: string, name: string) => void
 }) {
   const totalLessons = section.course.lessons.length
   const openLessons = section.schedules.length
+  const hasEnrollments = section.enrolledCount > 0
+  // Sección archivada → read-only en TODA la UI (no editar sede, no inscribir,
+  // no asignar instructores, no abrir/cerrar lecciones).
+  const writable = canEdit && !section.isArchived
 
   return (
-    <Card className="overflow-hidden">
+    <Card className={`overflow-hidden ${section.isArchived ? 'bg-gray-50/60 border-gray-300 opacity-90' : ''}`}>
       <button
         type="button"
         onClick={onToggleExpand}
@@ -762,9 +887,22 @@ function SectionCard({
           {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="font-semibold text-gray-900 text-sm">{section.name}</h4>
+              <h4 className={`font-semibold text-sm ${section.isArchived ? 'text-gray-500' : 'text-gray-900'}`}>
+                {section.name}
+              </h4>
               <span className="text-xs text-gray-500">· {section.course.title}</span>
+              {section.isArchived && (
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase tracking-wider">
+                  <Archive className="h-2.5 w-2.5 mr-1" />
+                  Archivada
+                </Badge>
+              )}
             </div>
+            {section.isArchived && section.archivedAt && (
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                Archivada el {formatDate(section.archivedAt)} · read-only
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-600 shrink-0">
@@ -779,30 +917,81 @@ function SectionCard({
       {isExpanded && (
         <div className="border-t bg-gray-50/30 p-3 space-y-2">
           {canEdit && (
-            <div className="flex items-center gap-3 mb-2 pb-2 border-b border-gray-200">
+            <div className="flex items-center gap-3 mb-2 pb-2 border-b border-gray-200 flex-wrap">
               <label className="text-xs font-medium text-gray-700">Sede:</label>
               <select
                 value={section.sedeId ?? ''}
                 onChange={(e) => onUpdateSede(section.id, e.target.value || null)}
-                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+                disabled={section.isArchived}
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white disabled:bg-gray-100 disabled:text-gray-400"
               >
                 <option value="">— sin sede —</option>
                 {sedes.map((s) => (<option key={s.id} value={s.id}>{s.code} · {s.name}</option>))}
               </select>
-              <Button size="sm" variant="ghost" onClick={() => onDelete(section.id, section.name)} className="ml-auto h-7 px-2 text-red-600 hover:bg-red-50">
-                <Trash2 className="h-3.5 w-3.5 mr-1" />
-                Eliminar
+
+              {/* Archivar / Reactivar — siempre disponible para SUPERADMIN/ADMIN */}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onArchive(section.id, section.name, !section.isArchived)}
+                className={`ml-auto h-7 px-2 ${section.isArchived ? 'text-emerald-700 hover:bg-emerald-50' : 'text-amber-700 hover:bg-amber-50'}`}
+                title={section.isArchived ? 'Reactivar (volverá a ser editable)' : 'Archivar (queda read-only, datos se conservan)'}
+              >
+                {section.isArchived ? (
+                  <><ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Reactivar</>
+                ) : (
+                  <><Archive className="h-3.5 w-3.5 mr-1" /> Archivar</>
+                )}
               </Button>
+
+              {/* Eliminar definitivo SOLO si no tiene estudiantes y NO está archivada */}
+              {!hasEnrollments && !section.isArchived && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onDelete(section.id, section.name)}
+                  className="h-7 px-2 text-red-600 hover:bg-red-50"
+                  title="Eliminar definitivamente (solo posible porque no tiene estudiantes)"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  Eliminar
+                </Button>
+              )}
             </div>
           )}
 
-          {section.instructors.length > 0 && (
-            <div className="mb-2 text-[11px] text-gray-600">
-              <span className="font-medium">Instructores:</span>{' '}
-              {section.instructors.map((i) => i.name || '(sin nombre)').join(', ')}
-            </div>
-          )}
+          {/* Instructores */}
+          <PeopleSection
+            title="Instructores"
+            people={section.instructors}
+            available={availableInstructors.filter((u) =>
+              !section.instructors.some((i) => i.id === u.id)
+            )}
+            canEdit={writable}
+            onAdd={(userId) => onAssignInstructor(section.id, userId)}
+            onRemove={(userId, name) => onUnassignInstructor(section.id, userId, name)}
+            emptyMessage="Sin instructores asignados"
+            addLabel="+ Asignar instructor"
+          />
 
+          {/* Estudiantes */}
+          <PeopleSection
+            title={`Estudiantes (${section.enrolledStudents.length})`}
+            people={section.enrolledStudents}
+            available={availableStudents.filter((u) =>
+              !section.enrolledStudents.some((e) => e.id === u.id)
+            )}
+            canEdit={writable}
+            onAdd={(userId) => onEnrollStudent(section.id, userId)}
+            onRemove={(userId, name) => onUnenrollStudent(section.id, userId, name)}
+            emptyMessage="Sin estudiantes inscriptos"
+            addLabel="+ Inscribir estudiante"
+            maxVisible={5}
+          />
+
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mt-3 mb-1.5">
+            📅 Calendario
+          </h4>
           {section.course.lessons.length === 0 ? (
             <p className="text-xs text-gray-400">El curso no tiene lecciones diseñadas.</p>
           ) : (
@@ -816,6 +1005,7 @@ function SectionCard({
                     lesson={lesson}
                     isOpen={!!schedule}
                     schedule={schedule}
+                    readOnly={section.isArchived}
                     onToggle={(open, availableAt) => onToggleLesson(section.id, lesson.id, open, availableAt)}
                   />
                 )
@@ -832,13 +1022,14 @@ function SectionCard({
 // LessonScheduleRow: toggle individual de una lección × sección
 // ═══════════════════════════════════════════════════════════════
 function LessonScheduleRow({
-  index, lesson, isOpen, schedule, onToggle,
+  index, lesson, isOpen, schedule, onToggle, readOnly,
 }: {
   index: number
   lesson: Lesson
   isOpen: boolean
   schedule?: Schedule
   onToggle: (open: boolean, availableAt?: string) => void
+  readOnly?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [dateInput, setDateInput] = useState(schedule ? new Date(schedule.availableAt).toISOString().slice(0, 10) : todayISO())
@@ -866,7 +1057,11 @@ function LessonScheduleRow({
           <p className="text-[10px] text-green-700">{formatDate(schedule.availableAt)} · cierre {schedule.closesAfterHours}h</p>
         )}
       </div>
-      {editing ? (
+      {readOnly ? (
+        <span className={`text-[10px] px-1.5 py-0.5 rounded ${isOpen ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+          {isOpen ? 'abierta' : 'cerrada'}
+        </span>
+      ) : editing ? (
         <div className="flex items-center gap-1.5">
           <Input type="date" value={dateInput} onChange={(e) => setDateInput(e.target.value)} className="text-[11px] h-7 w-32" />
           <Button size="sm" onClick={handleOpen} disabled={submitting} className="h-7">
@@ -884,6 +1079,148 @@ function LessonScheduleRow({
           <Calendar className="h-3 w-3" />
           Abrir
         </Button>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PeopleSection: lista de personas (estudiantes o instructores) con
+// botón para agregar y × para quitar. Reusable.
+// ═══════════════════════════════════════════════════════════════
+function PeopleSection({
+  title, people, available, canEdit, onAdd, onRemove,
+  emptyMessage, addLabel, maxVisible,
+}: {
+  title: string
+  people: UserMini[]
+  available: { id: string; name: string | null; email: string }[]
+  canEdit: boolean
+  onAdd: (userId: string) => void
+  onRemove: (userId: string, name: string) => void
+  emptyMessage: string
+  addLabel: string
+  maxVisible?: number
+}) {
+  const [showAll, setShowAll] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const [filter, setFilter] = useState('')
+
+  const visible = maxVisible && !showAll ? people.slice(0, maxVisible) : people
+  const hiddenCount = people.length - visible.length
+
+  const filteredAvailable = filter.trim()
+    ? available.filter((u) => {
+        const q = filter.toLowerCase()
+        return (
+          (u.name?.toLowerCase().includes(q) ?? false) ||
+          u.email.toLowerCase().includes(q)
+        )
+      })
+    : available
+
+  return (
+    <div className="border-t border-gray-200 pt-2">
+      <div className="flex items-center justify-between mb-1.5">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{title}</h4>
+        {canEdit && !picking && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setPicking(true)}
+            className="h-6 px-2 text-[11px] text-indigo-700 hover:bg-indigo-50"
+          >
+            {addLabel}
+          </Button>
+        )}
+      </div>
+
+      {picking && (
+        <div className="mb-2 bg-white border border-indigo-200 rounded-md p-2">
+          <Input
+            placeholder="Buscar por nombre o email..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="h-7 text-xs mb-1.5"
+            autoFocus
+          />
+          <div className="max-h-48 overflow-y-auto space-y-0.5">
+            {filteredAvailable.length === 0 ? (
+              <p className="text-[11px] text-gray-400 px-2 py-1.5">
+                {available.length === 0 ? 'No hay usuarios disponibles.' : 'Sin resultados.'}
+              </p>
+            ) : (
+              filteredAvailable.slice(0, 30).map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => {
+                    onAdd(u.id)
+                    setPicking(false)
+                    setFilter('')
+                  }}
+                  className="w-full text-left px-2 py-1 text-xs hover:bg-indigo-50 rounded"
+                >
+                  <span className="font-medium text-gray-800">{u.name || '(sin nombre)'}</span>
+                  <span className="text-gray-500 ml-1">· {u.email}</span>
+                </button>
+              ))
+            )}
+          </div>
+          <div className="flex justify-end pt-1.5 mt-1 border-t border-gray-100">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setPicking(false); setFilter('') }}
+              className="h-6 px-2 text-[11px]"
+            >
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {people.length === 0 ? (
+        <p className="text-[11px] text-gray-400 italic">{emptyMessage}</p>
+      ) : (
+        <div className="flex flex-wrap gap-1">
+          {visible.map((p) => (
+            <span
+              key={p.id}
+              className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-[11px]"
+            >
+              <span className="text-gray-800">{p.name || p.email}</span>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(p.id, p.name || p.email)}
+                  className="text-gray-400 hover:text-red-600 leading-none"
+                  title="Quitar"
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          ))}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="text-[11px] text-indigo-600 hover:underline px-1.5"
+            >
+              + {hiddenCount} más
+            </button>
+          )}
+          {showAll && maxVisible && people.length > maxVisible && (
+            <button
+              type="button"
+              onClick={() => setShowAll(false)}
+              className="text-[11px] text-gray-500 hover:underline px-1.5"
+            >
+              Mostrar menos
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

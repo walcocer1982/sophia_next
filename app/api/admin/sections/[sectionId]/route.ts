@@ -20,6 +20,7 @@ export async function PATCH(
   const body = (await request.json()) as {
     name?: string
     sedeId?: string | null
+    isArchived?: boolean
   }
 
   const section = await prisma.section.findUnique({
@@ -35,7 +36,24 @@ export async function PATCH(
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 
-  const updateData: { name?: string; sedeId?: string | null } = {}
+  const updateData: {
+    name?: string
+    sedeId?: string | null
+    isArchived?: boolean
+    archivedAt?: Date | null
+  } = {}
+
+  // Archivar / desarchivar es la ÚNICA mutación permitida en una sección ya
+  // archivada — el resto requiere desarchivar primero.
+  if (typeof body.isArchived === 'boolean') {
+    updateData.isArchived = body.isArchived
+    updateData.archivedAt = body.isArchived ? new Date() : null
+  } else if (section.isArchived) {
+    return NextResponse.json(
+      { error: 'Sección archivada (read-only). Desarchivala primero para editar.' },
+      { status: 409 }
+    )
+  }
 
   if (body.name !== undefined) {
     const trimmed = body.name.trim()
