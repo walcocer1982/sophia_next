@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import {
   CalendarDays, Users, GraduationCap, Calendar, Lock,
   ChevronDown, ChevronRight, Loader2, Building2, Plus, Trash2, Sparkles, Check,
+  Archive, ArchiveRestore,
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -68,25 +69,58 @@ export default function ProgramacionPage() {
   const [expandedTransversales, setExpandedTransversales] = useState<Set<string>>(new Set())
   const [showNewPeriod, setShowNewPeriod] = useState(false)
   const [showNewSection, setShowNewSection] = useState(false)
+  // Mostrar también períodos cerrados (default: no). Cambia el query del API.
+  const [includeArchived, setIncludeArchived] = useState(false)
 
   const refetch = useCallback(async (): Promise<void> => {
     try {
-      const res = await fetch('/api/programacion')
+      const url = includeArchived
+        ? '/api/programacion?includeArchived=true'
+        : '/api/programacion'
+      const res = await fetch(url)
       if (!res.ok) throw new Error('fetch failed')
       const json = (await res.json()) as ProgramacionData
       setData(json)
-      if (!activePeriodId) {
+      // Si el período activo seleccionado ya no está en la lista (porque
+      // lo acabamos de cerrar y dejó de incluirse), saltar al primero activo.
+      const currentExists = activePeriodId && json.periods.some((p) => p.id === activePeriodId)
+      if (!currentExists) {
         const active = json.periods.find((p) => p.isActive) ?? json.periods[0]
-        if (active) setActivePeriodId(active.id)
+        setActivePeriodId(active?.id ?? null)
       }
     } catch {
       toast.error('No se pudo cargar la programación')
     }
-  }, [activePeriodId])
+  }, [activePeriodId, includeArchived])
 
   useEffect(() => {
     refetch().finally(() => setLoading(false))
   }, [refetch])
+
+  const handleTogglePeriodActive = async (periodId: string, currentlyActive: boolean) => {
+    const action = currentlyActive ? 'cerrar' : 'reactivar'
+    const period = data?.periods.find((p) => p.id === periodId)
+    if (!confirm(
+      currentlyActive
+        ? `¿Cerrar el período "${period?.name}"? Las secciones de este período se ocultarán de la vista. Podés reabrirlo después.`
+        : `¿Reactivar el período "${period?.name}"?`
+    )) return
+    try {
+      const res = await fetch(`/api/admin/periods/${periodId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !currentlyActive }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success(currentlyActive ? 'Período cerrado' : 'Período reactivado')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message + ` (al ${action})`)
+    }
+  }
 
   const toggleExpand = (id: string, setFn: typeof setExpandedSections) => {
     setFn((prev) => {
@@ -233,7 +267,9 @@ export default function ProgramacionPage() {
             >
               {data.periods.length === 0 && <option value="">— sin períodos —</option>}
               {data.periods.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} {p.isActive ? '· activo' : ''}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.isActive ? '· activo' : '· cerrado'}
+                </option>
               ))}
             </select>
             {data.canCreate && (
@@ -248,12 +284,41 @@ export default function ProgramacionPage() {
                     Nueva sección
                   </Button>
                 )}
+                {activePeriodId && (() => {
+                  const period = data.periods.find((p) => p.id === activePeriodId)
+                  if (!period) return null
+                  return (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleTogglePeriodActive(period.id, period.isActive)}
+                      className={`gap-1.5 ${period.isActive ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50'}`}
+                      title={period.isActive ? 'Cerrar este período (se ocultan sus secciones)' : 'Reactivar este período'}
+                    >
+                      {period.isActive
+                        ? (<><Archive className="h-3.5 w-3.5" /> Cerrar período</>)
+                        : (<><ArchiveRestore className="h-3.5 w-3.5" /> Reactivar</>)
+                      }
+                    </Button>
+                  )
+                })()}
               </>
             )}
           </div>
-          <div className="text-xs text-gray-500">
-            {totalSections} sección{totalSections !== 1 ? 'es' : ''} ·{' '}
-            {transversalGroups.size} curso{transversalGroups.size !== 1 ? 's' : ''} transversal{transversalGroups.size !== 1 ? 'es' : ''}
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={includeArchived}
+                onChange={(e) => setIncludeArchived(e.target.checked)}
+                className="rounded"
+              />
+              <span>Ver también períodos cerrados</span>
+            </label>
+            <span>
+              {totalSections} sección{totalSections !== 1 ? 'es' : ''} ·{' '}
+              {transversalGroups.size} transversal{transversalGroups.size !== 1 ? 'es' : ''}
+            </span>
           </div>
         </div>
       </Card>

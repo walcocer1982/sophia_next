@@ -17,7 +17,7 @@ export const runtime = 'nodejs'
  *
  * Solo cursos REGULAR (los CONTINUA viven en Eventos, no en Programación).
  */
-export async function GET() {
+export async function GET(request: Request) {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -27,8 +27,17 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  // ?includeArchived=true incluye los períodos cerrados (isActive=false)
+  // y sus secciones. Default: false para mantener la vista limpia.
+  const { searchParams } = new URL(request.url)
+  const includeArchived = searchParams.get('includeArchived') === 'true'
+
   // Para INSTRUCTOR: filtrar a sus secciones asignadas
-  let sectionWhere: { course: { track: 'REGULAR'; deletedAt: null }; id?: { in: string[] } } = {
+  let sectionWhere: {
+    course: { track: 'REGULAR'; deletedAt: null }
+    id?: { in: string[] }
+    period?: { isActive: boolean }
+  } = {
     course: { track: 'REGULAR', deletedAt: null },
   }
   if (role === 'INSTRUCTOR') {
@@ -42,8 +51,14 @@ export async function GET() {
     }
   }
 
+  // Si no se incluye archived, filtrar secciones de períodos cerrados.
+  if (!includeArchived) {
+    sectionWhere = { ...sectionWhere, period: { isActive: true } }
+  }
+
   const [periods, sedes, sections] = await Promise.all([
     prisma.academicPeriod.findMany({
+      where: includeArchived ? undefined : { isActive: true },
       orderBy: { name: 'desc' },
       select: { id: true, name: true, isActive: true },
     }),
