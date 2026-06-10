@@ -14,6 +14,8 @@ interface SectionOption {
   period: { id: string; name: string }
   course: { id: string; title: string }
   _count: { enrollments: number }
+  sede?: { code: string } | null
+  startLabel?: string | null // fecha de inicio de cohorte, formateada en server
 }
 
 interface SectionSelectorProps {
@@ -92,9 +94,21 @@ export function SectionSelector({ grouped, existingEnrollments }: SectionSelecto
                       }`}
                     >
                       <div>
-                        <span className="font-medium text-gray-800">{section.name}</span>
-                        <span className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
-                          <Users className="h-3 w-3" /> {section._count.enrollments} estudiantes
+                        <span className="flex items-center gap-2">
+                          <span className="font-medium text-gray-800">{section.name}</span>
+                          {section.sede && (
+                            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 border border-indigo-200">
+                              {section.sede.code}
+                            </span>
+                          )}
+                        </span>
+                        <span className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" /> {section._count.enrollments} estudiantes
+                          </span>
+                          {section.startLabel && (
+                            <span className="text-emerald-700">· Inicia {section.startLabel}</span>
+                          )}
                         </span>
                       </div>
                       {isLoading ? (

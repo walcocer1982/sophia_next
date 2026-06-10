@@ -9,7 +9,7 @@ export default async function SelectSectionPage() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { careerId: true, role: true },
+    select: { careerId: true, role: true, sedeId: true, admissionPeriodId: true },
   })
 
   // Only students need to select section
@@ -32,19 +32,29 @@ export default async function SelectSectionPage() {
     },
   })
 
-  // Get available sections for student's career (include transversal courses)
+  // Secciones visibles para el estudiante:
+  // - NO archivadas (cohorts terminadas no aceptan matrícula)
+  // - De cursos de su carrera o transversales (careerId null)
+  // - De su período de admisión (si lo eligió en onboarding; legacy: activos)
+  // - De su sede o sin sede asignada (si tiene sede; legacy: todas)
   const sections = await prisma.section.findMany({
     where: {
+      isArchived: false,
       course: {
         OR: [{ careerId: user.careerId }, { careerId: null }],
         deletedAt: null,
       },
-      period: { isActive: true },
+      ...(user.admissionPeriodId
+        ? { periodId: user.admissionPeriodId }
+        : { period: { isActive: true } }),
+      ...(user.sedeId ? { OR: [{ sedeId: user.sedeId }, { sedeId: null }] } : {}),
     },
     orderBy: [{ period: { name: 'desc' } }, { course: { title: 'asc' } }, { name: 'asc' }],
     select: {
       id: true,
       name: true,
+      startDate: true,
+      sede: { select: { code: true } },
       period: { select: { id: true, name: true } },
       course: { select: { id: true, title: true } },
       _count: { select: { enrollments: true } },
@@ -63,10 +73,18 @@ export default async function SelectSectionPage() {
     )
   }
 
+  // Formatear fecha de inicio en server (locale explícito — evita mismatch SSR)
+  const items = sections.map(({ startDate, ...s }) => ({
+    ...s,
+    startLabel: startDate
+      ? startDate.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit' })
+      : null,
+  }))
+
   // Group by period then course
-  type SectionItem = typeof sections[number]
+  type SectionItem = typeof items[number]
   const grouped: Record<string, Record<string, SectionItem[]>> = {}
-  for (const s of sections) {
+  for (const s of items) {
     const pName = s.period.name
     const cTitle = s.course.title
     if (!grouped[pName]) grouped[pName] = {}

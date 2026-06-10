@@ -35,12 +35,16 @@ model User {
   careerId      String?
   // Sede de pertenencia (opcional — superadmins pueden no tener sede)
   sedeId        String?
+  // Admisión del estudiante (período académico en que ingresó, ej: "2026-1").
+  // Se elige en el onboarding y filtra las secciones visibles a su cohorte.
+  admissionPeriodId String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // Relaciones
   career             Career?              @relation(fields: [careerId], references: [id])
   sede               Sede?                @relation(fields: [sedeId], references: [id])
+  admissionPeriod    AcademicPeriod?      @relation(fields: [admissionPeriodId], references: [id])
   lessonSessions     LessonSession[]
   accounts           Account[]
   courses            Course[]
@@ -52,6 +56,7 @@ model User {
   @@index([googleId])
   @@index([careerId])
   @@index([sedeId])
+  @@index([admissionPeriodId])
 }
 
 model Account {
@@ -394,7 +399,8 @@ model AcademicPeriod {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  sections Section[]
+  sections      Section[]
+  admittedUsers User[]
 }
 
 model Section {

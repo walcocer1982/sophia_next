@@ -14,29 +14,48 @@ export default async function SelectCareerPage() {
   })
   if (user?.careerId) redirect('/lessons')
 
-  const careers = await prisma.career.findMany({
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true },
-  })
+  // Onboarding: Sede → Carrera → Admisión.
+  // Solo sedes activas CON carreras asignadas (los programas internos sin
+  // sede — Tutoría, ENTER, Inducción — no aparecen como opción de carrera).
+  const [sedes, periods] = await Promise.all([
+    prisma.sede.findMany({
+      where: { isActive: true, careers: { some: {} } },
+      orderBy: { code: 'asc' },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        careers: {
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true },
+        },
+      },
+    }),
+    prisma.academicPeriod.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'desc' },
+      select: { id: true, name: true },
+    }),
+  ])
 
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Selecciona tu carrera</h1>
+          <h1 className="text-2xl font-bold">Completa tus datos</h1>
           <p className="mt-2 text-muted-foreground">
-            Elige la carrera a la que perteneces para ver tus lecciones.
+            Elige tu sede, carrera y admisión para ver tus lecciones.
           </p>
         </div>
 
-        {careers.length === 0 ? (
+        {sedes.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center">
             <p className="text-muted-foreground">
-              No hay carreras disponibles todavía. Contacta al administrador.
+              No hay sedes con carreras disponibles todavía. Contacta al administrador.
             </p>
           </div>
         ) : (
-          <CareerSelector careers={careers} />
+          <CareerSelector sedes={sedes} periods={periods} />
         )}
       </div>
     </div>
