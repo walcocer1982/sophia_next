@@ -145,7 +145,10 @@ export default async function LessonsPage() {
       status: (progressMap.get(l.id) || 'not_started') as 'completed' | 'in_progress' | 'not_started',
       isAvailable,
       isClosed,
-      availableAt: l.availableAt?.toISOString() || null,
+      // Fecha EFECTIVA (programación de la sección del estudiante, con
+      // fallback a la general). Antes se pasaba siempre la general y la card
+      // mostraba una fecha vieja aunque la sección tuviera horario propio.
+      availableAt: availableDate?.toISOString() || null,
       closesAt: closesAt?.toISOString() || null,
     }
   })
