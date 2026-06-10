@@ -78,6 +78,30 @@ function isoToInputDate(iso: string | null) {
   return iso ? new Date(iso).toISOString().slice(0, 10) : ''
 }
 
+// ── Helpers de hora para programar lecciones con hora de inicio/cierre ──
+// Fecha (YYYY-MM-DD) + hora local (HH:mm) → ISO UTC (el browser interpreta
+// el string sin zona como hora LOCAL del usuario).
+function toLocalISO(date: string, time: string): string {
+  return new Date(`${date}T${time}`).toISOString()
+}
+// Horas enteras (mín 1, redondeo hacia arriba) entre dos HH:mm del mismo día.
+// 0 = inválido (cierre no es posterior al inicio).
+function hoursBetween(start: string, end: string): number {
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  const diff = eh * 60 + em - (sh * 60 + sm)
+  return diff > 0 ? Math.max(1, Math.ceil(diff / 60)) : 0
+}
+// HH:mm local de un ISO
+function localTime(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+// HH:mm local del cierre (availableAt + closesAfterHours)
+function closeTime(iso: string, hours: number): string {
+  return localTime(new Date(new Date(iso).getTime() + hours * 3_600_000).toISOString())
+}
+
 /** Estado visual de una sección según sus fechas: futura, en curso, terminada */
 function getSectionDateStatus(startDate: string | null, endDate: string | null): {
   label: string
@@ -196,12 +220,18 @@ export default function ProgramacionPage() {
     return { transversalGroups: tGroups, sedeGroups: sGroups }
   }, [data, activePeriodId])
 
-  const handleToggleLesson = async (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => {
+  const handleToggleLesson = async (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string, closesAfterHours?: number) => {
     try {
       const res = await fetch('/api/planner/lesson/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lessonId, publish: isOpen, sectionId, availableAt: availableAt || todayISO() }),
+        body: JSON.stringify({
+          lessonId,
+          publish: isOpen,
+          sectionId,
+          availableAt: availableAt || todayISO(),
+          ...(closesAfterHours ? { closesAfterHours } : {}),
+        }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -214,12 +244,18 @@ export default function ProgramacionPage() {
     }
   }
 
-  const handleBulkToggle = async (lessonId: string, sectionIds: string[], publish: boolean, availableAt?: string) => {
+  const handleBulkToggle = async (lessonId: string, sectionIds: string[], publish: boolean, availableAt?: string, closesAfterHours?: number) => {
     try {
       const res = await fetch('/api/programacion/bulk-toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lessonId, sectionIds, publish, availableAt: availableAt || todayISO() }),
+        body: JSON.stringify({
+          lessonId,
+          sectionIds,
+          publish,
+          availableAt: availableAt || todayISO(),
+          ...(closesAfterHours ? { closesAfterHours } : {}),
+        }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -682,8 +718,8 @@ function TransversalCard({
   canEdit: boolean
   isExpanded: boolean
   onToggleExpand: () => void
-  onBulkToggle: (lessonId: string, sectionIds: string[], publish: boolean, availableAt?: string) => void
-  onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => void
+  onBulkToggle: (lessonId: string, sectionIds: string[], publish: boolean, availableAt?: string, closesAfterHours?: number) => void
+  onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string, closesAfterHours?: number) => void
   onArchive: (sectionId: string, name: string, archive: boolean) => void
   onDelete: (sectionId: string, name: string) => void
   onRename: (sectionId: string, currentName: string) => void
@@ -757,8 +793,8 @@ function TransversalCard({
                   lesson={lesson}
                   sections={sections}
                   sedes={sedes}
-                  onBulkToggle={(sectionIds, publish, availableAt) =>
-                    onBulkToggle(lesson.id, sectionIds, publish, availableAt)
+                  onBulkToggle={(sectionIds, publish, availableAt, closesAfterHours) =>
+                    onBulkToggle(lesson.id, sectionIds, publish, availableAt, closesAfterHours)
                   }
                 />
               ))}
@@ -844,7 +880,7 @@ function TransversalCard({
                           isOpen={!!schedule}
                           schedule={schedule}
                           readOnly={sec.isArchived}
-                          onToggle={(open, availableAt) => onToggleLesson(sec.id, lesson.id, open, availableAt)}
+                          onToggle={(open, availableAt, closesAfterHours) => onToggleLesson(sec.id, lesson.id, open, availableAt, closesAfterHours)}
                         />
                       )
                     })}
@@ -940,6 +976,8 @@ interface SedeGroup {
   sectionIds: string[]
   openSectionIds: string[]
   defaultDate: string
+  defaultStart: string // HH:mm local
+  defaultEnd: string   // HH:mm local
 }
 
 function groupSectionsBySede(
@@ -958,11 +996,15 @@ function groupSectionsBySede(
     const openSecs = secs.filter((s) =>
       s.schedules.some((sch) => sch.lessonId === lessonId)
     )
-    // Fecha por defecto: la de la 1ra sección abierta, o hoy.
+    // Fecha/horas por defecto: las de la 1ra sección abierta, o hoy 08:00-10:00.
     const firstOpen = openSecs[0]?.schedules.find((sch) => sch.lessonId === lessonId)
     const defaultDate = firstOpen
       ? new Date(firstOpen.availableAt).toISOString().slice(0, 10)
       : todayISO()
+    const defaultStart = firstOpen ? localTime(firstOpen.availableAt) : '08:00'
+    const defaultEnd = firstOpen
+      ? closeTime(firstOpen.availableAt, firstOpen.closesAfterHours)
+      : '10:00'
     return {
       key: sedeId ?? 'no-sede',
       sedeId,
@@ -971,6 +1013,8 @@ function groupSectionsBySede(
       sectionIds: secs.map((s) => s.id),
       openSectionIds: openSecs.map((s) => s.id),
       defaultDate,
+      defaultStart,
+      defaultEnd,
     }
   })
 }
@@ -982,7 +1026,7 @@ function BulkLessonRow({
   lesson: Lesson
   sections: Section[]
   sedes: Sede[]
-  onBulkToggle: (sectionIds: string[], publish: boolean, availableAt?: string) => void
+  onBulkToggle: (sectionIds: string[], publish: boolean, availableAt?: string, closesAfterHours?: number) => void
 }) {
   const sedeGroups = groupSectionsBySede(sections, sedes, lesson.id)
   const totalOpen = sedeGroups.reduce((sum, g) => sum + g.openSectionIds.length, 0)
@@ -1004,8 +1048,8 @@ function BulkLessonRow({
             key={g.key}
             group={g}
             lessonTitle={lesson.title}
-            onToggle={(publish, availableAt) =>
-              onBulkToggle(g.sectionIds, publish, availableAt)
+            onToggle={(publish, availableAt, closesAfterHours) =>
+              onBulkToggle(g.sectionIds, publish, availableAt, closesAfterHours)
             }
           />
         ))}
@@ -1019,9 +1063,11 @@ function SedeToggleRow({
 }: {
   group: SedeGroup
   lessonTitle: string
-  onToggle: (publish: boolean, availableAt?: string) => void
+  onToggle: (publish: boolean, availableAt?: string, closesAfterHours?: number) => void
 }) {
   const [date, setDate] = useState(group.defaultDate)
+  const [startTime, setStartTime] = useState(group.defaultStart)
+  const [endTime, setEndTime] = useState(group.defaultEnd)
   const [submitting, setSubmitting] = useState(false)
 
   const total = group.sectionIds.length
@@ -1038,8 +1084,13 @@ function SedeToggleRow({
       setSubmitting(false)
     } else {
       // open all (partial → completar)
+      const hours = hoursBetween(startTime, endTime)
+      if (hours === 0) {
+        toast.error('La hora de cierre debe ser posterior a la de inicio')
+        return
+      }
       setSubmitting(true)
-      await onToggle(true, date)
+      await onToggle(true, toLocalISO(date, startTime), hours)
       setSubmitting(false)
     }
   }
@@ -1085,15 +1136,34 @@ function SedeToggleRow({
         {open}/{total} secc
       </span>
 
-      {/* Date picker — ancho consistente */}
-      <Input
-        type="date"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
-        disabled={submitting}
-        className="h-7 text-xs w-36 ml-auto"
-        title={allOpen ? 'Fecha actual (cambiar requiere cerrar + reabrir)' : 'Fecha al abrir'}
-      />
+      {/* Fecha + hora inicio + hora cierre */}
+      <div className="flex items-center gap-1 ml-auto">
+        <Input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          disabled={submitting}
+          className="h-7 text-xs w-32"
+          title={allOpen ? 'Fecha actual (cambiar requiere cerrar + reabrir)' : 'Fecha al abrir'}
+        />
+        <Input
+          type="time"
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+          disabled={submitting}
+          className="h-7 text-xs w-22"
+          title="Hora de inicio"
+        />
+        <span className="text-[10px] text-gray-400">a</span>
+        <Input
+          type="time"
+          value={endTime}
+          onChange={(e) => setEndTime(e.target.value)}
+          disabled={submitting}
+          className="h-7 text-xs w-22"
+          title="Hora de cierre"
+        />
+      </div>
     </div>
   )
 }
@@ -1115,7 +1185,7 @@ function SectionCard({
   availableInstructors: InstructorOption[]
   isExpanded: boolean
   onToggleExpand: () => void
-  onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => void
+  onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string, closesAfterHours?: number) => void
   onUpdateSede: (sectionId: string, sedeId: string | null) => void
   onUpdateDates: (sectionId: string, startDate: string | null, endDate: string | null) => void
   onDelete: (sectionId: string, name: string) => void
@@ -1352,7 +1422,7 @@ function SectionCard({
                     isOpen={!!schedule}
                     schedule={schedule}
                     readOnly={section.isArchived}
-                    onToggle={(open, availableAt) => onToggleLesson(section.id, lesson.id, open, availableAt)}
+                    onToggle={(open, availableAt, closesAfterHours) => onToggleLesson(section.id, lesson.id, open, availableAt, closesAfterHours)}
                   />
                 )
               })}
@@ -1374,16 +1444,25 @@ function LessonScheduleRow({
   lesson: Lesson
   isOpen: boolean
   schedule?: Schedule
-  onToggle: (open: boolean, availableAt?: string) => void
+  onToggle: (open: boolean, availableAt?: string, closesAfterHours?: number) => void
   readOnly?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [dateInput, setDateInput] = useState(schedule ? new Date(schedule.availableAt).toISOString().slice(0, 10) : todayISO())
+  const [startTime, setStartTime] = useState(schedule ? localTime(schedule.availableAt) : '08:00')
+  const [endTime, setEndTime] = useState(
+    schedule ? closeTime(schedule.availableAt, schedule.closesAfterHours) : '10:00'
+  )
   const [submitting, setSubmitting] = useState(false)
 
   const handleOpen = async () => {
+    const hours = hoursBetween(startTime, endTime)
+    if (hours === 0) {
+      toast.error('La hora de cierre debe ser posterior a la de inicio')
+      return
+    }
     setSubmitting(true)
-    await onToggle(true, dateInput)
+    await onToggle(true, toLocalISO(dateInput, startTime), hours)
     setSubmitting(false)
     setEditing(false)
   }
@@ -1400,7 +1479,9 @@ function LessonScheduleRow({
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-gray-900 truncate">{lesson.title}</p>
         {isOpen && schedule && (
-          <p className="text-[10px] text-green-700">{formatDate(schedule.availableAt)} · cierre {schedule.closesAfterHours}h</p>
+          <p className="text-[10px] text-green-700">
+            {formatDate(schedule.availableAt)} · {localTime(schedule.availableAt)}–{closeTime(schedule.availableAt, schedule.closesAfterHours)}
+          </p>
         )}
       </div>
       {readOnly ? (
@@ -1408,8 +1489,11 @@ function LessonScheduleRow({
           {isOpen ? 'abierta' : 'cerrada'}
         </span>
       ) : editing ? (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
           <Input type="date" value={dateInput} onChange={(e) => setDateInput(e.target.value)} className="text-[11px] h-7 w-32" />
+          <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="text-[11px] h-7 w-24" title="Hora de inicio" />
+          <span className="text-[10px] text-gray-400">a</span>
+          <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="text-[11px] h-7 w-24" title="Hora de cierre" />
           <Button size="sm" onClick={handleOpen} disabled={submitting} className="h-7">
             {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'OK'}
           </Button>
