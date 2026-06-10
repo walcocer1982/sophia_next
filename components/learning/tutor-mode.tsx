@@ -50,12 +50,23 @@ export function TutorMode({
   const [showTextInput, setShowTextInput] = useState(false)
   const chatInputRef = useRef<ChatInputRef>(null)
 
-  // Last assistant message (currently visible bubble)
+  // Burbuja visible: el último mensaje de Sophia CON contenido (y sin error).
+  // Un placeholder vacío (recién enviado), un stream que falló o un mensaje
+  // vacío del modelo NUNCA deben reemplazar la pregunta vigente — si lo
+  // hicieran, el estudiante queda mirando una tarjeta en blanco sin saber
+  // qué se le preguntó.
   const lastAssistantMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant') return messages[i]
+      const m = messages[i]
+      if (m.role === 'assistant' && m.status !== 'error' && m.content.trim()) return m
     }
     return null
+  }, [messages])
+
+  // Error del último intento: se muestra como aviso aparte, sin tapar la pregunta.
+  const lastMessageHasError = useMemo(() => {
+    const last = messages[messages.length - 1]
+    return last?.role === 'assistant' && last.status === 'error'
   }, [messages])
 
   return (
@@ -163,6 +174,13 @@ export function TutorMode({
             </motion.div>
           ) : null}
         </AnimatePresence>
+
+        {/* Error notice — aparece DEBAJO de la pregunta vigente, sin taparla */}
+        {lastMessageHasError && (
+          <div className="max-w-2xl w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+            Hubo un problema al generar la respuesta. Escribe tu mensaje de nuevo para reintentar.
+          </div>
+        )}
 
         {/* History link */}
         <Button

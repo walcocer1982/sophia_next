@@ -196,6 +196,12 @@ Genera entre 4-5 actividades total (MÁXIMO 5 para 45 min).
 - Genera IDs en formato: "{tema_slug}_{001}".
 - agent_instruction: MÁXIMO 60 palabras. Sé conciso — la IA tutora es inteligente, no necesita instrucciones literales ni que le dictes cada ejemplo. Dale la directiva y el enfoque, no un guion.
 - Preguntas de verificación contextualizadas (escenarios reales, NO preguntas teóricas).
+- ⚠️ UNA SOLA PREGUNTA por verificación: verification.question debe contener UN único interrogante.
+  PROHIBIDO encadenar preguntas ("identifica X, Y y Z... y además dime W"). El estudiante responde
+  por chat y no puede releer una pregunta de varias partes mientras escribe: responde parcial y la
+  clase entra en bucles de re-preguntar. Si necesitas evaluar varios elementos, pídelos DENTRO de
+  una sola pregunta con lista explícita ("Menciona los 3 datos más importantes de...") y refleja
+  cada elemento en must_include — nunca como preguntas separadas en el mismo turno.
 - 2-4 criterios observables por actividad (concisos, no redundantes).
 - El understanding_level debe escalar con la progresión: memorized → understood → applied → analyzed.
 

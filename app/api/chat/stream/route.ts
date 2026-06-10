@@ -555,14 +555,31 @@ export async function POST(request: Request) {
         // Drenar el buffer si no apareció el marcador (caso normal sin brief).
         if (!suppressFurther && unsent) flushToClient(unsent)
 
+        // Si Sophia emitió un PROJECT_BRIEF (cursos basados en proyecto),
+        // extrae el JSON y limpia el marcador del mensaje persistido.
+        const { brief: projectBrief, cleaned } = extractProjectBrief(fullResponse)
+        let cleanedAssistantContent = cleaned
+
+        // Fallback anti-burbuja-vacía: si el modelo devolvió una respuesta
+        // vacía (o solo whitespace / solo un brief suprimido), el estudiante
+        // quedaría mirando un mensaje en blanco sin saber cómo continuar
+        // (observado en sesiones reales: tuvo que escribir "continua"/"ok").
+        // Re-planteamos la pregunta de la actividad vigente para re-anclar.
+        if (!cleanedAssistantContent.trim()) {
+          const fallbackText = `Retomemos donde estábamos. ${currentActivity.verification.question}`
+          logger.warn('chat.stream.empty_response_fallback', {
+            sessionId,
+            activityId: currentActivity.id,
+            fullResponseLength: fullResponse.length,
+            hadBrief: projectBrief !== null,
+          })
+          flushToClient(fallbackText)
+          cleanedAssistantContent = fallbackText
+        }
+
         // 4. Save messages to database (con activityId y timestamps explícitos para orden correcto)
         const userTimestamp = new Date()
         const assistantTimestamp = new Date(userTimestamp.getTime() + 1) // +1ms para garantizar orden
-
-        // Si Sophia emitió un PROJECT_BRIEF (cursos basados en proyecto),
-        // extrae el JSON y limpia el marcador del mensaje persistido.
-        const { brief: projectBrief, cleaned: cleanedAssistantContent } =
-          extractProjectBrief(fullResponse)
 
         await prisma.$transaction([
           prisma.message.create({
