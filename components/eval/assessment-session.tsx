@@ -9,11 +9,17 @@ import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { SophiaAvatar } from '../learning/sophia-avatar'
+import {
+  SophiaTalkingHead,
+  type TalkingHeadHandle,
+} from '../learning/avatar-3d/sophia-talkinghead'
+import { featureFlags } from '@/lib/env'
 import { VoiceButton } from '../learning/voice-button'
 import { ChatInput, type ChatInputRef } from '../learning/chat-input'
 import { ConversationDrawer } from '../learning/conversation-drawer'
 import type { OptimisticMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
+import { getUnlockedAudio } from '@/lib/audio-unlock'
 import { useT } from '@/lib/i18n/use-translation'
 import type { Locale } from '@/lib/i18n/strings'
 
@@ -95,6 +101,50 @@ export function AssessmentSession({
   const [showTextInput, setShowTextInput] = useState(!voiceEnabled)
   const [isMobile, setIsMobile] = useState(false)
   const [avatarState, setAvatarState] = useState<AvatarState>('idle')
+  // --- Avatar 3D experimental (TalkingHead), detrás de feature flag ---
+  const use3DAvatar = featureFlags.enable3DAvatar
+  const talkingHeadRef = useRef<TalkingHeadHandle>(null)
+  // Ref de disponibilidad: lo leemos DENTRO de speakReply para evitar stale
+  // closures (el callback de streaming captura una versión vieja de speakReply).
+  const avatar3DReadyRef = useRef(false)
+  // ¿Enrutar el audio por el avatar 3D (lip-sync)? Ya no exige "listo": el
+  // componente encola el habla y la reproduce al cargar (sirve para el welcome).
+  const shouldRoute3D = () => use3DAvatar && !!talkingHeadRef.current
+  // Resolver del 'speakEnd' actual: lo usa el modo voz para serializar oraciones
+  // (cada oración espera a que el avatar termine de hablarla antes de la siguiente).
+  const speakEndResolverRef = useRef<(() => void) | null>(null)
+
+  // Reproduce una oración del modo voz por el avatar 3D (lip-sync) y resuelve
+  // cuando el avatar termina de hablarla.
+  const speakChunkVia3D = useCallback(async (blob: Blob, text: string) => {
+    if (!use3DAvatar || !talkingHeadRef.current) {
+      // Fallback: reproducir con el <audio> compartido (desbloqueado en el
+      // gesto de registro — un new Audio() perdería ese desbloqueo).
+      const url = URL.createObjectURL(blob)
+      const audio = getUnlockedAudio() ?? new Audio()
+      audio.src = url
+      await new Promise<void>((resolve) => {
+        audio.onended = () => resolve()
+        audio.onerror = () => resolve()
+        audio.play().catch(() => resolve())
+      })
+      try { URL.revokeObjectURL(url) } catch { /* ignore */ }
+      return
+    }
+    const buf = await blob.arrayBuffer()
+    await new Promise<void>((resolve) => {
+      speakEndResolverRef.current = resolve
+      // Safety: si 'speakEnd' no llega, no colgar la cola indefinidamente.
+      const safety = setTimeout(resolve, 30000)
+      const wrapped = () => { clearTimeout(safety); resolve() }
+      speakEndResolverRef.current = wrapped
+      talkingHeadRef.current!.speakAudio(buf, text)
+    })
+  }, [use3DAvatar])
+  // Diagnóstico solo en consola (sin overlay que tape la UI).
+  const pushDebug = useCallback((msg: string) => {
+    console.log('[avatar3d:eval]', msg)
+  }, [])
   const [lightboxImage, setLightboxImage] = useState<{ url: string; description: string } | null>(null)
   const [progressData, setProgressData] = useState<{ current: number; total: number; percentage: number; currentActivityId: string | null } | null>(null)
   // Imagen visible AHORA — una sola a la vez, basada en (a) actividad actual
@@ -239,6 +289,7 @@ export function AssessmentSession({
   // Bloquea el input mientras suena (avatarState='speaking') — el ChatInput
   // ya respeta `disabled={avatarState === 'speaking'}`.
   const speakReply = useCallback(async (text: string) => {
+    pushDebug(`speakReply entró (voiceEnabled=${voiceEnabled})`)
     if (!voiceEnabled) return
     const clean = stripMarkdownForTts(text)
     if (!clean) return
@@ -255,8 +306,18 @@ export function AssessmentSession({
         return
       }
       const blob = await res.blob()
+      const route3D = shouldRoute3D()
+      pushDebug(`speakReply: ruta=${route3D ? '3D iframe' : 'audio padre'} ready=${avatar3DReadyRef.current} bytes=${blob.size}`)
+      // Avatar 3D activo: el iframe reproduce el audio y hace lip-sync.
+      // El retorno a 'idle' lo dispara onSpeakEnd (marker al final del audio).
+      if (route3D) {
+        const buf = await blob.arrayBuffer()
+        talkingHeadRef.current!.speakAudio(buf, clean)
+        return
+      }
       objectUrl = URL.createObjectURL(blob)
-      const audio = new Audio(objectUrl)
+      const audio = getUnlockedAudio() ?? new Audio()
+      audio.src = objectUrl
       const cleanup = () => {
         if (objectUrl) URL.revokeObjectURL(objectUrl)
         setAvatarState('idle')
@@ -283,10 +344,16 @@ export function AssessmentSession({
       })
       if (!res.ok) return
       const blob = await res.blob()
+      if (shouldRoute3D()) {
+        const buf = await blob.arrayBuffer()
+        talkingHeadRef.current!.speakAudio(buf, text)
+        return
+      }
       const url = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      audio.play().catch(e => console.warn('Welcome audio autoplay blocked:', e))
+      const audio = getUnlockedAudio() ?? new Audio()
+      audio.src = url
       audio.onended = () => URL.revokeObjectURL(url)
+      audio.play().catch(e => console.warn('Welcome audio autoplay blocked:', e))
     } catch (e) {
       console.warn('TTS welcome failed:', e)
     }
@@ -318,6 +385,13 @@ export function AssessmentSession({
             })))
             welcomeAudioPlayedRef.current = true // evitar TTS del welcome
             setWelcomeLoading(false)
+            // Sesión recuperada: repetir en voz el último mensaje de Sophia
+            // para que el participante retome el hilo. Antes la recuperación
+            // era siempre muda (el "welcome ya reproducido" silenciaba todo).
+            const lastAssistant = [...histData.messages].reverse().find((m) => m.role === 'assistant')
+            if (lastAssistant?.content && voiceEnabled) {
+              void speakReply(lastAssistant.content)
+            }
             return
           }
         }
@@ -384,22 +458,33 @@ export function AssessmentSession({
           })
           if (ttsRes.ok) {
             const blob = await ttsRes.blob()
-            const url = URL.createObjectURL(blob)
-            const audio = new Audio()
-            audio.preload = 'auto'
-            audio.src = url
-            audio.onended = () => URL.revokeObjectURL(url)
             welcomeAudioPlayedRef.current = true
-            await new Promise<void>((resolve) => {
-              audio.oncanplaythrough = () => resolve()
-              audio.onerror = () => resolve()
-              audio.load()
-              setTimeout(() => resolve(), 1500)
-            })
-            setMessages(prev => prev.map(m =>
-              m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
-            ))
-            audio.play().catch(e => console.warn('Welcome audio blocked:', e))
+            // Avatar 3D: enrutar el welcome por el iframe para que haga lip-sync.
+            // Si aún no está listo, el componente lo encola y lo reproduce al cargar.
+            if (shouldRoute3D()) {
+              setMessages(prev => prev.map(m =>
+                m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
+              ))
+              pushDebug(`welcome -> 3D iframe bytes=${blob.size}`)
+              const buf = await blob.arrayBuffer()
+              talkingHeadRef.current!.speakAudio(buf, cleanText)
+            } else {
+              const url = URL.createObjectURL(blob)
+              const audio = getUnlockedAudio() ?? new Audio()
+              audio.preload = 'auto'
+              audio.src = url
+              audio.onended = () => URL.revokeObjectURL(url)
+              await new Promise<void>((resolve) => {
+                audio.oncanplaythrough = () => resolve()
+                audio.onerror = () => resolve()
+                audio.load()
+                setTimeout(() => resolve(), 1500)
+              })
+              setMessages(prev => prev.map(m =>
+                m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
+              ))
+              audio.play().catch(e => console.warn('Welcome audio blocked:', e))
+            }
           } else {
             setMessages(prev => prev.map(m =>
               m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
@@ -417,7 +502,7 @@ export function AssessmentSession({
       }
     }
     initSession()
-  }, [sessionId, playWelcomeAudio])
+  }, [sessionId, playWelcomeAudio, speakReply, voiceEnabled])
 
   useEffect(() => {
     if (secondsLeft <= 0) {
@@ -606,7 +691,33 @@ export function AssessmentSession({
         <main className="col-span-6 bg-[#0d1f3c]/60 backdrop-blur border border-white/10 rounded-xl flex flex-col p-3 min-h-0 relative">
           <div className="flex-1 flex flex-col items-center justify-center gap-3 min-h-0">
             {/* Avatar */}
-            <SophiaAvatar state={avatarState} size={170} />
+            {use3DAvatar ? (
+              <SophiaTalkingHead
+                ref={talkingHeadRef}
+                width={300}
+                height={380}
+                onReady={() => {
+                  avatar3DReadyRef.current = true
+                  pushDebug('iframe READY (ref=true)')
+                }}
+                onSpeakEnd={() => {
+                  setAvatarState('idle')
+                  const r = speakEndResolverRef.current
+                  speakEndResolverRef.current = null
+                  r?.()
+                }}
+                onError={() => {
+                  setAvatarState('idle')
+                  const r = speakEndResolverRef.current
+                  speakEndResolverRef.current = null
+                  r?.()
+                }}
+                onInfo={pushDebug}
+              />
+            ) : (
+              <SophiaAvatar state={avatarState} size={170} />
+            )}
+
 
             {/* Bubble or loader */}
             <AnimatePresence mode="wait">
@@ -716,6 +827,7 @@ export function AssessmentSession({
                   setAvatarState('idle')
                   setMessages(prev => prev.map(m => m.id === id ? { ...m, status: 'completed', isOptimistic: false } : m))
                 }}
+                onSpeakChunk={use3DAvatar ? speakChunkVia3D : undefined}
               />
             )}
             <Button

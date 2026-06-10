@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { detectHallucination } from '@/lib/hallucination-detector'
 import { streamChatResponse } from '@/lib/chat-stream'
+import { getUnlockedAudio } from '@/lib/audio-unlock'
 
 type VoiceState = 'idle' | 'connecting' | 'ready' | 'recording' | 'processing' | 'speaking' | 'error'
 
@@ -20,6 +21,10 @@ interface UseVoiceChatArgs {
   onAssistantStreamStart?: (messageId: string) => void
   onAssistantStreamDelta?: (messageId: string, delta: string) => void
   onAssistantStreamDone?: (messageId: string) => void
+  /** Si se provee, cada oración de audio se reproduce por aquí (p. ej. avatar
+   * 3D con lip-sync) en vez de con un <audio> interno. Debe resolver cuando el
+   * audio termina, para serializar las oraciones. */
+  onSpeakChunk?: (audioBlob: Blob, text: string) => Promise<void>
 }
 
 /**
@@ -45,9 +50,13 @@ export function useVoiceChat({
   onAssistantStreamStart,
   onAssistantStreamDelta,
   onAssistantStreamDone,
+  onSpeakChunk,
 }: UseVoiceChatArgs) {
   const [state, setState] = useState<VoiceState>('idle')
   const [error, setError] = useState<string | null>(null)
+  // Ref para usar el callback más reciente dentro de playFromQueue (useCallback []).
+  const onSpeakChunkRef = useRef(onSpeakChunk)
+  onSpeakChunkRef.current = onSpeakChunk
 
   const peerRef = useRef<RTCPeerConnection | null>(null)
   const dataChannelRef = useRef<RTCDataChannel | null>(null)
@@ -129,6 +138,7 @@ export function useVoiceChat({
    * Sin reproducción; eso lo hace el loop de la cola.
    */
   const synthesizeSentence = useCallback(async (text: string): Promise<Blob | null> => {
+    const t0 = performance.now()
     try {
       const res = await fetch('/api/voice/speak', {
         method: 'POST',
@@ -139,7 +149,9 @@ export function useVoiceChat({
         console.warn('[Voice] TTS sentence failed:', res.status)
         return null
       }
-      return await res.blob()
+      const blob = await res.blob()
+      console.log(`[timing] 🔊 TTS oración (${Math.round(performance.now() - t0)}ms): "${text.slice(0, 30)}..."`)
+      return blob
     } catch (e) {
       console.warn('[Voice] TTS sentence error:', e)
       return null
@@ -164,7 +176,9 @@ export function useVoiceChat({
       const entry = speakQueueRef.current.shift()
       if (!entry) continue
       try {
+        const tWait = performance.now()
         const blob = await entry.blobPromise
+        const waitMs = Math.round(performance.now() - tWait)
         if (cancelPlaybackRef.current) continue
         // Revelar el texto en la UI EXACTAMENTE cuando arranca el audio.
         const assistantId = currentAssistantIdRef.current
@@ -174,10 +188,27 @@ export function useVoiceChat({
           onDeltaRef.current(assistantId, prefix + entry.text)
         }
         if (!blob) continue
+
+        // Ruta avatar 3D (lip-sync): reproducir por el callback externo, que
+        // resuelve cuando termina el audio (serializa las oraciones).
+        if (onSpeakChunkRef.current) {
+          const tPlay = performance.now()
+          try {
+            await onSpeakChunkRef.current(blob, entry.text)
+          } catch (e) {
+            console.warn('[Voice] onSpeakChunk error:', e)
+          }
+          console.log(`[timing] 🎭 Avatar habló oración: ${Math.round(performance.now() - tPlay)}ms (espera audio: ${waitMs}ms)`)
+          continue
+        }
+
         const url = URL.createObjectURL(blob)
         playbackUrlRef.current = url
 
-        const audio = new Audio()
+        // Reusar el <audio> desbloqueado por gesto si existe (kiosko) — la
+        // reproducción llega segundos después del clic del mic y un elemento
+        // nuevo puede caer en el bloqueo de autoplay.
+        const audio = getUnlockedAudio() ?? new Audio()
         playbackAudioRef.current = audio
         audio.src = url
         audio.preload = 'auto'
@@ -235,6 +266,9 @@ export function useVoiceChat({
    * acumula el response streaming, y luego sintetiza con TTS.
    */
   const processWithClaude = useCallback(async (userTranscript: string) => {
+    const tStart = performance.now()
+    let firstTokenAt = 0
+    console.log('[timing] ⏱️ ─── nueva respuesta ───')
     onTranscript?.({ role: 'user', content: userTranscript })
 
     // NOTA: NO guardamos via /api/voice/message acá. Despues de la migracion
@@ -260,6 +294,10 @@ export function useVoiceChat({
         sessionId,
         userTranscript,
         (chunk) => {
+          if (!firstTokenAt) {
+            firstTokenAt = performance.now()
+            console.log(`[timing] 🧠 Claude primer token: ${Math.round(firstTokenAt - tStart)}ms`)
+          }
           accumulated += chunk
           sentenceBuffer += chunk
           // IMPORTANTE: NO llamamos a onAssistantStreamDelta acá. El texto se
@@ -272,6 +310,7 @@ export function useVoiceChat({
           }
         },
         () => {
+          console.log(`[timing] 🧠 Claude completo: ${Math.round(performance.now() - tStart)}ms`)
           resolve()
         },
         () => {

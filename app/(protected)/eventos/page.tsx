@@ -19,6 +19,7 @@ interface AssessmentSummary {
   title: string
   lessonTitle: string
   isActive: boolean
+  status: 'open' | 'scheduled' | 'ended' | 'closed'
   timeLimitMin: number
   createdAt: string
   closedAt: string | null
@@ -76,6 +77,20 @@ function formatDateRange(start: string, end: string) {
   if (sameMonth) return `${s.getDate()}-${e.getDate()} ${monthFmt.format(s)} ${s.getFullYear()}`
   if (sameYear) return `${s.getDate()} ${monthFmt.format(s)} – ${e.getDate()} ${monthFmt.format(e)} ${s.getFullYear()}`
   return `${s.getDate()} ${monthFmt.format(s)} ${s.getFullYear()} – ${e.getDate()} ${monthFmt.format(e)} ${e.getFullYear()}`
+}
+
+// Estado derivado del periodo de la campaña (calculado en /api/eventos):
+// el kiosko se abre/cierra solo según las fechas del evento; "Cerrado" solo
+// aparece si alguien usó el kill switch manual (isActive = false).
+function KioskoStatusBadge({ status }: { status: AssessmentSummary['status'] }) {
+  const styles: Record<AssessmentSummary['status'], { label: string; className: string }> = {
+    open: { label: 'Activo', className: 'bg-green-50 text-green-700 border-green-200' },
+    scheduled: { label: 'Programado', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+    ended: { label: 'Finalizado', className: 'bg-gray-50 text-gray-600' },
+    closed: { label: 'Cerrado', className: 'bg-red-50 text-red-700 border-red-200' },
+  }
+  const s = styles[status]
+  return <Badge variant="outline" className={`text-[10px] ${s.className}`}>{s.label}</Badge>
 }
 
 function npsColor(score: number | null): string {
@@ -299,10 +314,7 @@ function AssessmentRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <code className="text-xs font-mono font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{assessment.code}</code>
-          {assessment.isActive
-            ? <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">Activo</Badge>
-            : <Badge variant="outline" className="text-[10px] bg-gray-50 text-gray-600">Cerrado</Badge>
-          }
+          <KioskoStatusBadge status={assessment.status} />
         </div>
         <p className="text-sm font-medium text-gray-900 truncate">{assessment.title}</p>
         <p className="text-xs text-gray-500 truncate">{assessment.lessonTitle}</p>

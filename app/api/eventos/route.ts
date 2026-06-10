@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
+import { getKioskoStatus } from '@/lib/kiosko-status'
 
 export const runtime = 'nodejs'
 
@@ -78,8 +79,12 @@ export async function GET() {
     surveysByAssessment.set(aid, arr)
   }
 
-  // Helper para formatear stats de un assessment
-  const formatAssessment = (a: typeof orphans[0]) => {
+  // Helper para formatear stats de un assessment. `campaign` (si existe)
+  // determina el estado derivado: el kiosko hereda el periodo del evento.
+  const formatAssessment = (
+    a: typeof orphans[0],
+    campaign?: { startDate: Date; endDate: Date }
+  ) => {
     const totalParticipants = a.participants.length
     const completed = a.participants.filter((p) => p.completedAt).length
     const npsScores = surveysByAssessment.get(a.id) ?? []
@@ -98,6 +103,7 @@ export async function GET() {
       title: a.title,
       lessonTitle: a.lesson.title,
       isActive: a.isActive,
+      status: getKioskoStatus({ isActive: a.isActive, campaign }),
       timeLimitMin: a.timeLimitMin,
       createdAt: a.createdAt,
       closedAt: a.closedAt,
@@ -136,9 +142,11 @@ export async function GET() {
       location: c.location,
       url: c.url,
       isArchived: c.isArchived,
-      assessments: c.assessments.map(formatAssessment),
+      assessments: c.assessments.map((a) =>
+        formatAssessment(a, { startDate: c.startDate, endDate: c.endDate })
+      ),
     })),
-    orphanAssessments: orphans.map(formatAssessment),
+    orphanAssessments: orphans.map((a) => formatAssessment(a)),
     options: {
       lessons: lessonsForOptions.map((l) => ({
         id: l.id,

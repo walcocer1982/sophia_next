@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { AssessmentKiosko } from '@/components/eval/assessment-kiosko'
+import { getKioskoStatus } from '@/lib/kiosko-status'
 import type { LessonContent } from '@/types/lesson'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,7 @@ export default async function EvalPage({
       code: true,
       title: true,
       isActive: true,
+      campaign: { select: { startDate: true, endDate: true } },
       timeLimitMin: true,
       collectEmail: true,
       collectDni: true,
@@ -58,13 +60,18 @@ export default async function EvalPage({
       }))
   })
 
+  // Estado derivado: el kiosko hereda el periodo de su campaña (se abre y
+  // cierra solo según las fechas del evento). isActive queda como kill switch.
+  const status = getKioskoStatus(assessment)
+
   return (
     <AssessmentKiosko
       assessment={{
         id: assessment.id,
         code: assessment.code,
         title: assessment.title,
-        isActive: assessment.isActive,
+        status,
+        availableFrom: assessment.campaign?.startDate.toISOString() ?? null,
         timeLimitMin: assessment.timeLimitMin,
         collectEmail: assessment.collectEmail,
         collectDni: assessment.collectDni,

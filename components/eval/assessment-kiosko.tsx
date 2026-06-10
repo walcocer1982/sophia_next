@@ -10,13 +10,18 @@ import { AssessmentSession } from './assessment-session'
 import { AssessmentResult } from './assessment-result'
 import { useT } from '@/lib/i18n/use-translation'
 import type { Locale } from '@/lib/i18n/strings'
+import { formatKioskoDate, type KioskoStatus } from '@/lib/kiosko-status'
+import { unlockAudio } from '@/lib/audio-unlock'
 import Image from 'next/image'
 
 interface AssessmentInfo {
   id: string
   code: string
   title: string
-  isActive: boolean
+  /** Estado derivado del periodo de la campaña + kill switch isActive. */
+  status: KioskoStatus
+  /** Inicio de la campaña (ISO) — para el mensaje "Disponible a partir del…". */
+  availableFrom: string | null
   timeLimitMin: number
   collectEmail: boolean
   collectDni: boolean
@@ -119,6 +124,9 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
 
   const handleStart = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Desbloquear audio DENTRO del gesto del submit: el TTS del welcome se
+    // reproduce varios segundos después y sin esto el navegador lo bloquea.
+    unlockAudio()
     if (!firstName.trim()) {
       toast.error(t('register_error_missing_name'))
       return
@@ -130,10 +138,14 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
 
     setSubmitting(true)
     try {
+      // Modo testing: con ?fresh=1 en la URL, fuerza una sesión nueva
+      // (ignora la recuperación por cookie/DNI). Solo aplica en desarrollo.
+      const forceNew =
+        new URLSearchParams(window.location.search).get('fresh') === '1'
       const res = await fetch(`/api/eval/${assessment.code}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName, dni, email, language }),
+        body: JSON.stringify({ firstName, dni, email, language, forceNew }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -149,8 +161,8 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
         participantName?: string
         language?: 'ES' | 'EN'
       }
-      // El idioma del recovery puede diferir del toggle actual — respetamos el
-      // de la sesión original para no romper el historial conversacional.
+      // El servidor respeta el idioma del toggle (actualiza la sesión si
+      // difiere). Este sync solo aplica si por alguna razón devolvió otro.
       if (data.language && data.language !== language) {
         switchLanguage(data.language)
       }
@@ -199,17 +211,37 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
     // mantenerlo en EN si está en un evento internacional.
   }
 
-  if (!assessment.isActive) {
+  if (assessment.status !== 'open') {
+    const closedCopy: Record<Exclude<KioskoStatus, 'open'>, { title: string; detail: string }> =
+      language === 'EN'
+        ? {
+            scheduled: {
+              title: 'Not open yet',
+              detail: assessment.availableFrom
+                ? `This class will be available from ${formatKioskoDate(assessment.availableFrom, 'EN')}.`
+                : 'This class is not available yet.',
+            },
+            ended: { title: 'Event finished', detail: 'This event has ended. Thank you for your interest!' },
+            closed: { title: 'Class closed', detail: 'This class is no longer available.' },
+          }
+        : {
+            scheduled: {
+              title: 'Aún no disponible',
+              detail: assessment.availableFrom
+                ? `Esta clase estará disponible a partir del ${formatKioskoDate(assessment.availableFrom, 'ES')}.`
+                : 'Esta clase todavía no está disponible.',
+            },
+            ended: { title: 'Evento finalizado', detail: 'Este evento ya terminó. ¡Gracias por tu interés!' },
+            closed: { title: 'Clase cerrada', detail: 'Esta clase ya no está disponible.' },
+          }
+    const copy = closedCopy[assessment.status]
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0a1628] p-4">
         <div className="text-center max-w-md">
           <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={120} height={120} className="mx-auto mb-6 rounded-lg" />
-          <h1 className="text-2xl font-bold text-white mb-2">
-            {language === 'EN' ? 'Class closed' : 'Clase cerrada'}
-          </h1>
-          <p className="text-slate-400">
-            {language === 'EN' ? 'This class is no longer available.' : 'Esta clase ya no está disponible.'}
-          </p>
+          <h1 className="text-2xl font-bold text-white mb-2">{copy.title}</h1>
+          <p className="text-slate-400">{copy.detail}</p>
         </div>
       </div>
     )

@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { Mic, Loader2, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useVoiceChat } from '@/hooks/use-voice-chat'
+import { unlockAudio } from '@/lib/audio-unlock'
 import { useT } from '@/lib/i18n/use-translation'
 import type { Locale } from '@/lib/i18n/strings'
 import type { OptimisticMessage } from '@/types/chat'
@@ -19,6 +20,8 @@ interface VoiceButtonProps {
   onStreamDone?: (id: string) => void
   disabled?: boolean
   autoStart?: boolean // Auto-activate voice on mount (kiosko mode)
+  /** Si se provee, cada oración de audio se reproduce por aquí (avatar 3D). */
+  onSpeakChunk?: (audioBlob: Blob, text: string) => Promise<void>
 }
 
 export function VoiceButton({
@@ -30,6 +33,7 @@ export function VoiceButton({
   onStreamDone,
   disabled,
   autoStart = false,
+  onSpeakChunk,
 }: VoiceButtonProps) {
   const t = useT(language)
   const {
@@ -60,6 +64,7 @@ export function VoiceButton({
     onAssistantStreamStart: onStreamStart,
     onAssistantStreamDelta: onStreamDelta,
     onAssistantStreamDone: onStreamDone,
+    onSpeakChunk,
   })
 
   // Auto-start voice on mount if requested (kiosko mode)
@@ -79,7 +84,7 @@ export function VoiceButton({
       <div className="flex items-center gap-2">
         <Button
           type="button"
-          onClick={connect}
+          onClick={() => { unlockAudio(); connect() }}
           disabled={disabled || state === 'connecting'}
           variant="outline"
           size="sm"
@@ -105,6 +110,9 @@ export function VoiceButton({
   const isBusy = state === 'processing' || state === 'speaking'
 
   const handleMicClick = () => {
+    // Cada clic del mic es un gesto — renovar el desbloqueo de audio para que
+    // la respuesta TTS (que llega segundos después) no caiga en autoplay block.
+    unlockAudio()
     if (isRecording) {
       stopRecording()
     } else if (canStart) {

@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { logger } from '@/lib/logger'
+import { getKioskoStatus } from '@/lib/kiosko-status'
 
 export const runtime = 'nodejs'
 
@@ -25,14 +26,17 @@ export async function POST(
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params
-  const { firstName, lastName, dni, email, language } = await request.json() as {
+  const { firstName, lastName, dni, email, language, forceNew } = await request.json() as {
     firstName?: string
     lastName?: string
     dni?: string
     email?: string
     language?: 'ES' | 'EN'
+    forceNew?: boolean
   }
   const lang: 'ES' | 'EN' = language === 'EN' ? 'EN' : 'ES'
+  // Modo testing (solo dev): fuerza sesión nueva ignorando recovery.
+  const skipRecovery = !!forceNew && process.env.NODE_ENV === 'development'
 
   if (!firstName || !firstName.trim()) {
     return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 })
@@ -40,21 +44,48 @@ export async function POST(
 
   const assessment = await prisma.assessment.findUnique({
     where: { code: code.toUpperCase() },
-    include: { lesson: true },
+    include: {
+      lesson: true,
+      campaign: { select: { startDate: true, endDate: true } },
+    },
   })
 
-  if (!assessment || !assessment.isActive) {
+  // El kiosko hereda el periodo de su campaña — fuera de fechas no se permite
+  // registrar, aunque la pantalla de cierre del cliente ya lo bloquee.
+  if (!assessment || getKioskoStatus(assessment) !== 'open') {
     return NextResponse.json({ error: 'Evaluación no disponible' }, { status: 404 })
   }
 
   const cookieStore = await cookies()
   const dniTrimmed = dni?.trim().slice(0, 20) || null
 
+  // Al recuperar una sesión, respetar el idioma del toggle ACTUAL: si el
+  // visitante eligió otro idioma, actualizamos la sesión (el prompt de Sophia
+  // es dinámico y lee lessonSession.language en cada mensaje, así que el
+  // cambio aplica desde la próxima respuesta). Antes se devolvía el idioma
+  // original y el cliente revertía el toggle — elegir EN no tenía efecto.
+  const syncLanguage = async (
+    sessionId: string,
+    participantId: string,
+    current: 'ES' | 'EN'
+  ): Promise<'ES' | 'EN'> => {
+    if (!language || current === lang) return current
+    await prisma.lessonSession.update({
+      where: { id: sessionId },
+      data: { language: lang },
+    })
+    await prisma.assessmentParticipant.update({
+      where: { id: participantId },
+      data: { language: lang },
+    })
+    return lang
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // PATH 1 — Recovery por COOKIE (más rápido, no requiere DNI)
   // ═══════════════════════════════════════════════════════════════
   const existingUserId = cookieStore.get('guest_user_id')?.value
-  if (existingUserId) {
+  if (!skipRecovery && existingUserId) {
     const existingSession = await prisma.lessonSession.findFirst({
       where: {
         userId: existingUserId,
@@ -98,7 +129,11 @@ export async function POST(
         participantId: existingSession.assessmentParticipant.id,
         sessionId: existingSession.id,
         timeLimitMin: assessment.timeLimitMin,
-        language: existingSession.language,
+        language: await syncLanguage(
+          existingSession.id,
+          existingSession.assessmentParticipant.id,
+          existingSession.language
+        ),
       })
     }
   }
@@ -106,7 +141,7 @@ export async function POST(
   // ═══════════════════════════════════════════════════════════════
   // PATH 2 — Recovery por DNI (si lo proveyeron)
   // ═══════════════════════════════════════════════════════════════
-  if (dniTrimmed) {
+  if (!skipRecovery && dniTrimmed) {
     const existingParticipant = await prisma.assessmentParticipant.findFirst({
       where: {
         assessmentId: assessment.id,
@@ -148,7 +183,11 @@ export async function POST(
         participantId: existingParticipant.id,
         sessionId: existingParticipant.session.id,
         timeLimitMin: assessment.timeLimitMin,
-        language: existingParticipant.session.language,
+        language: await syncLanguage(
+          existingParticipant.session.id,
+          existingParticipant.id,
+          existingParticipant.session.language
+        ),
       })
     }
   }
