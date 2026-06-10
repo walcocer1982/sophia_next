@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sophia TalkingHead</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    #avatar { width: 100%; height: 100%; }
+    #status {
+      position: fixed; top: 8px; left: 8px; font: 12px system-ui, sans-serif;
+      color: #64748b; background: rgba(255,255,255,.7); padding: 2px 8px; border-radius: 6px;
+    }
+  </style>
+
+  <!-- importmap polyfill (igual que los ejemplos oficiales de TalkingHead) -->
+  <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.7.1/dist/es-module-shims.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js/+esm",
+      "three/examples/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+      "talkinghead": "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@v1.7.0/modules/talkinghead.mjs"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="avatar"></div>
+  <div id="status">Cargando...</div>
+
+  <script type="module">
+    import { TalkingHead } from "talkinghead";
+    import { LipsyncEs } from "./lipsync-es.mjs";
+
+    const statusEl = document.getElementById("status");
+    const setStatus = (t) => { statusEl.textContent = t; };
+    const post = (msg) => parent.postMessage({ source: "talkinghead", ...msg }, "*");
+    // Log que sale tanto en la consola del iframe como en la del padre.
+    const dlog = (...args) => {
+      console.log("[avatar3d:iframe]", ...args);
+      post({ type: "info", message: args.map(String).join(" ") });
+    };
+
+    // Avatar servido LOCALMENTE (mismo origen, sin depender del CDN).
+    // brunette.glb: rig Mixamo + visemas Oculus/ARKit garantizados.
+    const DEFAULT_AVATAR = "/talkinghead/avatars/brunette.glb";
+
+    let head;
+
+    async function init() {
+      try {
+        const node = document.getElementById("avatar");
+        head = new TalkingHead(node, {
+          cameraView: "upper",        // medio cuerpo
+          avatarMood: "neutral",
+          lipsyncModules: ["en"],     // base; el procesador "es" se inyecta abajo
+          modelBgColor: "transparent",
+          cameraRotateEnable: false,
+          cameraPanEnable: false,
+          cameraZoomEnable: false,
+        });
+
+        // Inyectamos el procesador de lip-sync en espanol (modulo propio).
+        head.lipsync["es"] = new LipsyncEs();
+
+        // El AudioContext del iframe arranca suspendido (politica de autoplay).
+        // La pagina padre llama a esto en cada gesto del usuario para reanudarlo
+        // (mismo origen => permitido). Una vez "running", se queda activo.
+        window.thResumeAudio = () => {
+          try { return head.audioCtx && head.audioCtx.resume(); } catch (e) { return null; }
+        };
+
+        setStatus("Cargando avatar...");
+        await head.showAvatar({
+          url: DEFAULT_AVATAR,
+          body: "F",
+          avatarMood: "neutral",
+          lipsyncLang: "es",
+        });
+
+        setStatus("");
+
+        // Diagnóstico: ¿el avatar tiene morph targets de visemas?
+        let visemeKeys = new Set();
+        (head.morphs || []).forEach((m) => {
+          Object.keys(m.morphTargetDictionary || {}).forEach((k) => {
+            if (k.toLowerCase().includes("viseme")) visemeKeys.add(k);
+          });
+        });
+        dlog("avatar morphs=", (head.morphs || []).length, "| visemas=", visemeKeys.size,
+          visemeKeys.size ? "(" + [...visemeKeys].slice(0, 6).join(",") + "...)" : "(NINGUNA!)");
+
+        post({ type: "ready" });
+      } catch (err) {
+        console.error("[talkinghead] init error:", err);
+        setStatus("Error: " + (err?.message || err));
+        post({ type: "error", message: String(err?.message || err) });
+      }
+    }
+
+    // API por postMessage desde React
+    window.addEventListener("message", async (e) => {
+      const d = e.data || {};
+      if (d.target !== "talkinghead") return;
+      if (!head) { dlog("mensaje recibido pero head AUN no listo:", d.action); return; }
+      dlog("accion recibida:", d.action);
+
+      try {
+        switch (d.action) {
+          case "gesture":
+            head.playGesture(d.name, d.dur ?? 4);
+            break;
+          case "stopGesture":
+            head.stopGesture(0.5);
+            break;
+          case "mood":
+            head.setMood(d.name);
+            break;
+          case "avatar":
+            setStatus("Cargando avatar...");
+            await head.showAvatar({
+              url: d.url,
+              body: d.body || "F",
+              avatarMood: "neutral",
+              lipsyncLang: "es",
+            });
+            setStatus("");
+            post({ type: "ready" });
+            break;
+          case "speak":
+            // Requiere ttsEndpoint configurado. Sin el, se ignora.
+            if (head.opt.ttsEndpoint) {
+              await head.speakText(d.text);
+            } else {
+              post({ type: "info", message: "speak ignorado: falta ttsEndpoint" });
+            }
+            break;
+          case "speakAudio": {
+            // Lip-sync en espanol: recibe el MP3 (de OpenAI TTS) + el texto.
+            // OpenAI no da timestamps, asi que estimamos los tiempos de cada
+            // palabra repartiendo la duracion del audio. TalkingHead calcula
+            // las visemas con el modulo "es" inyectado.
+            dlog("speakAudio: bytes recibidos =", d.audio?.byteLength, "texto =", JSON.stringify((d.text || "").slice(0, 40)));
+            try { await head.audioCtx.resume(); } catch (e) { dlog("resume error:", e?.message); }
+            dlog("audioCtx.state =", head.audioCtx.state);
+            const audioBuffer = await head.audioCtx.decodeAudioData(d.audio);
+            dlog("audio decodificado, duracion =", audioBuffer.duration.toFixed(2) + "s");
+            setStatus("audio: " + head.audioCtx.state + " · " + audioBuffer.duration.toFixed(1) + "s");
+            const totalMs = audioBuffer.duration * 1000;
+            const words = (d.text || "").trim().split(/\s+/).filter(Boolean);
+            const weights = words.map((w) => {
+              const clean = w.replace(/[^\p{L}\p{N}]/gu, "");
+              return Math.max(1, clean.length || 1);
+            });
+            const sum = weights.reduce((a, b) => a + b, 0) || 1;
+            let t = 0;
+            const wtimes = [];
+            const wdurations = [];
+            for (let i = 0; i < words.length; i++) {
+              const dur = (weights[i] / sum) * totalMs;
+              wtimes.push(Math.round(t));
+              wdurations.push(Math.round(dur));
+              t += dur;
+            }
+            head.speakAudio(
+              {
+                audio: audioBuffer,
+                words,
+                wtimes,
+                wdurations,
+                // Marker al final del audio: avisa a React que terminó de hablar
+                // (para devolver el avatar a 'idle').
+                markers: [() => { post({ type: "speakEnd" }); setStatus(""); }],
+                mtimes: [Math.round(totalMs)],
+              },
+              { lipsyncLang: "es" },
+            );
+            dlog("speakAudio() llamado:", words.length, "palabras, isSpeaking =", head.isSpeaking);
+            post({ type: "speaking" });
+            break;
+          }
+        }
+      } catch (err) {
+        console.error("[avatar3d:iframe] action error:", err);
+        dlog("ERROR en accion:", err?.message || err);
+        post({ type: "error", message: String(err?.message || err) });
+      }
+    });
+
+    // es-module-shims puede tardar; arrancamos cuando el modulo ya esta listo.
+    init();
+  </script>
+</body>
+</html>
