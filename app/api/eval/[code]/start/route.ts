@@ -96,7 +96,23 @@ export async function POST(
       orderBy: { startedAt: 'desc' },
     })
 
-    if (existingSession?.assessmentParticipant?.assessmentId === assessment.id) {
+    // La cookie identifica al DISPOSITIVO, no a la persona. Si el registro
+    // actual es OTRA persona (distinto DNI, o distinto nombre cuando no hay
+    // DNI para comparar), NO recuperamos: es el siguiente participante del
+    // stand entrando sin que el anterior presionara "Salir". En ese caso se
+    // sigue de largo a PATH 2/3 y la sesión nueva sobrescribe las cookies.
+    const cookieParticipant = existingSession?.assessmentParticipant
+    const isSamePerson = (() => {
+      if (!cookieParticipant) return false
+      if (dniTrimmed && cookieParticipant.dni) return dniTrimmed === cookieParticipant.dni
+      const norm = (s: string) => s.trim().toLowerCase()
+      return norm(firstName) === norm(cookieParticipant.firstName)
+    })()
+
+    if (
+      existingSession?.assessmentParticipant?.assessmentId === assessment.id &&
+      isSamePerson
+    ) {
       // Sesión completada → devolver status para que cliente muestre resultado
       if (existingSession.completedAt) {
         logger.info('eval.start.cookie_already_completed', {
