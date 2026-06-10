@@ -248,6 +248,28 @@ export default function ProgramacionPage() {
     }
   }
 
+  const handleRenameSection = async (sectionId: string, currentName: string) => {
+    const newName = prompt('Nuevo nombre de la sección:', currentName)
+    if (newName === null) return
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === currentName) return
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error')
+      }
+      toast.success('Sección renombrada')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
   const handleArchiveSection = async (sectionId: string, name: string, archive: boolean) => {
     const msg = archive
       ? `¿Archivar la sección "${name}"? Quedará read-only (histórico). Los datos se conservan y podés desarchivarla cuando quieras.`
@@ -557,6 +579,7 @@ export default function ProgramacionPage() {
                     onToggleLesson={handleToggleLesson}
                     onArchive={handleArchiveSection}
                     onDelete={handleDeleteSection}
+                    onRename={handleRenameSection}
                     onUpdateDates={handleUpdateSectionDates}
                   />
                 ))}
@@ -618,6 +641,7 @@ export default function ProgramacionPage() {
                               onUpdateDates={handleUpdateSectionDates}
                               onDelete={handleDeleteSection}
                               onArchive={handleArchiveSection}
+                              onRename={handleRenameSection}
                               onEnrollStudent={handleEnrollStudent}
                               onUnenrollStudent={handleUnenrollStudent}
                               onAssignInstructor={handleAssignInstructor}
@@ -651,7 +675,7 @@ export default function ProgramacionPage() {
 // ═══════════════════════════════════════════════════════════════
 function TransversalCard({
   sections, sedes, canEdit, isExpanded, onToggleExpand,
-  onBulkToggle, onToggleLesson, onArchive, onDelete, onUpdateDates,
+  onBulkToggle, onToggleLesson, onArchive, onDelete, onRename, onUpdateDates,
 }: {
   sections: Section[]
   sedes: Sede[]
@@ -662,6 +686,7 @@ function TransversalCard({
   onToggleLesson: (sectionId: string, lessonId: string, isOpen: boolean, availableAt?: string) => void
   onArchive: (sectionId: string, name: string, archive: boolean) => void
   onDelete: (sectionId: string, name: string) => void
+  onRename: (sectionId: string, currentName: string) => void
   onUpdateDates: (sectionId: string, startDate: string | null, endDate: string | null) => void
 }) {
   const course = sections[0].course
@@ -698,12 +723,22 @@ function TransversalCard({
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {sections.map((sec) => {
                 const sede = sedes.find((s) => s.id === sec.sedeId)
+                const canRename = canEdit && !sec.isArchived
                 return (
-                  <span key={sec.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded text-[11px]">
+                  <button
+                    key={sec.id}
+                    type="button"
+                    disabled={!canRename}
+                    onClick={() => canRename && onRename(sec.id, sec.name)}
+                    title={canRename ? 'Click para renombrar' : undefined}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded text-[11px] ${
+                      canRename ? 'hover:border-indigo-300 hover:bg-indigo-50/50 cursor-pointer' : 'cursor-default'
+                    }`}
+                  >
                     {sede && <code className="font-mono font-semibold text-emerald-700">{sede.code}</code>}
                     <span>{sec.name}</span>
                     <span className="text-gray-400">({sec.enrolledCount})</span>
-                  </span>
+                  </button>
                 )
               })}
             </div>
@@ -764,6 +799,16 @@ function TransversalCard({
                     </p>
                     {canEdit && (
                       <div className="flex items-center gap-1 shrink-0">
+                        {!sec.isArchived && (
+                          <button
+                            type="button"
+                            onClick={() => onRename(sec.id, sec.name)}
+                            className="text-[10px] px-1.5 py-0.5 rounded text-indigo-700 hover:bg-indigo-50"
+                            title="Cambiar el nombre de la sección"
+                          >
+                            Renombrar
+                          </button>
+                        )}
                         {!sec.isArchived && (
                           <SubSectionDateEditor section={sec} onUpdateDates={onUpdateDates} />
                         )}
@@ -1060,7 +1105,7 @@ function SectionCard({
   section, sedes, canEdit,
   availableStudents, availableInstructors,
   isExpanded, onToggleExpand,
-  onToggleLesson, onUpdateSede, onUpdateDates, onDelete, onArchive,
+  onToggleLesson, onUpdateSede, onUpdateDates, onDelete, onArchive, onRename,
   onEnrollStudent, onUnenrollStudent, onAssignInstructor, onUnassignInstructor,
 }: {
   section: Section
@@ -1075,6 +1120,7 @@ function SectionCard({
   onUpdateDates: (sectionId: string, startDate: string | null, endDate: string | null) => void
   onDelete: (sectionId: string, name: string) => void
   onArchive: (sectionId: string, name: string, archive: boolean) => void
+  onRename: (sectionId: string, currentName: string) => void
   onEnrollStudent: (sectionId: string, userId: string) => void
   onUnenrollStudent: (sectionId: string, userId: string, name: string) => void
   onAssignInstructor: (sectionId: string, userId: string) => void
@@ -1156,12 +1202,24 @@ function SectionCard({
                 {sedes.map((s) => (<option key={s.id} value={s.id}>{s.code} · {s.name}</option>))}
               </select>
 
+              {!section.isArchived && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onRename(section.id, section.name)}
+                  className="ml-auto h-7 px-2 text-indigo-700 hover:bg-indigo-50"
+                  title="Cambiar el nombre de la sección"
+                >
+                  Renombrar
+                </Button>
+              )}
+
               {/* Archivar / Reactivar — siempre disponible para SUPERADMIN/ADMIN */}
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => onArchive(section.id, section.name, !section.isArchived)}
-                className={`ml-auto h-7 px-2 ${section.isArchived ? 'text-emerald-700 hover:bg-emerald-50' : 'text-amber-700 hover:bg-amber-50'}`}
+                className={`${section.isArchived ? 'ml-auto' : ''} h-7 px-2 ${section.isArchived ? 'text-emerald-700 hover:bg-emerald-50' : 'text-amber-700 hover:bg-amber-50'}`}
                 title={section.isArchived ? 'Reactivar (volverá a ser editable)' : 'Archivar (queda read-only, datos se conservan)'}
               >
                 {section.isArchived ? (
