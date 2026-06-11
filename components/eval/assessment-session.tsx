@@ -319,11 +319,15 @@ export function AssessmentSession({
   // recovery, donde Sophia repite su último mensaje). on_demand nunca solo.
   useEffect(() => {
     if (heroIsImage) return
+    // Nunca durante el saludo: el welcome SIEMPRE presenta el tema de la
+    // lección, así que matchea la descripción de la imagen por afinidad
+    // natural (falso positivo sistemático del matcher difuso).
+    if (!hasUserMessage) return
     const content = lastAssistantMessage?.content
     const img = activityImages[visibleImageIdx]
     if (!content || !img || img.showWhen === 'on_demand') return
     if (textMentionsImage(content, img.description)) setHeroIsImage(true)
-  }, [lastAssistantMessage?.content, activityImages, visibleImageIdx, heroIsImage, textMentionsImage])
+  }, [lastAssistantMessage?.content, activityImages, visibleImageIdx, heroIsImage, hasUserMessage, textMentionsImage])
 
   // Key points "encendidos": una vez que Sophia menciona un punto clave en
   // alguna respuesta, queda iluminado en el sidebar por el resto de la sesión.
