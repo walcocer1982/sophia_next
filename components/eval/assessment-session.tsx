@@ -107,44 +107,79 @@ export function AssessmentSession({
   // Ref de disponibilidad: lo leemos DENTRO de speakReply para evitar stale
   // closures (el callback de streaming captura una versión vieja de speakReply).
   const avatar3DReadyRef = useRef(false)
-  // ¿Enrutar el audio por el avatar 3D (lip-sync)? Ya no exige "listo": el
-  // componente encola el habla y la reproduce al cargar (sirve para el welcome).
-  const shouldRoute3D = () => use3DAvatar && !!talkingHeadRef.current
-  // Resolver del 'speakEnd' actual: lo usa el modo voz para serializar oraciones
-  // (cada oración espera a que el avatar termine de hablarla antes de la siguiente).
-  const speakEndResolverRef = useRef<(() => void) | null>(null)
-
-  // Reproduce una oración del modo voz por el avatar 3D (lip-sync) y resuelve
-  // cuando el avatar termina de hablarla.
-  const speakChunkVia3D = useCallback(async (blob: Blob, text: string) => {
-    if (!use3DAvatar || !talkingHeadRef.current) {
-      // Fallback: reproducir con el <audio> compartido (desbloqueado en el
-      // gesto de registro — un new Audio() perdería ese desbloqueo).
-      const url = URL.createObjectURL(blob)
-      const audio = getUnlockedAudio() ?? new Audio()
-      audio.src = url
-      await new Promise<void>((resolve) => {
-        audio.onended = () => resolve()
-        audio.onerror = () => resolve()
-        audio.play().catch(() => resolve())
-      })
-      try { URL.revokeObjectURL(url) } catch { /* ignore */ }
-      return
-    }
-    const buf = await blob.arrayBuffer()
-    await new Promise<void>((resolve) => {
-      speakEndResolverRef.current = resolve
-      // Safety: si 'speakEnd' no llega, no colgar la cola indefinidamente.
-      const safety = setTimeout(resolve, 30000)
-      const wrapped = () => { clearTimeout(safety); resolve() }
-      speakEndResolverRef.current = wrapped
-      talkingHeadRef.current!.speakAudio(buf, text)
-    })
-  }, [use3DAvatar])
   // Diagnóstico solo en consola (sin overlay que tape la UI).
   const pushDebug = useCallback((msg: string) => {
     console.log('[avatar3d:eval]', msg)
   }, [])
+  // Salud del pipeline 3D: tras 2 fallos (error del iframe o watchdog vencido)
+  // dejamos de enrutar audio por el avatar durante el resto de la sesión y
+  // todo suena por el reproductor normal. La voz NUNCA debe quedarse muda por
+  // culpa del experimento de lip-sync.
+  const avatar3DFailuresRef = useRef(0)
+  // ¿Enrutar el audio por el avatar 3D (lip-sync)? Ya no exige "listo": el
+  // componente encola el habla y la reproduce al cargar (sirve para el welcome).
+  const shouldRoute3D = () =>
+    use3DAvatar && !!talkingHeadRef.current && avatar3DFailuresRef.current < 2
+  // Resolver del 'speakEnd'/'error' actual: lo usa el modo voz para serializar
+  // oraciones (cada una espera a que el avatar la termine antes de la siguiente).
+  const speakEndResolverRef = useRef<((result: 'end' | 'error') => void) | null>(null)
+
+  // Duración estimada del habla (texto → ms) para los watchdogs. Generosa:
+  // ~450ms por palabra + 4s de margen, tope 30s.
+  const estimateSpeechMs = (text: string) => {
+    const words = text.trim().split(/\s+/).filter(Boolean).length
+    return Math.min(30000, 4000 + words * 450)
+  }
+
+  // Reproduce el blob por el <audio> compartido (desbloqueado en el gesto de
+  // registro — un new Audio() perdería ese desbloqueo).
+  const playBlobFallback = useCallback(async (blob: Blob) => {
+    const url = URL.createObjectURL(blob)
+    const audio = getUnlockedAudio() ?? new Audio()
+    audio.src = url
+    await new Promise<void>((resolve) => {
+      audio.onended = () => resolve()
+      audio.onerror = () => resolve()
+      audio.play().catch(() => resolve())
+    })
+    try { URL.revokeObjectURL(url) } catch { /* ignore */ }
+  }, [])
+
+  // Reproduce una oración del modo voz por el avatar 3D (lip-sync) y resuelve
+  // cuando el avatar termina de hablarla. Endurecido:
+  //  - watchdog adaptativo a la longitud del texto (antes 30s fijos — una
+  //    oración perdida congelaba toda la cola medio minuto)
+  //  - error del iframe (p. ej. decode fallido) → la oración se reproduce por
+  //    el audio normal para que no haya silencio
+  //  - 2 fallos seguidos → el resto de la sesión va por audio normal
+  const speakChunkVia3D = useCallback(async (blob: Blob, text: string) => {
+    if (!shouldRoute3D()) {
+      await playBlobFallback(blob)
+      return
+    }
+    const buf = await blob.arrayBuffer()
+    const result = await new Promise<'end' | 'error' | 'timeout'>((resolve) => {
+      const safety = setTimeout(() => {
+        speakEndResolverRef.current = null
+        resolve('timeout')
+      }, estimateSpeechMs(text))
+      speakEndResolverRef.current = (r) => { clearTimeout(safety); resolve(r) }
+      talkingHeadRef.current!.speakAudio(buf, text)
+    })
+    if (result === 'end') {
+      avatar3DFailuresRef.current = 0
+      return
+    }
+    avatar3DFailuresRef.current += 1
+    pushDebug(`3D ${result} (fallo ${avatar3DFailuresRef.current}/2) — degradando a audio normal`)
+    // Error = el audio NO sonó (decode fallido) → reproducirlo por el camino
+    // normal. Timeout = ambiguo (pudo sonar y perderse el marker): no se
+    // re-reproduce para no duplicar la oración, solo cuenta como fallo.
+    if (result === 'error') {
+      await playBlobFallback(blob)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [use3DAvatar, playBlobFallback, pushDebug])
   const [lightboxImage, setLightboxImage] = useState<{ url: string; description: string } | null>(null)
   // Popover del objetivo (ⓘ del sidebar) — el goal ya no está fijo en pantalla.
   const [showGoal, setShowGoal] = useState(false)
@@ -356,6 +391,11 @@ export function AssessmentSession({
       if (route3D) {
         const buf = await blob.arrayBuffer()
         talkingHeadRef.current!.speakAudio(buf, clean)
+        // Watchdog: si el 'speakEnd' del iframe se pierde, liberar el input
+        // igual (antes quedaba "Sophia está hablando..." indefinidamente).
+        setTimeout(() => {
+          setAvatarState((s) => (s === 'speaking' ? 'idle' : s))
+        }, estimateSpeechMs(clean))
         return
       }
       objectUrl = URL.createObjectURL(blob)
@@ -755,13 +795,13 @@ export function AssessmentSession({
                   setAvatarState('idle')
                   const r = speakEndResolverRef.current
                   speakEndResolverRef.current = null
-                  r?.()
+                  r?.('end')
                 }}
                 onError={() => {
                   setAvatarState('idle')
                   const r = speakEndResolverRef.current
                   speakEndResolverRef.current = null
-                  r?.()
+                  r?.('error')
                 }}
                 onInfo={pushDebug}
               />
