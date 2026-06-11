@@ -19,6 +19,8 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     courseId?: string
+    title?: string
+    capacidad?: string | null  // descripción / competencia general
     methodology?: 'REFLECTIVE' | 'CODE'
     track?: 'REGULAR' | 'CONTINUA'
     sedeIds?: string[]   // m:n: reemplaza el set completo de sedes
@@ -33,6 +35,30 @@ export async function POST(request: Request) {
   }
 
   const data: Prisma.CourseUpdateInput = {}
+  if (body.title !== undefined) {
+    const trimmed = body.title.trim()
+    if (trimmed.length < 3 || trimmed.length > 200) {
+      return NextResponse.json(
+        { error: 'El título debe tener entre 3 y 200 caracteres' },
+        { status: 400 }
+      )
+    }
+    data.title = trimmed
+  }
+  if (body.capacidad !== undefined) {
+    if (body.capacidad === null || body.capacidad === '') {
+      data.capacidad = null
+    } else {
+      const trimmed = body.capacidad.trim()
+      if (trimmed.length > 2000) {
+        return NextResponse.json(
+          { error: 'La descripción no puede superar 2000 caracteres' },
+          { status: 400 }
+        )
+      }
+      data.capacidad = trimmed
+    }
+  }
   if (body.methodology !== undefined) {
     if (body.methodology !== 'REFLECTIVE' && body.methodology !== 'CODE') {
       return NextResponse.json({ error: 'methodology inválida' }, { status: 400 })
@@ -83,6 +109,8 @@ export async function POST(request: Request) {
     data,
     select: {
       id: true,
+      title: true,
+      capacidad: true,
       methodology: true,
       track: true,
       voiceEnabled: true,

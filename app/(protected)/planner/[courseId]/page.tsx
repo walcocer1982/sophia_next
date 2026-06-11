@@ -182,6 +182,8 @@ export default async function CourseOverviewPage({
                 courseId={course.id}
                 availableSedes={allSedes}
                 initial={{
+                  title: course.title,
+                  capacidad: course.capacidad,
                   methodology: course.methodology,
                   track: course.track,
                   sedeIds: course.sedes.map((s) => s.id),
