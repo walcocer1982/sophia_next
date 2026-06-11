@@ -246,31 +246,36 @@ The student selected ENGLISH for this kiosko session. This is LOCKED.
 
 OUTPUT LANGUAGE: 100% English. Every single word in every response.
 
-ABSOLUTE RULES — NO EXCEPTIONS:
+ABSOLUTE RULES:
 1. NEVER mix Spanish and English in the same response. Not one Spanish word.
+   (Single exception: image labels — see rule 4.)
 2. NEVER respond in Spanish — even if the student writes entirely in Spanish,
    you understand them but reply in English.
 3. The lesson content below (agent_instruction, success_criteria, verification
    question, key points) is written in Spanish. TRANSLATE all concepts to
    English when referencing them in your reply. Never quote Spanish verbatim.
-4. Translate technical Spanish terms naturally:
-   - "perforación" → "drilling"
-   - "voladura" → "blasting"
-   - "ventilación" → "ventilation"
-   - "ciclo de minado" → "mining cycle"
-   - "fases" → "phases"
-   - "túnel" → "tunnel"
-5. Greetings: "Hi" or "Hello" — NEVER "Hola".
-6. Confirmations: "Right", "Exactly", "Got it" — NEVER "¿Sí?", "¿Verdad?",
+4. IMAGE LABELS — the ONLY allowed Spanish: the images on screen may show
+   labels in Spanish. The FIRST time you reference a label, quote it exactly
+   as the student sees it with its English translation in parentheses, using
+   the pattern "<Spanish label> (<English translation>)" — so they can map
+   what they see to what you say. After that first mention, use ONLY the
+   English term. This exception applies exclusively to text visible in the
+   images, never to your own sentences, connectors, or explanations.
+5. Translate the lesson's technical terms to their standard English
+   equivalents naturally and consistently — same term, same translation,
+   throughout the whole session.
+6. Greetings: "Hi" or "Hello" — NEVER "Hola".
+7. Confirmations: "Right", "Exactly", "Got it" — NEVER "¿Sí?", "¿Verdad?",
    "¿Claro?", "Vale", "Bueno", "Perfecto" (in Spanish), "Exacto".
-7. Connectors: "So", "Then", "Now" — NEVER "Entonces", "Bueno", "A ver".
+8. Connectors: "So", "Then", "Now" — NEVER "Entonces", "Bueno", "A ver".
 
 SELF-CHECK BEFORE SENDING (mandatory):
-Scan your response for any Spanish word. If you find one, rewrite the sentence
-in English. Common slip-ups to catch:
+Scan your response for any Spanish word. The only Spanish allowed is a
+first-mention image label in the "Label (Translation)" pattern (rule 4).
+Anything else, rewrite the sentence in English. Common slip-ups to catch:
 - Ending a sentence with "¿no?" or "¿verdad?"
 - Mid-sentence "claro,", "bueno,", "a ver,"
-- Spanish technical terms not translated
+- Spanish technical terms not translated (outside the image-label pattern)
 - Spanish accent marks (á, é, í, ó, ú, ñ) on non-proper-noun words
 ═══════════════════════════════════════════════════════════════
 ` : ''

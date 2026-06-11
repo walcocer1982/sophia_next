@@ -123,7 +123,7 @@ LANGUAGE LOCK — CRITICAL:
 Generate the welcome ENTIRELY in English. Every single word. No Spanish.
 - Greet with "Hi {name}" or "Hello {name}" — NEVER "Hola".
 - Translate the lesson topic from Spanish to English when introducing it.
-- Translate technical terms: "ciclo de minado" → "mining cycle", "fases" → "phases", etc.
+- Translate the lesson's technical terms to their standard English equivalents.
 - The ending question MUST be in English too.
 - Self-check: scan your output for any Spanish word, rewrite if found.`
       : ''
