@@ -1076,6 +1076,16 @@ function SedeToggleRow({
   const noneOpen = open === 0
   const partial = open > 0 && open < total
 
+  // Hay cambios pendientes en fecha/hora respecto a lo guardado en el servidor.
+  // Usado para mostrar el botón "Aplicar" SOLO cuando hace falta (no contamina
+  // la UI mientras no haya nada que guardar). Si la sede no está abierta no
+  // tiene sentido — el checkbox ya guarda al abrir.
+  const dirty =
+    allOpen &&
+    (date !== group.defaultDate ||
+      startTime !== group.defaultStart ||
+      endTime !== group.defaultEnd)
+
   const handleClick = async () => {
     if (allOpen) {
       if (!confirm(`¿Cerrar "${lessonTitle}" en ${group.code} (${total} secc${total !== 1 ? 'iones' : 'ión'})?`)) return
@@ -1093,6 +1103,18 @@ function SedeToggleRow({
       await onToggle(true, toLocalISO(date, startTime), hours)
       setSubmitting(false)
     }
+  }
+
+  const handleApply = async () => {
+    const hours = hoursBetween(startTime, endTime)
+    if (hours === 0) {
+      toast.error('La hora de cierre debe ser posterior a la de inicio')
+      return
+    }
+    setSubmitting(true)
+    // Re-enviar publish=true con los nuevos valores → upsert en el endpoint.
+    await onToggle(true, toLocalISO(date, startTime), hours)
+    setSubmitting(false)
   }
 
   return (
@@ -1144,7 +1166,7 @@ function SedeToggleRow({
           onChange={(e) => setDate(e.target.value)}
           disabled={submitting}
           className="h-7 text-xs w-32"
-          title={allOpen ? 'Fecha actual (cambiar requiere cerrar + reabrir)' : 'Fecha al abrir'}
+          title={allOpen ? 'Cambiar fecha — click en "Aplicar" para guardar' : 'Fecha al abrir'}
         />
         <Input
           type="time"
@@ -1163,6 +1185,18 @@ function SedeToggleRow({
           className="h-7 text-xs w-22"
           title="Hora de cierre"
         />
+        {dirty && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleApply}
+            disabled={submitting}
+            className="h-7 px-2 text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white"
+            title="Guardar los cambios de fecha/hora en esta sede"
+          >
+            {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Aplicar'}
+          </Button>
+        )}
       </div>
     </div>
   )
@@ -1500,10 +1534,30 @@ function LessonScheduleRow({
           <Button size="sm" variant="outline" onClick={() => setEditing(false)} className="h-7">✕</Button>
         </div>
       ) : isOpen ? (
-        <Button size="sm" variant="outline" onClick={handleClose} disabled={submitting} className="h-7 gap-1 text-amber-700 hover:bg-amber-50 text-[11px]">
-          {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lock className="h-3 w-3" />}
-          Cerrar
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              // Sincronizar inputs con el valor actual antes de abrir el editor.
+              if (schedule) {
+                setDateInput(new Date(schedule.availableAt).toISOString().slice(0, 10))
+                setStartTime(localTime(schedule.availableAt))
+                setEndTime(closeTime(schedule.availableAt, schedule.closesAfterHours))
+              }
+              setEditing(true)
+            }}
+            disabled={submitting}
+            className="h-7 gap-1 text-indigo-700 hover:bg-indigo-50 text-[11px]"
+          >
+            <Calendar className="h-3 w-3" />
+            Editar
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleClose} disabled={submitting} className="h-7 gap-1 text-amber-700 hover:bg-amber-50 text-[11px]">
+            {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lock className="h-3 w-3" />}
+            Cerrar
+          </Button>
+        </div>
       ) : (
         <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="h-7 gap-1 text-green-700 hover:bg-green-50 text-[11px]">
           <Calendar className="h-3 w-3" />
