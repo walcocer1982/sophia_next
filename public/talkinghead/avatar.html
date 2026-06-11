@@ -147,7 +147,9 @@
             dlog("audioCtx.state =", head.audioCtx.state);
             const audioBuffer = await head.audioCtx.decodeAudioData(d.audio);
             dlog("audio decodificado, duracion =", audioBuffer.duration.toFixed(2) + "s");
-            setStatus("audio: " + head.audioCtx.state + " · " + audioBuffer.duration.toFixed(1) + "s");
+            // Sin status visible durante reproduccion (era un chip de debug
+            // que se veia en el kiosko). El estado va solo a consola.
+            dlog("audio: " + head.audioCtx.state + " · " + audioBuffer.duration.toFixed(1) + "s");
             const totalMs = audioBuffer.duration * 1000;
             const words = (d.text || "").trim().split(/\s+/).filter(Boolean);
             const weights = words.map((w) => {

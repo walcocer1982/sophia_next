@@ -20,6 +20,8 @@ interface VoiceButtonProps {
   onStreamDone?: (id: string) => void
   disabled?: boolean
   autoStart?: boolean // Auto-activate voice on mount (kiosko mode)
+  /** CTA primario grande (kiosko): botón lleno y prominente en vez de outline sm. */
+  prominent?: boolean
   /** Si se provee, cada oración de audio se reproduce por aquí (avatar 3D). */
   onSpeakChunk?: (audioBlob: Blob, text: string) => Promise<void>
 }
@@ -33,6 +35,7 @@ export function VoiceButton({
   onStreamDone,
   disabled,
   autoStart = false,
+  prominent = false,
   onSpeakChunk,
 }: VoiceButtonProps) {
   const t = useT(language)
@@ -86,14 +89,14 @@ export function VoiceButton({
           type="button"
           onClick={() => { unlockAudio(); connect() }}
           disabled={disabled || state === 'connecting'}
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
+          variant={prominent ? 'default' : 'outline'}
+          size={prominent ? 'lg' : 'sm'}
+          className={prominent ? 'gap-2 h-12 px-8 text-base font-semibold' : 'gap-1.5'}
         >
           {state === 'connecting' ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className={prominent ? 'h-5 w-5 animate-spin' : 'h-4 w-4 animate-spin'} />
           ) : (
-            <Mic className="h-4 w-4" />
+            <Mic className={prominent ? 'h-5 w-5' : 'h-4 w-4'} />
           )}
           <span className="hidden sm:inline">
             {state === 'connecting' ? t('voice_connecting') : t('voice_activate')}
@@ -127,10 +130,10 @@ export function VoiceButton({
         onClick={handleMicClick}
         disabled={disabled || (!canStart && !isRecording)}
         variant={isRecording ? 'destructive' : 'default'}
-        size="sm"
-        className={`gap-1.5 select-none ${isRecording ? 'animate-pulse' : ''}`}
+        size={prominent ? 'lg' : 'sm'}
+        className={`select-none ${prominent ? 'gap-2 h-12 px-8 text-base font-semibold' : 'gap-1.5'} ${isRecording ? 'animate-pulse' : ''}`}
       >
-        <Mic className="h-4 w-4" />
+        <Mic className={prominent ? 'h-5 w-5' : 'h-4 w-4'} />
         <span className="hidden sm:inline">
           {isRecording
             ? t('voice_click_to_send')
