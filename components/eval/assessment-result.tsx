@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Sparkles, ArrowRight, Award } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { gradeToRubricLevel } from '@/lib/rubric'
 import { useT } from '@/lib/i18n/use-translation'
@@ -75,6 +75,7 @@ const LEVEL_INFO: Record<LevelKey, LevelInfo> = {
 export function AssessmentResult({
   sessionId,
   grade,
+  gradeOver20,
   participantName,
   language = 'ES',
   onNext,
@@ -118,16 +119,22 @@ export function AssessmentResult({
         <div className="relative bg-[#0d1f3c]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-8 text-center">
           <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={56} height={56} className="mx-auto mb-4 rounded-lg opacity-90" />
 
+          {/* La nota es el elemento protagonista de la pantalla */}
           <motion.div
             initial={{ scale: 0, rotate: -90 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-            className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center bg-gradient-to-br ${info.from} ${info.to} ring-4 ${info.ring} mb-5 shadow-xl`}
+            className={`mx-auto w-36 h-36 rounded-full flex items-center justify-center bg-gradient-to-br ${info.from} ${info.to} ring-4 ${info.ring} mb-5 shadow-xl`}
           >
-            {level === 'logrado_destacado' ? <Award className="h-10 w-10 text-white" /> : <Sparkles className="h-10 w-10 text-white" />}
+            {/* Número centrado en el eje, denominador debajo — el "/20" a la
+                derecha desplazaba el número del centro del círculo. */}
+            <span className="flex flex-col items-center">
+              <span className="text-5xl font-extrabold text-white leading-none">{gradeOver20.toFixed(1)}</span>
+              <span className="mt-1.5 text-base font-semibold text-white/75 leading-none">/20</span>
+            </span>
           </motion.div>
 
-          <h2 className="text-2xl font-bold text-white mb-2">
+          <h2 className="text-lg font-semibold text-white mb-2">
             {language === 'EN' ? `Thanks for participating, ${firstName}!` : `¡Gracias por participar, ${firstName}!`}
           </h2>
 

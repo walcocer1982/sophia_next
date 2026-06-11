@@ -1,20 +1,24 @@
 /**
  * 4-level rubric system para evaluación de actividades.
  *
- * Escala discreta 0-25-50-75-100. Thresholds en los valores EXACTOS de
- * cada nivel (sin rangos intermedios):
+ * DOS escalas distintas:
  *
- * | Nivel              | Score requerido | Definición operacional        |
- * |--------------------|-----------------|-------------------------------|
- * | Logrado Destacado  | = 100           | sustenta su respuesta         |
- * | Logrado            | >= 75           | cumple 2+ criterios           |
- * | En Proceso         | >= 50           | intenta pero vago/incompleto  |
- * | En Inicio          | < 50            | básico, monosilábico o nada   |
+ * 1) NOTA GLOBAL de la lección (promedio 0-100) → bandas definidas por
+ *    política de evaluación (2026-06-10):
  *
- * Passing grade: 75 = Logrado.
+ *    | Nivel              | Rango 0-100 | En /20      |
+ *    |--------------------|-------------|-------------|
+ *    | Logrado Destacado  | >= 87.5     | 17.5 - 20   |
+ *    | Logrado            | >= 75       | 15 - 17.4   |
+ *    | En Proceso         | >= 62.5     | 12.5 - 14.9 |
+ *    | En Inicio          | < 62.5      | < 12.5      |
  *
- * Como el grade es un promedio, valores intermedios (ej: 62) caen al nivel
- * inferior: 62 → Proceso (no llegó a 75 = Logrado).
+ *    Convención de borde: el límite inferior pertenece al nivel superior
+ *    (15.0 es Logrado, 17.5 es Destacado). Passing grade: 75 = 15/20.
+ *
+ * 2) NIVEL POR ACTIVIDAD: escala discreta 0-25-50-75-100 del evaluador
+ *    (memorized/understood/applied/analyzed) → ver calculateRubricLevel.
+ *    NO usa las bandas globales: 50 = understood siempre es Proceso.
  *
  * SOURCE OF TRUTH: la rúbrica se deriva del grade numérico calculado en
  * lib/grading.ts. Esta capa solo mapea el número al label.
@@ -23,10 +27,10 @@
 import { activityScore, type ScorableActivity } from './grading'
 
 export const GRADE_THRESHOLDS = {
-  LOGRADO_DESTACADO: 100,  // Score 100 (analyzed) → Destacado
-  LOGRADO: 75,             // Score 75 (applied) → Logrado
-  EN_PROCESO: 50,          // Score 50 (understood) → Proceso
-  EN_INICIO: 0,            // Score 0-49 (memorized=25) → Inicio
+  LOGRADO_DESTACADO: 87.5, // 17.5/20 — alcanzable sin perfección absoluta
+  LOGRADO: 75,             // 15/20 — passing
+  EN_PROCESO: 62.5,        // 12.5/20
+  EN_INICIO: 0,
 } as const
 
 export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 75 = applied = Logrado
@@ -67,15 +71,20 @@ const RUBRIC_CONFIG: Record<RubricLevel, Omit<RubricResult, 'level'>> = {
  * Calculate rubric level for a single activity.
  *
  * Delega en activityScore() (lib/grading.ts) para tener UNA fuente de verdad.
- * Ese score ya incluye el cap-por-intentos: el primer intento puede llegar
- * a Destacado; intento 2 tope Logrado; 3 tope Proceso; 4+ tope Inicio.
+ * Mapea la escala DISCRETA por actividad (no las bandas de la nota global):
+ * 100 = analyzed → Destacado, >=75 = applied → Logrado,
+ * >=50 = understood → Proceso, <50 = memorized → Inicio.
  */
 export function calculateRubricLevel(
   ap: ScorableActivity,
   passedCriteria: boolean,
 ): RubricLevel {
   if (!passedCriteria) return 'en_inicio'
-  return gradeToRubricLevel(activityScore(ap))
+  const score = activityScore(ap)
+  if (score >= 100) return 'logrado_destacado'
+  if (score >= 75) return 'logrado'
+  if (score >= 50) return 'en_proceso'
+  return 'en_inicio'
 }
 
 /**

@@ -164,7 +164,7 @@ export const STRINGS = {
     rubric_destacado: 'Outstanding',
     rubric_inicio_desc: 'You need to reinforce the basic concepts',
     rubric_proceso_desc: "You're on the right track, keep practicing",
-    rubric_logrado_desc: 'You master the concepts taught',
+    rubric_logrado_desc: 'You mastered the concepts taught',
     rubric_destacado_desc: 'Excellent — deep understanding of the topic',
 
     // Survey modal
