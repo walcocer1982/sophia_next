@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Settings, Loader2, Check, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api-client'
 import { useAsyncOp } from '@/lib/hooks/use-async-op'
@@ -17,6 +19,8 @@ interface SedeOption {
 }
 
 interface CourseConfig {
+  title: string
+  capacidad: string | null
   methodology: Methodology
   track: Track
   sedeIds: string[]  // ids de las sedes asignadas al curso
@@ -45,12 +49,17 @@ export function CourseConfigPanel({
   initial: CourseConfig
   availableSedes: SedeOption[]
 }) {
+  const router = useRouter()
   const [config, setConfig] = useState<CourseConfig>(initial)
   const [open, setOpen] = useState(false)
   const [instructorDraft, setInstructorDraft] = useState(initial.instructor)
+  const [titleDraft, setTitleDraft] = useState(initial.title)
+  const [capacidadDraft, setCapacidadDraft] = useState(initial.capacidad ?? '')
   const { run, isPending } = useAsyncOp()
   const menuRef = useRef<HTMLDivElement>(null)
   const instructorDirty = instructorDraft.trim() !== config.instructor.trim()
+  const titleDirty = titleDraft.trim() !== config.title.trim()
+  const capacidadDirty = capacidadDraft.trim() !== (config.capacidad ?? '').trim()
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -93,6 +102,22 @@ export function CourseConfigPanel({
     await patch({ instructor: next }, 'instructor')
   }
 
+  async function saveInfo() {
+    const nextTitle = titleDraft.trim()
+    if (nextTitle.length < 3) {
+      toast.error('El título debe tener al menos 3 caracteres')
+      return
+    }
+    const nextCap = capacidadDraft.trim()
+    const payload: Partial<CourseConfig> = {}
+    if (titleDirty) payload.title = nextTitle
+    if (capacidadDirty) payload.capacidad = nextCap || null
+    if (Object.keys(payload).length === 0) return
+    await patch(payload, 'info')
+    // Refrescar el header de la página (Server Component) sin recarga completa
+    router.refresh()
+  }
+
   return (
     <div className="relative" ref={menuRef}>
       <Button
@@ -108,8 +133,57 @@ export function CourseConfigPanel({
 
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1 w-96 rounded-lg border border-gray-200 bg-white p-3 shadow-lg max-h-[80vh] overflow-y-auto">
+          {/* Información del curso (título + descripción) */}
+          <p className="mb-1.5 text-xs font-medium text-gray-700">Información del curso</p>
+          <div className="mb-3 space-y-2">
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Título</label>
+              <Input
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                maxLength={200}
+                className="text-sm"
+                placeholder="Nombre del curso"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Descripción</label>
+              <textarea
+                value={capacidadDraft}
+                onChange={(e) => setCapacidadDraft(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                placeholder="Competencia general que desarrolla el curso"
+                className="w-full resize-y rounded-md border border-gray-200 px-2 py-1.5 text-xs leading-snug focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <p className="mt-0.5 text-[10px] text-gray-400">{capacidadDraft.length} / 2000</p>
+            </div>
+            {(titleDirty || capacidadDirty) && (
+              <div className="flex items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTitleDraft(config.title)
+                    setCapacidadDraft(config.capacidad ?? '')
+                  }}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Descartar
+                </button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={saveInfo}
+                  disabled={isPending('info') || titleDraft.trim().length < 3}
+                >
+                  {isPending('info') ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Guardar'}
+                </Button>
+              </div>
+            )}
+          </div>
+
           {/* Track (Regular vs Continua) */}
-          <p className="mb-1.5 text-xs font-medium text-gray-700">Track del curso</p>
+          <p className="mb-1.5 text-xs font-medium text-gray-700 border-t border-gray-100 pt-2">Track del curso</p>
           <div className="mb-3 space-y-1">
             {(['REGULAR', 'CONTINUA'] as Track[]).map((t) => (
               <button
