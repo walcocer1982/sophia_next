@@ -5,6 +5,7 @@ import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActiviti
 import { buildSystemPrompt, getMaxTokensForActivity, isStudentUnsureStrong } from '@/lib/prompt-builder'
 import { isPassing } from '@/lib/rubric'
 import { calculateGrade, calculateCompletionGrade } from '@/lib/grading'
+import { gradeTo20 } from '@/lib/assessment-utils'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { detectHallucination } from '@/lib/hallucination-detector'
 import { logger, logChatMessage, logError } from '@/lib/logger'
@@ -15,7 +16,7 @@ import { classifyIntent } from '@/lib/services/intent-classification'
 import { compressMessagesForAPI } from '@/lib/message-summarizer'
 import { generateLessonReport } from '@/lib/lesson-report'
 import { processPlannerAttachments } from '@/lib/planner/attachments'
-import type { LessonContent } from '@/types/lesson'
+import type { LessonContent, ModerationResult, IntentClassification } from '@/types/lesson'
 import type { Message, Prisma } from '@prisma/client'
 
 export const runtime = 'nodejs'
@@ -118,20 +119,25 @@ export async function POST(request: Request) {
   // Cargar últimos 20 mensajes SIN filtrar por activityId
   // (El filtro por activityId causaba que el mensaje de transición se perdiera,
   // dejando a Claude sin contexto del escenario cuando el estudiante decía "no sé")
-  const messages = await prisma.message.findMany({
-    where: {
-      sessionId: lessonSession.id,
-    },
-    orderBy: { timestamp: 'desc' },
-    take: 20,
-  })
+  // ⚡ OPTIM #4: mensajes + contenido de lección EN PARALELO (ambos solo
+  // dependen de lessonSession). Antes eran 2 awaits secuenciales a Neon.
+  const [messages, contentJsonRaw] = await Promise.all([
+    prisma.message.findMany({
+      where: {
+        sessionId: lessonSession.id,
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 20,
+    }),
+    getLessonContent(lessonSession.lesson.id),
+  ])
 
   // Adjuntar mensajes a lessonSession para mantener compatibilidad (cast para TypeScript)
   const sessionWithMessages = lessonSession as typeof lessonSession & { messages: Message[] }
   sessionWithMessages.messages = messages
 
-  // 2. Get lesson content (from hardcoded file or DB)
-  const contentJson = await getLessonContent(lessonSession.lesson.id) as LessonContent
+  // 2. Lesson content (ya cargado en paralelo arriba)
+  const contentJson = contentJsonRaw as LessonContent
 
   if (!contentJson) {
     logger.error('chat.stream.lesson_content_not_found', {
@@ -273,13 +279,30 @@ export async function POST(request: Request) {
     })
   }
 
+  // ⚡ OPTIM #2: en continuaciones ("sí/ok/listo") la moderación y la
+  // clasificación de intención son innecesarias (mensaje obviamente seguro y
+  // on-topic) → evitamos 2 llamadas IA y dejamos que el Promise.all lo gobierne
+  // solo la verificación.
+  const SAFE_MODERATION: ModerationResult = {
+    is_safe: true, violations: [], severity: 'none', requires_intervention: false,
+  }
+  const CONTINUATION_INTENT: IntentClassification = {
+    intent: 'answer_verification', question_type: null, is_on_topic: true,
+    relevance_score: 100, topic_mentioned: null, needs_redirect: false,
+    suggested_response_strategy: 'acknowledge_answer',
+  }
+
   const [moderation, intent, verification] = await Promise.all([
-    moderateContent(message, { lessonTitle }),
-    classifyIntent(message, currentActivity, {
-      currentLesson: lessonTitle,
-      currentActivity: currentActivityInstruction,
-      lastInstructorQuestion: lastInstructorMessage?.content || undefined
-    }),
+    isContinuationMessage
+      ? Promise.resolve(SAFE_MODERATION)
+      : moderateContent(message, { lessonTitle }),
+    isContinuationMessage
+      ? Promise.resolve(CONTINUATION_INTENT)
+      : classifyIntent(message, currentActivity, {
+          currentLesson: lessonTitle,
+          currentActivity: currentActivityInstruction,
+          lastInstructorQuestion: lastInstructorMessage?.content || undefined
+        }),
     // Hallucination de voz: skip AI verifier (caro), tratar como off_topic
     // suave para que Sophia pida repetir sin contar como intento real.
     hallucinationCheck.isHallucination
@@ -788,6 +811,19 @@ export async function POST(request: Request) {
                 passed: isPassing(grade),
                 progress: 100,
                 grade,
+              },
+            })
+
+            // Si la sesión pertenece a un participante de kiosko, persistir su
+            // nota AQUÍ y no solo al presionar "Salir": los visitantes de feria
+            // suelen abandonar el stand sin salir y quedaban sin calificación.
+            await prisma.assessmentParticipant.updateMany({
+              where: { sessionId: lessonSession.id, completedAt: null },
+              data: {
+                grade,
+                gradeOver20: gradeTo20(grade),
+                passed: isPassing(grade),
+                completedAt: new Date(),
               },
             })
 

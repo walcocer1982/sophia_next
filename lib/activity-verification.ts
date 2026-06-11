@@ -392,7 +392,7 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
   try {
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001', // Haiku 4.5 (3.5 fue deprecada). Rápido + económico.
-      max_tokens: 500,
+      max_tokens: 400, // ⚡ OPTIM #1: bajado de 500 (el veredicto JSON cabe holgado)
       messages: [
         {
           role: 'user',
