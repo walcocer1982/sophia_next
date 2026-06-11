@@ -2,7 +2,6 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { logger } from '@/lib/logger'
-import { getKioskoStatus } from '@/lib/kiosko-status'
 
 export const runtime = 'nodejs'
 
@@ -44,15 +43,10 @@ export async function POST(
 
   const assessment = await prisma.assessment.findUnique({
     where: { code: code.toUpperCase() },
-    include: {
-      lesson: true,
-      campaign: { select: { startDate: true, endDate: true } },
-    },
+    include: { lesson: true },
   })
 
-  // El kiosko hereda el periodo de su campaña — fuera de fechas no se permite
-  // registrar, aunque la pantalla de cierre del cliente ya lo bloquee.
-  if (!assessment || getKioskoStatus(assessment) !== 'open') {
+  if (!assessment || !assessment.isActive) {
     return NextResponse.json({ error: 'Evaluación no disponible' }, { status: 404 })
   }
 

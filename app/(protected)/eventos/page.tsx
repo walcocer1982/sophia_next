@@ -10,7 +10,6 @@ import {
   Megaphone, Calendar, MapPin, ExternalLink, Users, CheckCircle2,
   Smile, Frown, Plus, Loader2,
 } from 'lucide-react'
-import Link from 'next/link'
 import { toast } from 'sonner'
 
 interface AssessmentSummary {
@@ -19,7 +18,6 @@ interface AssessmentSummary {
   title: string
   lessonTitle: string
   isActive: boolean
-  status: 'open' | 'scheduled' | 'ended' | 'closed'
   timeLimitMin: number
   createdAt: string
   closedAt: string | null
@@ -79,20 +77,6 @@ function formatDateRange(start: string, end: string) {
   return `${s.getDate()} ${monthFmt.format(s)} ${s.getFullYear()} – ${e.getDate()} ${monthFmt.format(e)} ${e.getFullYear()}`
 }
 
-// Estado derivado del periodo de la campaña (calculado en /api/eventos):
-// el kiosko se abre/cierra solo según las fechas del evento; "Cerrado" solo
-// aparece si alguien usó el kill switch manual (isActive = false).
-function KioskoStatusBadge({ status }: { status: AssessmentSummary['status'] }) {
-  const styles: Record<AssessmentSummary['status'], { label: string; className: string }> = {
-    open: { label: 'Activo', className: 'bg-green-50 text-green-700 border-green-200' },
-    scheduled: { label: 'Programado', className: 'bg-blue-50 text-blue-700 border-blue-200' },
-    ended: { label: 'Finalizado', className: 'bg-gray-50 text-gray-600' },
-    closed: { label: 'Cerrado', className: 'bg-red-50 text-red-700 border-red-200' },
-  }
-  const s = styles[status]
-  return <Badge variant="outline" className={`text-[10px] ${s.className}`}>{s.label}</Badge>
-}
-
 function npsColor(score: number | null): string {
   if (score === null) return 'text-gray-400'
   if (score >= 30) return 'text-green-600'
@@ -127,6 +111,28 @@ export default function EventosPage() {
 
   const activeCampaigns = data.campaigns.filter((c) => !c.isArchived)
   const archivedCampaigns = data.campaigns.filter((c) => c.isArchived)
+
+  // "Abrir" deja el kiosko usable de inmediato: si está cerrado lo activa
+  // (PATCH isActive) y luego abre /eval/[code]. La pestaña se abre ANTES del
+  // await para no perder el gesto del clic (popup blocker).
+  const handleOpenKiosko = async (a: AssessmentSummary) => {
+    const win = window.open('about:blank', '_blank')
+    if (!a.isActive) {
+      const res = await fetch(`/api/admin/assessments/${a.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: true }),
+      })
+      if (!res.ok) {
+        win?.close()
+        toast.error('No se pudo activar el kiosko')
+        return
+      }
+      toast.success('Kiosko activado')
+      void refetch()
+    }
+    if (win) win.location.href = `/eval/${a.code}`
+  }
 
   const handleAssignCampaign = async (assessmentId: string, campaignId: string | null) => {
     try {
@@ -187,6 +193,7 @@ export default function EventosPage() {
                 campaign={c}
                 campaigns={data.options.activeCampaigns}
                 onAssignCampaign={handleAssignCampaign}
+                onOpen={handleOpenKiosko}
               />
             ))}
           </div>
@@ -207,6 +214,7 @@ export default function EventosPage() {
                   assessment={a}
                   campaigns={data.options.activeCampaigns}
                   onAssignCampaign={handleAssignCampaign}
+                  onOpen={handleOpenKiosko}
                 />
               ))}
             </div>
@@ -227,6 +235,7 @@ export default function EventosPage() {
                 campaign={c}
                 campaigns={data.options.activeCampaigns}
                 onAssignCampaign={handleAssignCampaign}
+                onOpen={handleOpenKiosko}
                 compact
               />
             ))}
@@ -238,11 +247,12 @@ export default function EventosPage() {
 }
 
 function CampaignCard({
-  campaign, campaigns, onAssignCampaign, compact = false,
+  campaign, campaigns, onAssignCampaign, onOpen, compact = false,
 }: {
   campaign: Campaign
   campaigns: ActiveCampaignOption[]
   onAssignCampaign: (assessmentId: string, campaignId: string | null) => void
+  onOpen: (assessment: AssessmentSummary) => void
   compact?: boolean
 }) {
   const totalParticipants = campaign.assessments.reduce((s, a) => s + a.stats.totalParticipants, 0)
@@ -291,6 +301,7 @@ function CampaignCard({
                   campaigns={campaigns}
                   currentCampaignId={campaign.id}
                   onAssignCampaign={onAssignCampaign}
+                  onOpen={onOpen}
                 />
               ))}
             </div>
@@ -302,19 +313,23 @@ function CampaignCard({
 }
 
 function AssessmentRow({
-  assessment, campaigns, currentCampaignId, onAssignCampaign,
+  assessment, campaigns, currentCampaignId, onAssignCampaign, onOpen,
 }: {
   assessment: AssessmentSummary
   campaigns: ActiveCampaignOption[]
   currentCampaignId?: string
   onAssignCampaign: (assessmentId: string, campaignId: string | null) => void
+  onOpen: (assessment: AssessmentSummary) => void
 }) {
   return (
     <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <code className="text-xs font-mono font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{assessment.code}</code>
-          <KioskoStatusBadge status={assessment.status} />
+          {assessment.isActive
+            ? <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">Activo</Badge>
+            : <Badge variant="outline" className="text-[10px] bg-gray-50 text-gray-600">Cerrado</Badge>
+          }
         </div>
         <p className="text-sm font-medium text-gray-900 truncate">{assessment.title}</p>
         <p className="text-xs text-gray-500 truncate">{assessment.lessonTitle}</p>
@@ -351,7 +366,14 @@ function AssessmentRow({
             <option key={c.id} value={c.id}>{c.shortName || c.name}</option>
           ))}
         </select>
-        <Link href={`/eval/${assessment.code}`} target="_blank" className="text-xs text-indigo-600 hover:text-indigo-800 shrink-0">Abrir</Link>
+        <button
+          type="button"
+          onClick={() => onOpen(assessment)}
+          className="text-xs text-indigo-600 hover:text-indigo-800 shrink-0"
+          title={assessment.isActive ? 'Abrir kiosko' : 'Activar y abrir kiosko'}
+        >
+          Abrir
+        </button>
       </div>
     </div>
   )

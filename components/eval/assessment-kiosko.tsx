@@ -10,7 +10,6 @@ import { AssessmentSession } from './assessment-session'
 import { AssessmentResult } from './assessment-result'
 import { useT } from '@/lib/i18n/use-translation'
 import type { Locale } from '@/lib/i18n/strings'
-import { formatKioskoDate, type KioskoStatus } from '@/lib/kiosko-status'
 import { unlockAudio } from '@/lib/audio-unlock'
 import Image from 'next/image'
 
@@ -18,10 +17,7 @@ interface AssessmentInfo {
   id: string
   code: string
   title: string
-  /** Estado derivado del periodo de la campaña + kill switch isActive. */
-  status: KioskoStatus
-  /** Inicio de la campaña (ISO) — para el mensaje "Disponible a partir del…". */
-  availableFrom: string | null
+  isActive: boolean
   timeLimitMin: number
   collectEmail: boolean
   collectDni: boolean
@@ -211,37 +207,17 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
     // mantenerlo en EN si está en un evento internacional.
   }
 
-  if (assessment.status !== 'open') {
-    const closedCopy: Record<Exclude<KioskoStatus, 'open'>, { title: string; detail: string }> =
-      language === 'EN'
-        ? {
-            scheduled: {
-              title: 'Not open yet',
-              detail: assessment.availableFrom
-                ? `This class will be available from ${formatKioskoDate(assessment.availableFrom, 'EN')}.`
-                : 'This class is not available yet.',
-            },
-            ended: { title: 'Event finished', detail: 'This event has ended. Thank you for your interest!' },
-            closed: { title: 'Class closed', detail: 'This class is no longer available.' },
-          }
-        : {
-            scheduled: {
-              title: 'Aún no disponible',
-              detail: assessment.availableFrom
-                ? `Esta clase estará disponible a partir del ${formatKioskoDate(assessment.availableFrom, 'ES')}.`
-                : 'Esta clase todavía no está disponible.',
-            },
-            ended: { title: 'Evento finalizado', detail: 'Este evento ya terminó. ¡Gracias por tu interés!' },
-            closed: { title: 'Clase cerrada', detail: 'Esta clase ya no está disponible.' },
-          }
-    const copy = closedCopy[assessment.status]
-
+  if (!assessment.isActive) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0a1628] p-4">
         <div className="text-center max-w-md">
           <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={120} height={120} className="mx-auto mb-6 rounded-lg" />
-          <h1 className="text-2xl font-bold text-white mb-2">{copy.title}</h1>
-          <p className="text-slate-400">{copy.detail}</p>
+          <h1 className="text-2xl font-bold text-white mb-2">
+            {language === 'EN' ? 'Class closed' : 'Clase cerrada'}
+          </h1>
+          <p className="text-slate-400">
+            {language === 'EN' ? 'This class is no longer available.' : 'Esta clase ya no está disponible.'}
+          </p>
         </div>
       </div>
     )
@@ -266,11 +242,11 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
         <div className="flex items-center gap-3">
           <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={40} height={40} className="rounded-md" />
           <div>
-            <h1 className="text-sm font-semibold text-white">Sophia · Clase</h1>
-            <p className="text-xs text-slate-400">{assessment.title}</p>
+            <h1 className="text-sm font-semibold text-white">{language === 'EN' ? 'Sophia · Class' : 'Sophia · Clase'}</h1>
+            <p className="text-xs text-slate-400">{displayLessonTitle}</p>
           </div>
         </div>
-        <div className="text-xs text-slate-400">Código: <span className="font-mono font-semibold text-white">{assessment.code}</span></div>
+        <div className="text-xs text-slate-400">{language === 'EN' ? 'Code' : 'Código'}: <span className="font-mono font-semibold text-white">{assessment.code}</span></div>
       </header>
 
       {/* Content */}
