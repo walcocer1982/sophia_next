@@ -44,14 +44,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'sessionId required' }, { status: 400 })
   }
 
-  // Validar que la sesión exista y pertenezca al usuario.
+  // Validar que la sesión exista y pertenezca al usuario + traer el idioma
+  // para la transcripción.
   const lessonSession = await prisma.lessonSession.findFirst({
     where: { id: sessionId, userId: session.userId },
-    select: { id: true },
+    select: { id: true, language: true },
   })
   if (!lessonSession) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 })
   }
+
+  const transcriptionLanguage = lessonSession.language === 'EN' ? 'en' : 'es'
 
   // Crear ephemeral client secret en modo TRANSCRIPCIÓN.
   // Doc: POST /v1/realtime/client_secrets con session.type='transcription'.
@@ -70,7 +73,12 @@ export async function POST(request: Request) {
             format: { type: 'audio/pcm', rate: 24000 },
             transcription: {
               model: 'gpt-realtime-whisper',
-              language: 'es',
+              // Idioma dinámico según la sesión (antes fijo en 'es').
+              language: transcriptionLanguage,
+              // NOTA: gpt-realtime-whisper NO soporta el parámetro 'prompt'
+              // (vocabulario sesgado). Para corregir términos técnicos mal
+              // transcritos se hace post-corrección con Claude (que sí tiene
+              // el contexto de la lección), no aquí.
               // 'low' = balance entre latencia y precisión.
               delay: 'low',
             },

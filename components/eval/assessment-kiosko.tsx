@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,10 +8,50 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { AssessmentSession } from './assessment-session'
 import { AssessmentResult } from './assessment-result'
+import { SophiaAvatar } from '../learning/sophia-avatar'
+import { SophiaTalkingHead, type TalkingHeadHandle } from '../learning/avatar-3d/sophia-talkinghead'
+import { featureFlags } from '@/lib/env'
 import { useT } from '@/lib/i18n/use-translation'
 import type { Locale } from '@/lib/i18n/strings'
 import { unlockAudio } from '@/lib/audio-unlock'
 import Image from 'next/image'
+
+/**
+ * Avatar de la pantalla de bienvenida: Sophia saluda con un gesto (levanta la
+ * mano + cara feliz) al cargar y cada cierto tiempo. 100% visual, sin audio —
+ * así no choca con el bloqueo de autoplay del navegador en el registro.
+ */
+function GreetingAvatar() {
+  const use3DAvatar = featureFlags.enable3DAvatar
+  const headRef = useRef<TalkingHeadHandle>(null)
+  const greet = useCallback(() => {
+    try {
+      headRef.current?.setMood('happy')
+      headRef.current?.gesture('handup', 3)
+    } catch { /* ignore */ }
+  }, [])
+  useEffect(() => {
+    if (!use3DAvatar) return
+    const id = setInterval(greet, 14000) // repite el saludo cada ~14s
+    return () => clearInterval(id)
+  }, [use3DAvatar, greet])
+
+  if (use3DAvatar) {
+    return (
+      <SophiaTalkingHead
+        ref={headRef}
+        width="100%"
+        height="100%"
+        onReady={() => setTimeout(greet, 700)}
+      />
+    )
+  }
+  return (
+    <div className="flex-1 flex items-center justify-center">
+      <SophiaAvatar state="idle" size={260} />
+    </div>
+  )
+}
 
 interface AssessmentInfo {
   id: string
@@ -242,39 +282,65 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
         <div className="flex items-center gap-3">
           <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={40} height={40} className="rounded-md" />
           <div>
-            <h1 className="text-sm font-semibold text-white">{language === 'EN' ? 'Sophia · Class' : 'Sophia · Clase'}</h1>
-            <p className="text-xs text-slate-400">{displayLessonTitle}</p>
+            <h1 className="text-sm font-semibold text-white">{displayLessonTitle}</h1>
+            <p className="text-xs text-slate-400">{assessment.title}</p>
           </div>
         </div>
-        <div className="text-xs text-slate-400">{language === 'EN' ? 'Code' : 'Código'}: <span className="font-mono font-semibold text-white">{assessment.code}</span></div>
+        <div className="text-right text-xs text-slate-400 leading-relaxed">
+          {stage === 'session' && participantName && (
+            <div>{language === 'EN' ? 'Participant' : 'Participante'}: <span className="font-semibold text-white">{participantName}</span></div>
+          )}
+          <div>{language === 'EN' ? 'Code' : 'Código'}: <span className="font-mono font-semibold text-white">{assessment.code}</span></div>
+        </div>
       </header>
 
       {/* Content */}
-      <main className={`flex-1 min-h-0 flex flex-col ${stage === 'register' || stage === 'finished' ? 'items-center justify-center p-6' : ''}`}>
+      <main className={`flex-1 min-h-0 flex flex-col ${stage === 'finished' ? 'items-center justify-center p-6' : ''}`}>
         <AnimatePresence mode="wait">
           {stage === 'register' && (
             <motion.div
               key="register"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="relative w-full max-w-md"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2"
             >
-              {/* Glow border effect */}
-              <div className="absolute -inset-0.5 bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-2xl opacity-30 blur-md" />
+              {/* IZQUIERDA: Sophia saluda */}
+              <div className="relative hidden lg:flex flex-col items-center justify-end overflow-hidden border-r border-white/10 bg-[radial-gradient(circle_at_50%_40%,#12333f,#09222d_72%)]">
+                <div className="w-full h-full"><GreetingAvatar /></div>
+                <div className="absolute bottom-6 left-0 right-0 text-center pointer-events-none">
+                  <div className="text-4xl font-extrabold text-white">Sophia</div>
+                  <div className="text-sm text-[#fbc50b] font-semibold mt-0.5">
+                    {language === 'EN' ? 'Instructor' : 'Instructora'}
+                  </div>
+                </div>
+              </div>
 
-              <div className="relative bg-[#0d1f3c]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-8">
-                {/* Toggle de idioma — chips ES/EN arriba del form.
-                    Solo visible en stage register; al pasar a session se
-                    pierde de vista para evitar switching mid-class. */}
-                <div className="flex items-center justify-center gap-2 mb-5" role="group" aria-label={t('language_switch_aria')}>
+              {/* DERECHA: formulario de registro */}
+              <div className="flex items-center justify-center p-6">
+              <div className="relative w-full max-w-md bg-[#09222d]/40 lg:bg-transparent backdrop-blur-xl border border-white/10 lg:border-0 rounded-2xl p-8">
+                {/* Logo grande + "Bienvenido" como lo primero y prominente */}
+                <div className="text-center mb-5">
+                  <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={104} height={104} className="mx-auto mb-4 rounded-2xl" />
+                  <h2 className="text-4xl font-bold text-white">{t('register_title')}</h2>
+                  {translating && (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {language === 'EN' ? 'Loading English content...' : 'Cargando contenido...'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Toggle de idioma ES/EN — debajo del título.
+                    Solo en register; al pasar a session se oculta para evitar
+                    switching mid-class. */}
+                <div className="flex items-center justify-center gap-2 mb-6" role="group" aria-label={t('language_switch_aria')}>
                   <button
                     type="button"
                     onClick={() => switchLanguage('ES')}
                     aria-pressed={language === 'ES'}
                     className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
                       language === 'ES'
-                        ? 'bg-cyan-500 text-white border-cyan-400 shadow-lg shadow-cyan-500/30'
+                        ? 'bg-[#fbc50b] text-[#09222d] border-[#fbc50b] shadow-lg shadow-[#fbc50b]/30'
                         : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
                     }`}
                   >
@@ -286,23 +352,12 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                     aria-pressed={language === 'EN'}
                     className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
                       language === 'EN'
-                        ? 'bg-cyan-500 text-white border-cyan-400 shadow-lg shadow-cyan-500/30'
+                        ? 'bg-[#fbc50b] text-[#09222d] border-[#fbc50b] shadow-lg shadow-[#fbc50b]/30'
                         : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
                     }`}
                   >
                     🇬🇧 EN
                   </button>
-                </div>
-
-                <div className="text-center mb-6">
-                  <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={80} height={80} className="mx-auto mb-4 rounded-xl" />
-                  <h2 className="text-3xl font-bold text-white mb-1">{t('register_title')}</h2>
-                  <p className="text-sm text-cyan-400/80 font-medium">{displayLessonTitle}</p>
-                  {translating && (
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      {language === 'EN' ? 'Loading English content...' : 'Cargando contenido...'}
-                    </p>
-                  )}
                 </div>
 
                 <form onSubmit={handleStart} className="space-y-4">
@@ -317,7 +372,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                       placeholder={t('register_first_name')}
                       required
                       autoFocus
-                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-[#fbc50b] focus-visible:border-[#fbc50b]/50"
                     />
                   </div>
                   {/* DNI: opcional siempre — sirve como llave de recovery además
@@ -335,7 +390,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                       placeholder="12345678"
                       maxLength={20}
                       required={assessment.collectDni}
-                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-[#fbc50b] focus-visible:border-[#fbc50b]/50"
                     />
                     <p className="text-[10px] text-slate-500 mt-1 leading-snug">
                       {t('register_dni_hint')}
@@ -352,23 +407,23 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="email@example.com"
-                        className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400 focus-visible:border-cyan-400/50"
+                        className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-[#fbc50b] focus-visible:border-[#fbc50b]/50"
                       />
                     </div>
                   )}
 
-                  <div className="text-xs text-slate-400 bg-cyan-500/5 border border-cyan-400/20 rounded-lg p-3">
+                  <div className="text-xs text-slate-300 bg-[#fbc50b]/5 border border-[#fbc50b]/20 rounded-lg p-3">
                     {language === 'EN' ? (
-                      <>The class takes about <strong className="text-cyan-300">{assessment.timeLimitMin} minutes</strong>. Talk with Sophia — she will guide you step by step.</>
+                      <>The class takes about <strong className="text-[#fbc50b]">{assessment.timeLimitMin} minutes</strong>. Talk with Sophia — she will guide you step by step.</>
                     ) : (
-                      <>La clase dura aproximadamente <strong className="text-cyan-300">{assessment.timeLimitMin} minutos</strong>. Conversá con Sophia, ella te va guiando paso a paso.</>
+                      <>La clase dura aproximadamente <strong className="text-[#fbc50b]">{assessment.timeLimitMin} minutos</strong>. Conversá con Sophia, ella te va guiando paso a paso.</>
                     )}
                   </div>
 
                   <Button
                     type="submit"
                     disabled={submitting}
-                    className="w-full h-12 text-base font-semibold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 shadow-lg shadow-cyan-500/30"
+                    className="w-full h-12 text-base font-semibold bg-[#fbc50b] hover:bg-[#fbc50b]/90 text-[#09222d] border-0 shadow-lg shadow-[#fbc50b]/30"
                   >
                     {submitting ? (
                       <>
@@ -380,6 +435,7 @@ export function AssessmentKiosko({ assessment }: { assessment: AssessmentInfo })
                     )}
                   </Button>
                 </form>
+              </div>
               </div>
             </motion.div>
           )}

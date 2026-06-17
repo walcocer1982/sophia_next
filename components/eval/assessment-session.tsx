@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Clock, LogOut, Target, Lightbulb, Type, X, MessageSquare, Maximize2, Info } from 'lucide-react'
+import { Clock, LogOut, Target, Type, X, Maximize2, Info, ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
 import { SophiaAvatar } from '../learning/sophia-avatar'
 import {
   SophiaTalkingHead,
@@ -16,7 +15,6 @@ import {
 import { featureFlags } from '@/lib/env'
 import { VoiceButton } from '../learning/voice-button'
 import { ChatInput, type ChatInputRef } from '../learning/chat-input'
-import { ConversationDrawer } from '../learning/conversation-drawer'
 import type { OptimisticMessage } from '@/types/chat'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { getUnlockedAudio } from '@/lib/audio-unlock'
@@ -83,7 +81,6 @@ export function AssessmentSession({
   sessionId,
   participantId,
   participantName,
-  lessonTitle,
   lessonObjective,
   keyPoints,
   galleryImages,
@@ -180,19 +177,26 @@ export function AssessmentSession({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [use3DAvatar, playBlobFallback, pushDebug])
-  const [lightboxImage, setLightboxImage] = useState<{ url: string; description: string } | null>(null)
-  // Popover del objetivo (ⓘ del sidebar) — el goal ya no está fijo en pantalla.
-  const [showGoal, setShowGoal] = useState(false)
+  // Lightbox como galería navegable: índice sobre galleryList (todas las
+  // imágenes de la clase). null = cerrado.
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  // Popover del objetivo (ⓘ de la barra) — el goal no ocupa espacio fijo.
+  // Se auto-muestra al inicio por unos segundos para que todos lo lean, y
+  // luego se oculta solo; la ⓘ queda para volver a consultarlo.
+  const [showGoal, setShowGoal] = useState(true)
+  useEffect(() => {
+    const timer = setTimeout(() => setShowGoal(false), 6000)
+    return () => clearTimeout(timer)
+  }, [])
   const [progressData, setProgressData] = useState<{ current: number; total: number; percentage: number; currentActivityId: string | null } | null>(null)
-  // Imagen visible AHORA — una sola a la vez, basada en (a) actividad actual
-  // y (b) lo que Sophia mencionó recientemente. Si null, no se muestra ninguna.
-  const [visibleImageIdx, setVisibleImageIdx] = useState<number>(0)
-  const [showHistory, setShowHistory] = useState(false)
   const welcomeRequested = useRef(false)
   const finishedRef = useRef(false)
   const welcomeAudioPlayedRef = useRef(false)
   const chatInputRef = useRef<ChatInputRef>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  // Contenedor scrolleable del chat — para auto-bajar al fondo en cada mensaje
+  // nuevo o mientras Sophia streamea (antes el último turno quedaba cortado).
+  const msgsRef = useRef<HTMLDivElement>(null)
 
   // Fetch progress en montaje + cada vez que la conversación cambia (Sophia
   // responde → posible activity_completed → recargar). Polling cada 8s como
@@ -237,132 +241,89 @@ export function AssessmentSession({
     }
   }, [videoUrl])
 
-  // Imágenes de la actividad ACTUAL ordenadas por su `order` original.
-  // Si la actividad actual NO tiene imágenes → devolvemos [] (vacío). El render
-  // muestra "Sin recursos para esta actividad". NO caemos a las imágenes de
-  // otra actividad — eso confundía al estudiante (estaba en Act 3 sin imágenes
-  // y veía la imagen de Act 1 reapareciendo).
-  // Solo en el caso inicial (sin currentActivityId todavía, antes del primer
-  // fetch de progress) usamos la primera actividad que tenga imágenes.
-  const activityImages = useMemo(() => {
-    const currentId = progressData?.currentActivityId
-    if (currentId) {
-      return galleryImages
-        .filter((img) => img.activityId === currentId)
-        .sort((a, b) => a.order - b.order)
-    }
-    // Estado inicial (sin progressData todavía): primer activityId presente
-    const firstActId = galleryImages[0]?.activityId
-    return galleryImages
-      .filter((img) => img.activityId === firstActId)
-      .sort((a, b) => a.order - b.order)
-  }, [galleryImages, progressData?.currentActivityId])
-
-  // ¿La imagen está "activa" (en uso por la conversación)? Gobierna el héroe
-  // dinámico del centro: el saludo y las actividades sin imagen son de Sophia
-  // (grande); cuando Sophia usa la imagen, esta toma el centro y Sophia se
-  // encoge. Transición de UNA vía por actividad — sin rebotes turno a turno.
-  const [heroIsImage, setHeroIsImage] = useState(false)
-  const hasUserMessage = useMemo(() => messages.some((m) => m.role === 'user'), [messages])
-
-  // Cuando cambia la actividad, reseteo a la primera imagen `on_start`
-  // (o índice 0 si ninguna lo es) y recalculo el héroe: on_start toma el
-  // centro al entrar a la actividad — pero nunca durante el saludo (antes
-  // del primer mensaje del estudiante la pantalla es de Sophia).
-  useEffect(() => {
-    const startIdx = activityImages.findIndex((img) => img.showWhen === 'on_start')
-    setVisibleImageIdx(startIdx >= 0 ? startIdx : 0)
-    setHeroIsImage(hasUserMessage && startIdx >= 0)
-  }, [progressData?.currentActivityId, activityImages, hasUserMessage])
-
-  // La imagen visible: una sola — del set de la actividad actual.
-  const visibleImage = activityImages[visibleImageIdx] ?? null
-
-  // Detector de "Sophia mencionó la próxima imagen". Toma palabras significativas
-  // (>3 chars, sin stop-words comunes) de la description y cuenta cuántas
-  // aparecen en el texto. Si ≥2 matches, considero que la mencionó.
-  const STOP_WORDS = useMemo(() => new Set([
-    'para', 'como', 'pero', 'esta', 'este', 'esto', 'eso', 'esa', 'ese',
-    'los', 'las', 'una', 'unos', 'unas', 'del', 'que', 'con', 'por',
-    'sobre', 'hace', 'hacer', 'tiene', 'tener', 'cada', 'todos', 'todas',
-  ]), [])
-
-  const textMentionsImage = useCallback((text: string, description: string): boolean => {
-    if (!text || !description) return false
-    const normalized = (s: string) =>
-      s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    const textNorm = normalized(text)
-    const keywords = normalized(description)
-      .split(/[\s,;.()→]+/)
-      .filter((w) => w.length > 3 && !STOP_WORDS.has(w))
-    let matches = 0
-    for (const k of keywords) {
-      if (textNorm.includes(k)) matches++
-      if (matches >= 2) return true
-    }
-    return false
-  }, [STOP_WORDS])
-
-  // Cada vez que el último mensaje de Sophia cambia (streaming o nuevo), miro
-  // si menciona alguna imagen NEXT-en-el-orden que tenga showWhen=on_reference.
-  // Si sí, avanzo el índice. Una imagen a la vez.
-
+  // Último mensaje de Sophia (para resolver imagen, auto-scroll, cierre, etc.)
   const lastAssistantMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'assistant') return messages[i]
     }
     return null
   }, [messages])
+  const hasUserMessage = useMemo(() => messages.some((m) => m.role === 'user'), [messages])
 
-  // Activación del héroe por mención: si Sophia referencia la imagen visible
-  // en su última respuesta, la imagen toma el centro (cubre on_reference y el
-  // recovery, donde Sophia repite su último mensaje). on_demand nunca solo.
-  useEffect(() => {
-    if (heroIsImage) return
-    // Nunca durante el saludo: el welcome SIEMPRE presenta el tema de la
-    // lección, así que matchea la descripción de la imagen por afinidad
-    // natural (falso positivo sistemático del matcher difuso).
-    if (!hasUserMessage) return
-    const content = lastAssistantMessage?.content
-    const img = activityImages[visibleImageIdx]
-    if (!content || !img || img.showWhen === 'on_demand') return
-    if (textMentionsImage(content, img.description)) setHeroIsImage(true)
-  }, [lastAssistantMessage?.content, activityImages, visibleImageIdx, heroIsImage, hasUserMessage, textMentionsImage])
-
-  // Key points "encendidos": una vez que Sophia menciona un punto clave en
-  // alguna respuesta, queda iluminado en el sidebar por el resto de la sesión.
-  // Reusa el mismo matcher difuso que las imágenes (≥2 keywords presentes).
-  const [litKeyPoints, setLitKeyPoints] = useState<Set<number>>(new Set())
-  useEffect(() => {
-    const content = lastAssistantMessage?.content
-    if (!content) return
-    setLitKeyPoints((prev) => {
-      let changed = false
-      const next = new Set(prev)
-      keyPoints.forEach((point, i) => {
-        if (!next.has(i) && textMentionsImage(content, point)) {
-          next.add(i)
-          changed = true
-        }
-      })
-      return changed ? next : prev
-    })
-  }, [lastAssistantMessage?.content, keyPoints, textMentionsImage])
-
-  // Avanza a la siguiente imagen cuando Sophia la menciona en su respuesta.
-  // Solo mira la última respuesta y solo avanza si la imagen siguiente es
-  // on_reference (las on_demand no aparecen solas; las on_start ya están).
-  useEffect(() => {
-    if (!lastAssistantMessage?.content) return
-    if (visibleImageIdx >= activityImages.length - 1) return
-    const nextIdx = visibleImageIdx + 1
-    const next = activityImages[nextIdx]
-    if (!next) return
-    if (next.showWhen === 'on_demand') return
-    if (textMentionsImage(lastAssistantMessage.content, next.description)) {
-      setVisibleImageIdx(nextIdx)
+  // Galería GLOBAL de la clase (todas las imágenes, deduplicadas por url, en
+  // orden de la lección). Alimenta el botón "📷 Imágenes (N)", el lightbox y la
+  // resolución de la imagen inline. GLOBAL — no por actividad: una referencia
+  // de Sophia puede apuntar a una imagen de una actividad anterior (era la
+  // causa de mostrar la imagen equivocada).
+  const galleryList = useMemo(() => {
+    const seen = new Set<string>()
+    const out: ClassImage[] = []
+    for (const g of galleryImages) {
+      if (g.url && !seen.has(g.url)) { seen.add(g.url); out.push(g) }
     }
-  }, [lastAssistantMessage?.content, activityImages, visibleImageIdx, textMentionsImage])
+    return out
+  }, [galleryImages])
+  const galleryIndexOf = (url: string) => {
+    const i = galleryList.findIndex((g) => g.url === url)
+    return i < 0 ? 0 : i
+  }
+  const navLightbox = (d: number) =>
+    setLightboxIndex((idx) => (idx === null ? null : (idx + d + galleryList.length) % galleryList.length))
+
+  // Palabras genéricas que NO distinguen una imagen de otra (incluye términos
+  // de minería y meta-palabras como "imagen/diagrama" que están en muchas descs).
+  const STOP_WORDS = useMemo(() => new Set([
+    'para', 'como', 'pero', 'esta', 'este', 'esto', 'eso', 'esa', 'ese',
+    'los', 'las', 'una', 'unos', 'unas', 'del', 'que', 'con', 'por',
+    'sobre', 'hace', 'hacer', 'tiene', 'tener', 'cada', 'todos', 'todas',
+    'imagen', 'imagenes', 'foto', 'diagrama', 'figura', 'panel', 'muestra',
+    'donde', 'aqui', 'tunel', 'mina', 'mineria', 'minado',
+  ]), [])
+
+  // Cuenta cuántas palabras DISTINTIVAS de la descripción aparecen en el texto.
+  // Solo palabras largas (>4) y no genéricas → evita falsos positivos por
+  // términos comunes de minería que comparten varias descripciones.
+  const scoreMatch = useCallback((text: string, description: string): number => {
+    if (!text || !description) return 0
+    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    const textNorm = norm(text)
+    const kws = norm(description).split(/[\s,;.()\-→]+/).filter((w) => w.length > 4 && !STOP_WORDS.has(w))
+    let score = 0
+    const seen = new Set<string>()
+    for (const k of kws) {
+      if (!seen.has(k) && textNorm.includes(k)) { seen.add(k); score++ }
+    }
+    return score
+  }, [STOP_WORDS])
+
+  // Imagen ANCLADA POR MENSAJE: cada imagen se queda en el mensaje de Sophia
+  // donde apareció — los mensajes nuevos fluyen debajo SIN moverla (antes la
+  // imagen se pegaba al último mensaje y "saltaba" a cada respuesta nueva).
+  // Se resuelve contra la lista GLOBAL por mejor descripción (señal confiable;
+  // el número "imagen N" del prompt es ambiguo entre actividades). Fail-safe:
+  // sin match confiable no se ancla nada (no mostrar una imagen equivocada).
+  const [imageByMsg, setImageByMsg] = useState<Record<string, ClassImage>>({})
+  const lastAnchoredUrlRef = useRef<string | null>(null)
+  useEffect(() => {
+    const msg = lastAssistantMessage
+    const content = msg?.content
+    // Nunca durante el saludo (el welcome presenta el tema y matchearía por
+    // afinidad). Requiere al menos un mensaje del estudiante.
+    if (!msg || !content || !hasUserMessage || galleryList.length === 0) return
+    const scored = galleryList
+      .filter((img) => img.showWhen !== 'on_demand') // on_demand: solo por galería
+      .map((img) => ({ img, s: scoreMatch(content, img.description) }))
+      .sort((a, b) => b.s - a.s)
+    const best = scored[0]
+    const second = scored[1]
+    // Confianza: ≥2 keywords distintivas y claramente mejor que la segunda.
+    if (!best || best.s < 2 || (second && best.s <= second.s)) return
+    // No repetir la misma imagen que ya estaba anclada en el mensaje anterior:
+    // se queda en su sitio en vez de duplicarse en cada respuesta.
+    if (lastAnchoredUrlRef.current === best.img.url) return
+    lastAnchoredUrlRef.current = best.img.url
+    setImageByMsg((prev) => (prev[msg.id]?.url === best.img.url ? prev : { ...prev, [msg.id]: best.img }))
+  }, [lastAssistantMessage?.id, lastAssistantMessage?.content, hasUserMessage, galleryList, scoreMatch])
 
   // TTS de la respuesta cuando el estudiante escribe (no habla). Antes solo
   // se reproducía audio en el flujo de voz; si el usuario abría Escribir y
@@ -515,6 +476,9 @@ export function AssessmentSession({
           if (done) break
           fullContent += decoder.decode(value, { stream: true })
         }
+        // El texto NO se muestra durante el streaming: se revela junto con la
+        // voz (más abajo, cuando el audio está listo) para que texto y audio
+        // salgan al mismo tiempo. Mientras tanto sigue el splash "Preparando…".
 
         if (fullContent.trim().length === 0) {
           setWelcomeLoading(false)
@@ -537,50 +501,53 @@ export function AssessmentSession({
           .replace(/\.+/g, '.')
           .trim()
 
-        try {
-          const ttsRes = await fetch('/api/voice/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: cleanText, language }),
-          })
-          if (ttsRes.ok) {
-            const blob = await ttsRes.blob()
-            welcomeAudioPlayedRef.current = true
-            // Avatar 3D: enrutar el welcome por el iframe para que haga lip-sync.
-            // Si aún no está listo, el componente lo encola y lo reproduce al cargar.
-            if (shouldRoute3D()) {
-              setMessages(prev => prev.map(m =>
-                m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
-              ))
-              pushDebug(`welcome -> 3D iframe bytes=${blob.size}`)
-              const buf = await blob.arrayBuffer()
-              talkingHeadRef.current!.speakAudio(buf, cleanText)
-            } else {
-              const url = URL.createObjectURL(blob)
-              const audio = getUnlockedAudio() ?? new Audio()
-              audio.preload = 'auto'
-              audio.src = url
-              audio.onended = () => URL.revokeObjectURL(url)
-              await new Promise<void>((resolve) => {
-                audio.oncanplaythrough = () => resolve()
-                audio.onerror = () => resolve()
-                audio.load()
-                setTimeout(() => resolve(), 1500)
-              })
-              setMessages(prev => prev.map(m =>
-                m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
-              ))
-              audio.play().catch(e => console.warn('Welcome audio blocked:', e))
-            }
-          } else {
-            setMessages(prev => prev.map(m =>
-              m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
-            ))
-          }
-        } catch {
+        welcomeAudioPlayedRef.current = true
+
+        const setWelcomeText = (text: string, done: boolean) =>
           setMessages(prev => prev.map(m =>
-            m.id === welcomeId ? { ...m, content: fullContent, status: 'completed', isOptimistic: false } : m
+            m.id === welcomeId
+              ? { ...m, content: text, status: done ? 'completed' : 'streaming', isOptimistic: !done }
+              : m
           ))
+
+        // Sin voz: mostrar el texto completo de una y listo.
+        if (!voiceEnabled) {
+          setWelcomeText(cleanText, true)
+        } else {
+          // UNA sola llamada TTS del bloque completo → voz PAREJA (mismo pitch
+          // y volumen de principio a fin; antes, una llamada por oración hacía
+          // que cada frase sonara distinta). El texto se REVELA oración por
+          // oración a ritmo de habla, en paralelo a la reproducción — se ve
+          // progresivo sin partir el audio.
+          let blob: Blob | null = null
+          try {
+            const r = await fetch('/api/voice/tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: cleanText, language }),
+            })
+            blob = r.ok ? await r.blob() : null
+          } catch { blob = null }
+
+          const sentences = cleanText.match(/[^.!?]+[.!?]+(\s|$)/g)?.map(s => s.trim()).filter(Boolean)
+            ?? [cleanText]
+
+          // Reproducir el audio completo (3D o normal) sin bloquear el reveal.
+          const playPromise = blob ? speakChunkVia3D(blob, cleanText) : Promise.resolve()
+
+          // Reveal por tiempo: ~360ms por palabra ≈ ritmo del TTS.
+          const MS_PER_WORD = 360
+          let revealed = ''
+          for (let i = 0; i < sentences.length; i++) {
+            revealed = revealed ? `${revealed} ${sentences[i]}` : sentences[i]
+            setWelcomeText(revealed, i === sentences.length - 1)
+            if (i < sentences.length - 1) {
+              const words = sentences[i].split(/\s+/).filter(Boolean).length
+              await new Promise((res) => setTimeout(res, Math.min(7000, Math.max(700, words * MS_PER_WORD))))
+            }
+          }
+          setWelcomeText(cleanText, true) // asegurar texto completo
+          await playPromise
         }
       } catch {
         // ignore
@@ -589,7 +556,7 @@ export function AssessmentSession({
       }
     }
     initSession()
-  }, [sessionId, playWelcomeAudio, speakReply, voiceEnabled])
+  }, [sessionId, playWelcomeAudio, speakReply, voiceEnabled, speakChunkVia3D])
 
   useEffect(() => {
     if (secondsLeft <= 0) {
@@ -620,9 +587,22 @@ export function AssessmentSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progressData?.percentage, progressData?.total, isLoading, welcomeLoading, avatarState, lastAssistantMessage?.status])
 
+  // Corta TODA la voz en curso: el <audio> compartido (singleton global que
+  // no se detiene solo al desmontar) y el avatar 3D. Se llama al finalizar
+  // (Salir / tiempo / cierre) para que Sophia no siga hablando.
+  const stopAllAudio = () => {
+    try {
+      const a = getUnlockedAudio()
+      if (a) { a.pause(); a.currentTime = 0 }
+    } catch { /* ignore */ }
+    try { talkingHeadRef.current?.stopSpeaking() } catch { /* ignore */ }
+    setAvatarState('idle')
+  }
+
   const finishAssessment = async () => {
     if (finishedRef.current) return
     finishedRef.current = true
+    stopAllAudio()
     try {
       const res = await fetch(`/api/eval/finish`, {
         method: 'POST',
@@ -710,37 +690,95 @@ export function AssessmentSession({
   const seconds = secondsLeft % 60
   const timeLabel = `${minutes}:${seconds.toString().padStart(2, '0')}`
 
-  // ¿La imagen tiene el centro AHORA? (activa + existe para esta actividad)
-  const showImageHero = heroIsImage && !!visibleImage
+  // Cantidad de imágenes ancladas — dispara el auto-scroll cuando aparece una.
+  const anchoredImageCount = Object.keys(imageByMsg).length
+
+  // Barra de progreso = segmentos por actividad, etiquetados con el punto
+  // clave correspondiente. Se llenan con el avance real de la evaluación.
+  const segTotal = progressData?.total || keyPoints.length || 0
+  const pct = progressData?.percentage ?? 0
+  const curPos = progressData?.current ?? 1 // 1-based
+  const doneCount = pct >= 100 ? segTotal : Math.max(0, curPos - 1)
+  const curSegIdx = pct >= 100 ? -1 : Math.min(Math.max(0, segTotal - 1), curPos - 1)
+  const curKeyPoint = keyPoints[curSegIdx >= 0 ? curSegIdx : 0] ?? null
+
+  // Mensajes con contenido (o en streaming) para el transcript estilo Claude.
+  const visibleMessages = messages.filter((m) => m.content || m.status === 'streaming')
+
+  // Auto-scroll al fondo: cada mensaje nuevo y cada chunk de streaming bajan
+  // el chat hasta el final (incluye la imagen inline que aparece al final).
+  useEffect(() => {
+    const el = msgsRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [visibleMessages.length, lastAssistantMessage?.content, anchoredImageCount])
+
+  // ¿Estamos preparando la clase? (generando el saludo, antes del primer texto)
+  // Mientras tanto se muestra el splash "Preparando tu clase…" y se ocultan
+  // los controles, para que nadie crea que ya puede hablar.
+  const preparing = welcomeLoading && !lastAssistantMessage?.content
 
   return (
     <div className="h-full w-full max-w-[1600px] mx-auto px-3 py-2 flex flex-col gap-2 overflow-hidden">
-      {/* Top bar: participante + progreso + timer etiquetado + salir discreto */}
-      <div className="shrink-0 flex items-center justify-between gap-4 bg-[#0d1f3c]/80 backdrop-blur border border-white/10 rounded-xl px-4 py-2">
-        <div className="text-sm text-slate-300 shrink-0">
-          <span className="text-slate-500">{t('session_participant')}:</span>{' '}
-          <strong className="text-white">{participantName}</strong>
+      {/* Top bar: objetivo (ⓘ) · puntos clave como segmentos · timer · salir.
+          z-index alto + overflow-visible para que el popover del objetivo
+          flote por encima del avatar/chat y no quede tapado. */}
+      <div className="relative z-30 shrink-0 flex items-center justify-between gap-4 bg-[#0d1f3c]/80 backdrop-blur border border-white/10 rounded-xl px-4 py-2">
+        {/* Objetivo bajo demanda — no ocupa espacio fijo */}
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowGoal((v) => !v)}
+            className={`grid place-items-center w-6 h-6 rounded-full border transition-colors ${showGoal ? 'text-[#fbc50b] border-[#fbc50b]/50' : 'text-slate-400 border-white/15 hover:text-[#fbc50b]'}`}
+            title={t('session_objective_label')}
+          >
+            <Info className="h-4 w-4" />
+          </button>
+          {showGoal && (
+            <div className="absolute top-8 left-0 z-50 w-80 bg-[#09222d] border border-[#fbc50b]/30 rounded-lg p-3 shadow-2xl">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Target className="h-3.5 w-3.5 text-[#fbc50b]" />
+                <p className="text-xs font-semibold text-[#fbc50b]">{t('session_objective_label')}</p>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">{lessonObjective}</p>
+            </div>
+          )}
         </div>
 
-        {/* Progreso visible donde el ojo pasa siempre — antes estaba enterrado
-            en la esquina inferior izquierda */}
-        {progressData && progressData.total > 0 && (
-          <div className="hidden sm:flex items-center gap-3 flex-1 max-w-sm">
-            <Progress value={progressData.percentage} className="h-2 bg-white/10 flex-1" />
-            <span className="text-xs text-slate-400 whitespace-nowrap">
-              {t('session_activity_of', { current: Math.max(1, progressData.current), total: progressData.total })}
-              {' · '}<span className="text-cyan-400 font-semibold">{progressData.percentage}%</span>
-            </span>
+        {/* Puntos clave = barra de segmentos (un segmento por actividad). El
+            actual brilla; su texto se lee siempre al lado; hover = ver ese punto. */}
+        {segTotal > 0 && (
+          <div className="flex-1 flex items-center gap-3 min-w-0">
+            <div className="flex gap-1 shrink-0">
+              {Array.from({ length: segTotal }).map((_, i) => {
+                const done = i < doneCount
+                const cur = i === curSegIdx
+                return (
+                  <div
+                    key={i}
+                    title={keyPoints[i] ?? `${t('session_progress_label')} ${i + 1}`}
+                    className={`h-1.5 w-9 rounded-full transition-colors ${
+                      cur ? 'bg-[#fbc50b] shadow-[0_0_10px_rgba(251,197,11,.6)]'
+                        : done ? 'bg-[#fbc50b]/80' : 'bg-white/12'
+                    }`}
+                  />
+                )
+              })}
+            </div>
+            {curKeyPoint && (
+              <div className="hidden md:block text-xs text-slate-300 truncate min-w-0">
+                <span className="text-[#fbc50b] font-semibold">{curSegIdx + 1}.</span> {curKeyPoint}
+              </div>
+            )}
           </div>
         )}
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Timer · salir (el participante vive en el header) */}
+        <div className="flex items-center gap-4 shrink-0">
           <div className="flex items-center gap-1.5 text-sm text-slate-400">
             <Clock className="h-4 w-4" />
-            <span className="text-xs text-slate-500">{language === 'EN' ? 'Time left' : 'Tiempo restante'}</span>
+            <span className="hidden sm:inline text-xs text-slate-500">{language === 'EN' ? 'Time left' : 'Tiempo restante'}</span>
             <span className="font-mono">{timeLabel}</span>
           </div>
-          {/* Salir: acción destructiva → visual discreto, lejos de parecer CTA */}
           <Button
             type="button"
             size="sm"
@@ -749,233 +787,176 @@ export function AssessmentSession({
             className="gap-1.5 text-slate-500 hover:text-white hover:bg-white/10"
           >
             <LogOut className="h-4 w-4" />
-            {t('session_exit')}
+            <span className="hidden sm:inline">{t('session_exit')}</span>
           </Button>
         </div>
       </div>
 
-      {/* 2 columnas: guía compacta (3) + escenario principal (9) */}
-      <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
-        {/* LEFT: Aprendizajes */}
-        <aside className="col-span-3 bg-[#0d1f3c]/60 backdrop-blur border border-white/10 rounded-xl p-3 overflow-hidden flex flex-col gap-3 min-h-0">
-          {/* Título + objetivo bajo demanda (ⓘ). El goal salió de la vista
-              fija: repetía los key points y Sophia lo verbaliza en el saludo.
-              Popover por clic (no hover) — el kiosko es pantalla táctil. */}
-          <div className="shrink-0 relative flex items-center justify-between gap-2">
-            <h2 className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 line-clamp-1">{lessonTitle}</h2>
-            <button
-              type="button"
-              onClick={() => setShowGoal((v) => !v)}
-              className={`shrink-0 transition-colors ${showGoal ? 'text-cyan-300' : 'text-slate-500 hover:text-cyan-300'}`}
-              title={t('session_objective_label')}
-            >
-              <Info className="h-4 w-4" />
-            </button>
-            {showGoal && (
-              <div className="absolute top-6 left-0 right-0 z-20 bg-[#0d1f3c] border border-cyan-400/30 rounded-lg p-3 shadow-2xl">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Target className="h-3.5 w-3.5 text-cyan-400" />
-                  <p className="text-xs font-semibold text-cyan-300">{t('session_objective_label')}</p>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed">{lessonObjective}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Sophia — posición y tamaño FIJOS: la instructora al lado de la
-              pizarra. Vive aquí en ambos modos del centro, así no hay layout
-              shift y el motor 3D no se recarga nunca. */}
-          <div className="shrink-0 flex justify-center">
-            {use3DAvatar ? (
-              <SophiaTalkingHead
-                ref={talkingHeadRef}
-                width={220}
-                height={260}
-                onReady={() => {
-                  avatar3DReadyRef.current = true
-                  pushDebug('iframe READY (ref=true)')
-                }}
-                onSpeakEnd={() => {
-                  setAvatarState('idle')
-                  const r = speakEndResolverRef.current
-                  speakEndResolverRef.current = null
-                  r?.('end')
-                }}
-                onError={() => {
-                  setAvatarState('idle')
-                  const r = speakEndResolverRef.current
-                  speakEndResolverRef.current = null
-                  r?.('error')
-                }}
-                onInfo={pushDebug}
-              />
-            ) : videoUrl ? (
-              <video
-                ref={videoRef}
-                src={videoUrl}
-                className="h-56 rounded-lg object-contain"
-                autoPlay
-                loop
-                muted
-                playsInline
-              />
-            ) : (
-              <SophiaAvatar state={avatarState} size={140} />
-            )}
-          </div>
-
-          <section className="flex-1 min-h-0 flex flex-col">
-            <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-cyan-400/30 shrink-0">
-              <Lightbulb className="h-4 w-4 text-cyan-400" />
-              <h3 className="text-sm font-semibold text-white">{t('session_key_points_label')}</h3>
-            </div>
-            <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-0">
-              {/* Cada punto se "enciende" cuando Sophia lo toca en la conversación
-                  — convierte la lista estática en un mapa de avance visual. */}
-              {keyPoints.map((point, i) => {
-                const lit = litKeyPoints.has(i)
-                return (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 text-sm rounded-md px-1.5 py-1 -mx-1.5 transition-colors duration-500 ${lit ? 'bg-cyan-400/10' : ''}`}
-                  >
-                    <span className={`font-semibold shrink-0 ${lit ? 'text-cyan-300' : 'text-slate-600'}`}>{i + 1}.</span>
-                    <span className={`leading-relaxed ${lit ? 'text-slate-100' : 'text-slate-400'}`}>{point}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        </aside>
-
-        {/* MAIN: el material didáctico es el protagonista; el avatar acompaña
-            abajo junto a la burbuja. Antes era al revés: el avatar dominaba
-            el centro y el diagrama quedaba como thumbnail en una esquina. */}
-        <main className="col-span-9 bg-[#0d1f3c]/60 backdrop-blur border border-white/10 rounded-xl flex flex-col p-3 min-h-0 relative">
-          {/* HERO dinámico: la imagen ocupa el centro SOLO cuando la
-              conversación la está usando; si no, ese espacio es de Sophia. */}
-          {showImageHero && visibleImage ? (
-            <div className="flex-1 min-h-0 flex flex-col gap-1.5">
-              <AnimatePresence mode="wait">
-                <motion.button
-                  type="button"
-                  key={visibleImage.url}
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{ duration: 0.35 }}
-                  onClick={() => setLightboxImage({ url: visibleImage.url, description: visibleImage.description })}
-                  className="relative flex-1 min-h-0 w-full rounded-lg overflow-hidden border border-white/10 hover:border-cyan-400/40 transition-colors group"
-                >
-                  <Image
-                    src={visibleImage.url}
-                    alt={visibleImage.description}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 70vw"
-                    className="object-contain bg-black/30"
-                  />
-                  {/* Affordance de ampliar — antes la imagen era clickeable sin avisarlo */}
-                  <span className="absolute top-2 right-2 rounded-md bg-black/60 p-1.5 text-slate-200 opacity-60 group-hover:opacity-100 transition-opacity">
-                    <Maximize2 className="h-4 w-4" />
-                  </span>
-                </motion.button>
-              </AnimatePresence>
-              <div className="shrink-0 flex items-center justify-between gap-3">
-                {visibleImage.description ? (
-                  <p className="text-[11px] text-slate-400 leading-snug line-clamp-2 flex-1">{visibleImage.description}</p>
-                ) : <span />}
-                {activityImages.length > 1 && (
-                  <p className="text-[10px] text-slate-500 whitespace-nowrap shrink-0">
-                    {t('session_image_counter', { current: visibleImageIdx + 1, total: activityImages.length })}
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          {/* Conversación. Con imagen activa, la burbuja va abajo a todo lo
-              ancho; sin imagen activa (saludo, actividad sin recursos), la
-              burbuja ES la protagonista del centro. Sophia vive fija en la
-              columna izquierda — aquí solo está el contenido. */}
-          <div className={showImageHero ? 'shrink-0 mt-2' : 'flex-1 min-h-0 flex items-center justify-center'}>
-            <div className={showImageHero ? 'w-full' : 'w-full max-w-3xl'}>
-              <AnimatePresence mode="wait">
-                {welcomeLoading && !lastAssistantMessage?.content ? (
-                  <motion.div
-                    key="loader"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="w-full bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4"
-                  >
-                    <div className="flex items-center justify-center gap-3">
-                      <div className="flex gap-1">
-                        {[0, 0.15, 0.3].map((d, i) => (
-                          <motion.span
-                            key={i}
-                            animate={{ y: [0, -4, 0] }}
-                            transition={{ duration: 0.8, repeat: Infinity, delay: d }}
-                            className="block w-2 h-2 rounded-full bg-cyan-400"
-                          />
-                        ))}
-                      </div>
-                      <span className="text-sm text-slate-400">{t('session_preparing')}</span>
-                    </div>
-                  </motion.div>
-                ) : lastAssistantMessage?.content ? (
-                  <motion.div
-                    key={lastAssistantMessage.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className={`w-full bg-white/5 backdrop-blur border border-white/10 rounded-xl overflow-y-auto ${showImageHero ? 'p-4 max-h-[32vh]' : 'p-6 max-h-[55vh]'}`}
-                  >
-                    <div className={`text-slate-100 leading-relaxed ${showImageHero ? 'text-base sm:text-lg' : 'text-lg'}`}>
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          p: ({ children }) => <p className="leading-relaxed mb-2 last:mb-0">{children}</p>,
-                          strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
-                          em: ({ children }) => <em className="italic">{children}</em>,
-                          hr: () => <hr className="my-2 border-white/10" />,
-                          ul: ({ children }) => <ul className="list-disc list-inside my-1.5 space-y-0.5">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal list-inside my-1.5 space-y-0.5">{children}</ol>,
-                          li: ({ children }) => <li className="ml-2">{children}</li>,
-                          code: ({ children }) => <code className="px-1 py-0.5 rounded bg-white/10 text-cyan-200 font-mono text-sm">{children}</code>,
-                        }}
-                      >
-                        {lastAssistantMessage.content}
-                      </ReactMarkdown>
-                      {lastAssistantMessage.status === 'streaming' && (
-                        <motion.span
-                          animate={{ opacity: [1, 0.3, 1] }}
-                          transition={{ duration: 0.8, repeat: Infinity }}
-                          className="inline-block ml-1 text-cyan-400"
-                        >▊</motion.span>
-                      )}
-                    </div>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-            </div>
-          </div>
-
-          {/* Ver conversación (mismo patrón que /learn — drawer lateral con historial completo) */}
-          {messages.length > 0 && (
-            <div className="shrink-0 flex items-center justify-center pt-2">
-              <button
-                type="button"
-                onClick={() => setShowHistory(true)}
-                className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-cyan-300 transition-colors"
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-                {t('session_view_conversation')} ({messages.length} {messages.length === 1 ? t('session_message') : t('session_messages')})
-              </button>
+      {/* Cuerpo: Sophia (izquierda) · conversación estilo Claude (derecha).
+          La conversación recibe algo más de ancho — es donde se lee. */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[42fr_58fr] gap-2 min-h-0">
+        {/* IZQUIERDA: Sophia grande, fija. El motor 3D no se recarga porque
+            su posición en el árbol no cambia. */}
+        <div className="relative hidden lg:flex items-end justify-center overflow-hidden rounded-xl border border-[#fbc50b]/25 bg-[radial-gradient(circle_at_50%_38%,#12333f,#09222d_72%)]">
+          {use3DAvatar ? (
+            <SophiaTalkingHead
+              ref={talkingHeadRef}
+              width="100%"
+              height="100%"
+              onReady={() => {
+                avatar3DReadyRef.current = true
+                pushDebug('iframe READY (ref=true)')
+              }}
+              onSpeakEnd={() => {
+                setAvatarState('idle')
+                const r = speakEndResolverRef.current
+                speakEndResolverRef.current = null
+                r?.('end')
+              }}
+              onError={() => {
+                setAvatarState('idle')
+                const r = speakEndResolverRef.current
+                speakEndResolverRef.current = null
+                r?.('error')
+              }}
+              onInfo={pushDebug}
+            />
+          ) : videoUrl ? (
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              className="w-full h-full object-contain"
+              autoPlay
+              loop
+              muted
+              playsInline
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <SophiaAvatar state={avatarState} size={260} />
             </div>
           )}
+          {/* Placeholder logo CETEMIN: cubre TODA la espera (carga del modelo +
+              generación del saludo), no solo la carga. Crossfade a Sophia justo
+              cuando empieza a hablar (cuando aparece el primer texto). Así no se
+              ve "parada" — aparece ya hablando. También es respaldo digno si el
+              3D fallara en algún equipo. */}
+          <div
+            className={`absolute inset-0 z-20 grid place-items-center bg-[radial-gradient(circle_at_50%_40%,#12333f,#09222d_72%)] transition-opacity duration-700 ${preparing ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          >
+            <motion.div
+              animate={{ scale: [1, 1.04, 1], opacity: [0.85, 1, 0.85] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              <Image src="/cetemin-logo.jpg" alt="CETEMIN" width={300} height={300} className="rounded-3xl shadow-2xl w-[40vh] max-w-[320px] h-auto" />
+            </motion.div>
+          </div>
 
-          {/* Hint para móvil: la voz es problemática en celular (red, autoplay
-              de iOS, echo). Sugerimos Escribir antes de que sufran como Pepe. */}
+          {/* Placa de nombre + estado */}
+          <div className="absolute inset-x-0 bottom-0 p-4 text-center bg-gradient-to-t from-[#09222d] to-transparent pointer-events-none">
+            <div className="text-2xl font-bold text-white">Sophia</div>
+            <div className="text-xs text-[#fbc50b] mt-0.5 h-4">
+              {avatarState === 'speaking' ? (language === 'EN' ? '● Speaking…' : '● Hablando…') : ''}
+            </div>
+          </div>
+        </div>
+
+        {/* DERECHA: conversación estilo Claude (bloques a todo el ancho) */}
+        <div className="bg-[#0d1f3c]/60 backdrop-blur border border-white/10 rounded-xl flex flex-col min-h-0 p-3 relative">
+          <div ref={msgsRef} className="flex-1 overflow-y-auto px-2 min-h-0 scroll-smooth">
+            {/* Splash "Preparando tu clase…" — cubre la espera del saludo para
+                que no parezca que ya se puede hablar. */}
+            {preparing && (
+              <div className="h-full flex flex-col items-center justify-center gap-4 text-center px-6">
+                <div className="flex gap-1.5">
+                  {[0, 0.15, 0.3].map((d, i) => (
+                    <motion.span
+                      key={i}
+                      animate={{ y: [0, -6, 0] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: d }}
+                      className="block w-2.5 h-2.5 rounded-full bg-[#fbc50b]"
+                    />
+                  ))}
+                </div>
+                <p className="text-lg font-semibold text-white">
+                  {language === 'EN' ? 'Preparing your class…' : 'Preparando tu clase…'}
+                </p>
+                <p className="text-sm text-slate-400">
+                  {language === 'EN' ? 'Sophia is about to start. One moment.' : 'Sophia está por comenzar. Un momento.'}
+                </p>
+              </div>
+            )}
+
+            {visibleMessages.map((m) => {
+              const isAssistant = m.role === 'assistant'
+              const msgImage = imageByMsg[m.id]
+              return (
+                <div key={m.id} className="py-4 border-b border-white/5 last:border-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`grid place-items-center w-5 h-5 rounded-full text-[10px] font-extrabold ${isAssistant ? 'bg-[#fbc50b] text-[#09222d]' : 'bg-white/12 text-slate-300'}`}>
+                      {isAssistant ? 'S' : (participantName.trim()[0]?.toUpperCase() || 'T')}
+                    </span>
+                    <span className={`text-[11px] font-semibold uppercase tracking-wider ${isAssistant ? 'text-[#fbc50b]' : 'text-slate-400'}`}>
+                      {isAssistant ? 'Sophia' : participantName.split(' ')[0]}
+                    </span>
+                  </div>
+                  <div className={`text-base sm:text-lg leading-relaxed ${isAssistant ? 'text-slate-100' : 'text-slate-300'}`}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ children }) => <p className="leading-relaxed mb-2 last:mb-0">{children}</p>,
+                        strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
+                        em: ({ children }) => <em className="italic">{children}</em>,
+                        hr: () => <hr className="my-2 border-white/10" />,
+                        ul: ({ children }) => <ul className="list-disc list-inside my-1.5 space-y-0.5">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal list-inside my-1.5 space-y-0.5">{children}</ol>,
+                        li: ({ children }) => <li className="ml-2">{children}</li>,
+                        code: ({ children }) => <code className="px-1 py-0.5 rounded bg-white/10 text-[#fbc50b] font-mono text-sm">{children}</code>,
+                      }}
+                    >
+                      {m.content}
+                    </ReactMarkdown>
+                    {m.status === 'streaming' && (
+                      <motion.span
+                        animate={{ opacity: [1, 0.3, 1] }}
+                        transition={{ duration: 0.8, repeat: Infinity }}
+                        className="inline-block ml-1 text-[#fbc50b]"
+                      >▊</motion.span>
+                    )}
+                  </div>
+
+                  {/* Imagen anclada a ESTE mensaje (se queda en su sitio cuando
+                      llegan respuestas nuevas). Respeta el formato real de la
+                      imagen: <img> con alto/ancho automáticos, sin caja fija. */}
+                  {isAssistant && msgImage && (
+                    <button
+                      type="button"
+                      onClick={() => setLightboxIndex(galleryIndexOf(msgImage.url))}
+                      className="mt-3 block rounded-xl overflow-hidden border border-[#fbc50b]/30 hover:border-[#fbc50b]/60 transition-colors group w-fit"
+                    >
+                      <div className="relative bg-black/20">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={msgImage.url}
+                          alt={msgImage.description}
+                          className="block max-w-[460px] max-h-[300px] w-auto h-auto"
+                        />
+                        <span className="absolute top-2 right-2 rounded-md bg-black/60 p-1.5 text-slate-200 opacity-70 group-hover:opacity-100 transition-opacity">
+                          <Maximize2 className="h-4 w-4" />
+                        </span>
+                      </div>
+                      <div className="px-3 py-2 text-xs text-[#fbc50b] bg-[#fbc50b]/10 flex items-center gap-1.5">
+                        <Maximize2 className="h-3 w-3" />
+                        {language === 'EN' ? 'Tap to enlarge' : 'Toca para ampliar'}
+                      </div>
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Hint móvil */}
           {isMobile && voiceEnabled && (
             <div className="shrink-0 flex items-center justify-center pt-2">
               <p className="text-[11px] text-amber-300/80 bg-amber-500/10 border border-amber-400/20 rounded-full px-3 py-1">
@@ -984,45 +965,63 @@ export function AssessmentSession({
             </div>
           )}
 
-          {/* Controls: UNA acción primaria (voz) + escribir como secundaria */}
-          <div className="shrink-0 mt-3 pt-3 border-t border-white/10 flex items-center justify-center gap-3">
-            {voiceEnabled && (
-              <VoiceButton
-                sessionId={sessionId}
-                language={language}
-                autoStart
-                prominent
-                disabled={isLoading || welcomeLoading || avatarState === 'speaking'}
-                onMessage={(m) => setMessages(prev => [...prev, m])}
-                onStreamStart={(id) => {
-                  setAvatarState('speaking')
-                  setMessages(prev => [...prev, {
-                    id, sessionId, role: 'assistant', content: '',
-                    createdAt: new Date(), status: 'streaming', isOptimistic: true,
-                  }])
-                }}
-                onStreamDelta={(id, delta) => {
-                  setMessages(prev => prev.map(m => m.id === id ? { ...m, content: m.content + delta } : m))
-                }}
-                onStreamDone={(id) => {
-                  setAvatarState('idle')
-                  setMessages(prev => prev.map(m => m.id === id ? { ...m, status: 'completed', isOptimistic: false } : m))
-                }}
-                onSpeakChunk={use3DAvatar ? speakChunkVia3D : undefined}
-              />
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowTextInput(v => !v)}
-              className="gap-1.5 text-slate-400 hover:text-white hover:bg-white/10"
-            >
-              <Type className="h-4 w-4" />
-              <span className="hidden sm:inline">{voiceEnabled ? (showTextInput ? t('session_hide_button') : t('session_write_button')) : t('session_write_button')}</span>
-            </Button>
+          {/* Controles: voz + escribir al centro (conversación) · imágenes a la
+              derecha (recurso). Ocultos mientras se prepara la clase. */}
+          <div className={`shrink-0 mt-3 pt-3 border-t border-white/10 grid grid-cols-[1fr_auto_1fr] items-center gap-2 ${preparing ? 'invisible' : ''}`}>
+            <span />
+            <div className="flex items-center justify-center gap-3">
+              {voiceEnabled && (
+                <VoiceButton
+                  sessionId={sessionId}
+                  language={language}
+                  autoStart
+                  prominent
+                  disabled={isLoading || welcomeLoading || avatarState === 'speaking'}
+                  onMessage={(m) => setMessages(prev => [...prev, m])}
+                  onStreamStart={(id) => {
+                    setAvatarState('speaking')
+                    setMessages(prev => [...prev, {
+                      id, sessionId, role: 'assistant', content: '',
+                      createdAt: new Date(), status: 'streaming', isOptimistic: true,
+                    }])
+                  }}
+                  onStreamDelta={(id, delta) => {
+                    setMessages(prev => prev.map(m => m.id === id ? { ...m, content: m.content + delta } : m))
+                  }}
+                  onStreamDone={(id) => {
+                    setAvatarState('idle')
+                    setMessages(prev => prev.map(m => m.id === id ? { ...m, status: 'completed', isOptimistic: false } : m))
+                  }}
+                  onSpeakChunk={use3DAvatar ? speakChunkVia3D : undefined}
+                />
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowTextInput(v => !v)}
+                className="gap-1.5 text-slate-400 hover:text-white hover:bg-white/10"
+              >
+                <Type className="h-4 w-4" />
+                <span className="hidden sm:inline">{voiceEnabled ? (showTextInput ? t('session_hide_button') : t('session_write_button')) : t('session_write_button')}</span>
+              </Button>
+            </div>
+            {/* Imágenes: recurso a la derecha, ocupa lo mínimo */}
+            <div className="justify-self-end">
+              {galleryList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setLightboxIndex(0)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#fbc50b]/35 bg-[#fbc50b]/10 text-[#fbc50b] px-3 py-2 text-sm font-semibold hover:bg-[#fbc50b]/20 transition-colors"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">{language === 'EN' ? 'Images' : 'Imágenes'}</span>
+                  <span className="grid place-items-center min-w-5 h-5 px-1.5 rounded-full bg-[#fbc50b] text-[#09222d] text-[11px] font-extrabold">{galleryList.length}</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Text input collapsible */}
+          {/* Input de texto colapsable */}
           <AnimatePresence>
             {showTextInput && (
               <motion.div
@@ -1045,62 +1044,80 @@ export function AssessmentSession({
               </motion.div>
             )}
           </AnimatePresence>
-        </main>
-
+        </div>
       </div>
 
-      {/* Lightbox modal */}
+      {/* Lightbox / galería de imágenes con navegación ‹ › */}
       <AnimatePresence>
-        {lightboxImage && (
+        {lightboxIndex !== null && galleryList[lightboxIndex] && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
-            onClick={() => setLightboxImage(null)}
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+            onClick={() => setLightboxIndex(null)}
           >
             <Button
               type="button"
               size="icon"
               variant="outline"
-              className="absolute top-4 right-4 bg-white/10 border-white/20 text-white hover:bg-white/20"
-              onClick={() => setLightboxImage(null)}
+              className="absolute top-4 right-4 bg-white/10 border-white/20 text-white hover:bg-white/20 z-10"
+              onClick={() => setLightboxIndex(null)}
             >
               <X className="h-5 w-5" />
             </Button>
+
+            {galleryList.length > 1 && (
+              <>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 border-white/20 text-white hover:bg-white/20 rounded-full h-12 w-12 z-10"
+                  onClick={(e) => { e.stopPropagation(); navLightbox(-1) }}
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 border-white/20 text-white hover:bg-white/20 rounded-full h-12 w-12 z-10"
+                  onClick={(e) => { e.stopPropagation(); navLightbox(1) }}
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </Button>
+              </>
+            )}
+
             <motion.div
-              initial={{ scale: 0.9 }}
+              key={galleryList[lightboxIndex].url}
+              initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              className="relative max-w-[90vw] max-h-[85vh] w-full"
+              exit={{ scale: 0.95 }}
+              className="relative max-w-[90vw] max-h-[88vh] w-full"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="relative w-full" style={{ height: '70vh' }}>
+              <div className="relative w-full" style={{ height: '72vh' }}>
                 <Image
-                  src={lightboxImage.url}
-                  alt={lightboxImage.description}
+                  src={galleryList[lightboxIndex].url}
+                  alt={galleryList[lightboxIndex].description}
                   fill
                   sizes="90vw"
                   className="object-contain"
                   priority
                 />
               </div>
-              {lightboxImage.description && (
-                <div className="mt-3 bg-[#0d1f3c]/90 border border-white/10 rounded-lg p-4">
-                  <p className="text-sm text-slate-200 leading-relaxed">{lightboxImage.description}</p>
-                </div>
-              )}
+              <div className="mt-3 bg-[#0d1f3c]/90 border border-white/10 rounded-lg p-4 flex items-center justify-between gap-3">
+                <p className="text-sm text-slate-200 leading-relaxed">{galleryList[lightboxIndex].description}</p>
+                {galleryList.length > 1 && (
+                  <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">{lightboxIndex + 1} / {galleryList.length}</span>
+                )}
+              </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Historial de conversación (mismo componente que /learn) */}
-      <ConversationDrawer
-        open={showHistory}
-        onClose={() => setShowHistory(false)}
-        messages={messages}
-      />
     </div>
   )
 }

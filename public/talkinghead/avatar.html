@@ -80,6 +80,10 @@
           lipsyncLang: "es",
         });
 
+        // Acercar la camara para que el avatar aproveche el ancho del panel
+        // (antes quedaba angosto y centrado con mucho negro a los lados).
+        try { head.setView("upper", { cameraDistance: -0.6, cameraY: -0.05 }); } catch (e) { dlog("setView:", e?.message); }
+
         setStatus("");
 
         // Diagnóstico: ¿el avatar tiene morph targets de visemas?
@@ -115,6 +119,10 @@
           case "stopGesture":
             head.stopGesture(0.5);
             break;
+          case "stopSpeaking":
+            // Cortar el habla en curso de inmediato (al salir de la clase).
+            try { head.stopSpeaking(); } catch (e) { dlog("stopSpeaking:", e?.message); }
+            break;
           case "mood":
             head.setMood(d.name);
             break;
@@ -126,6 +134,7 @@
               avatarMood: "neutral",
               lipsyncLang: "es",
             });
+            try { head.setView("upper", { cameraDistance: -0.6, cameraY: -0.05 }); } catch (e) { dlog("setView:", e?.message); }
             setStatus("");
             post({ type: "ready" });
             break;

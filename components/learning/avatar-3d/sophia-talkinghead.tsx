@@ -1,6 +1,6 @@
 'use client'
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 
 export type TalkingHeadGesture =
   | 'handup'
@@ -30,6 +30,8 @@ export interface TalkingHeadHandle {
   speak: (text: string) => void
   /** Lip-sync con audio ya generado (MP3/wav ArrayBuffer) + texto para timing. */
   speakAudio: (audio: ArrayBuffer, text: string) => void
+  /** Corta el habla en curso de inmediato (p. ej. al salir de la clase). */
+  stopSpeaking: () => void
 }
 
 interface SophiaTalkingHeadProps {
@@ -59,7 +61,6 @@ export const SophiaTalkingHead = forwardRef<TalkingHeadHandle, SophiaTalkingHead
     ref,
   ) {
     const iframeRef = useRef<HTMLIFrameElement>(null)
-    const [ready, setReady] = useState(false)
     const readyRef = useRef(false)
     // Cola de habla: si llaman speakAudio antes de que el avatar esté listo
     // (p. ej. el welcome), lo guardamos y lo reproducimos al estar listo.
@@ -95,6 +96,10 @@ export const SophiaTalkingHead = forwardRef<TalkingHeadHandle, SophiaTalkingHead
           pendingSpeak.current.push({ audio, text })
         }
       },
+      stopSpeaking: () => {
+        pendingSpeak.current = [] // descartar lo encolado
+        send({ action: 'stopSpeaking' })
+      },
     }))
 
     useEffect(() => {
@@ -103,7 +108,6 @@ export const SophiaTalkingHead = forwardRef<TalkingHeadHandle, SophiaTalkingHead
         if (!d || d.source !== 'talkinghead') return
         if (d.type === 'ready') {
           readyRef.current = true
-          setReady(true)
           onReady?.()
           onInfo?.('iframe READY')
           // Reanudar audio (hay activación persistente del click "Comenzar")
@@ -166,22 +170,9 @@ export const SophiaTalkingHead = forwardRef<TalkingHeadHandle, SophiaTalkingHead
           style={{ width: '100%', height: '100%', border: 'none', background: 'transparent' }}
           allow="autoplay"
         />
-        {!ready && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 12,
-              color: '#94a3b8',
-              pointerEvents: 'none',
-            }}
-          >
-            Inicializando motor 3D…
-          </div>
-        )}
+        {/* Sin texto de carga visible: "Inicializando motor 3D…" se leía como
+            debug en el kiosko. El área queda en transparente hasta que el
+            modelo aparece. */}
       </div>
     )
   },

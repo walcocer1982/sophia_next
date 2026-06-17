@@ -65,22 +65,14 @@ export function useVoiceChat({
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null)
   const playbackUrlRef = useRef<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-  // Cola de oraciones para TTS chunked. Cada entrada tiene el TEXTO y la
-  // promesa del audio. La sincronización texto+voz se hace cuando empieza
-  // a reproducirse cada oración: ahí se revela el texto en la UI.
-  // Esto evita que el estudiante vea el texto antes de oírlo.
-  type QueuedSentence = { text: string; blobPromise: Promise<Blob | null> }
-  const speakQueueRef = useRef<QueuedSentence[]>([])
-  const isPlayingQueueRef = useRef<boolean>(false)
+  // Flag de cancelación de reproducción (al cortar el turno / cleanup).
   const cancelPlaybackRef = useRef<boolean>(false)
   // ID del mensaje de Sophia en la UI — usado para revelar texto sincronizado
   // con el audio. Se setea al inicio de cada turno.
   const currentAssistantIdRef = useRef<string | null>(null)
-  // Callbacks capturados por turno — los almacenamos en refs para que el
-  // playFromQueue (que se invoca de modo "fire and forget") los pueda usar.
+  // Callback de reveal capturado por turno (en ref para usarlo fuera del render).
   const onDeltaRef = useRef<((id: string, delta: string) => void) | undefined>(undefined)
   const MIN_RECORDING_MS = 800
-  const MIN_SENTENCE_CHARS = 20
 
   const sendEvent = useCallback((event: object) => {
     const dc = dataChannelRef.current
@@ -116,7 +108,6 @@ export function useVoiceChat({
       abortControllerRef.current = null
     }
     cancelPlaybackRef.current = true
-    speakQueueRef.current = []
     stopPlayback()
     if (dataChannelRef.current) {
       try { dataChannelRef.current.close() } catch { /* ignore */ }
@@ -159,197 +150,104 @@ export function useVoiceChat({
   }, [language])
 
   /**
-   * Loop que consume la cola: toma la próxima entrada {text, blobPromise},
-   * espera a que llegue el audio, REVELA el texto en la UI, lo reproduce,
-   * espera a que termine, y sigue con la siguiente.
-   *
-   * Sincronización clave: el texto se muestra al estudiante AL MISMO TIEMPO
-   * que el audio empieza a hablarlo. Antes el texto aparecía antes
-   * (streaming de Claude) y el audio llegaba 1-2s después.
+   * Reproduce UN blob de audio completo: por el avatar 3D (lip-sync) si hay
+   * callback, o por el <audio> compartido. Resuelve cuando termina.
    */
-  const playFromQueue = useCallback(async () => {
-    if (isPlayingQueueRef.current) return
-    isPlayingQueueRef.current = true
-    setState('speaking')
-
-    while (speakQueueRef.current.length > 0 && !cancelPlaybackRef.current) {
-      const entry = speakQueueRef.current.shift()
-      if (!entry) continue
-      try {
-        const tWait = performance.now()
-        const blob = await entry.blobPromise
-        const waitMs = Math.round(performance.now() - tWait)
-        if (cancelPlaybackRef.current) continue
-        // Revelar el texto en la UI EXACTAMENTE cuando arranca el audio.
-        const assistantId = currentAssistantIdRef.current
-        if (assistantId && onDeltaRef.current) {
-          // Agregamos espacio entre oraciones para que se concatenen bien.
-          const prefix = entry.text.startsWith(' ') ? '' : ' '
-          onDeltaRef.current(assistantId, prefix + entry.text)
-        }
-        if (!blob) continue
-
-        // Ruta avatar 3D (lip-sync): reproducir por el callback externo, que
-        // resuelve cuando termina el audio (serializa las oraciones).
-        if (onSpeakChunkRef.current) {
-          const tPlay = performance.now()
-          try {
-            await onSpeakChunkRef.current(blob, entry.text)
-          } catch (e) {
-            console.warn('[Voice] onSpeakChunk error:', e)
-          }
-          console.log(`[timing] 🎭 Avatar habló oración: ${Math.round(performance.now() - tPlay)}ms (espera audio: ${waitMs}ms)`)
-          continue
-        }
-
-        const url = URL.createObjectURL(blob)
-        playbackUrlRef.current = url
-
-        // Reusar el <audio> desbloqueado por gesto si existe (kiosko) — la
-        // reproducción llega segundos después del clic del mic y un elemento
-        // nuevo puede caer en el bloqueo de autoplay.
-        const audio = getUnlockedAudio() ?? new Audio()
-        playbackAudioRef.current = audio
-        audio.src = url
-        audio.preload = 'auto'
-
-        await new Promise<void>((resolve) => {
-          audio.onended = () => resolve()
-          audio.onerror = () => {
-            console.warn('[Voice] audio chunk error')
-            resolve()
-          }
-          audio.play().catch((e) => {
-            console.warn('[Voice] play() rejected:', e)
-            resolve()
-          })
-        })
-        try { URL.revokeObjectURL(url) } catch { /* ignore */ }
-        if (playbackUrlRef.current === url) playbackUrlRef.current = null
-        if (playbackAudioRef.current === audio) playbackAudioRef.current = null
-      } catch (e) {
-        console.warn('[Voice] chunk playback error:', e)
-      }
+  const playBlob = useCallback(async (blob: Blob, text: string) => {
+    if (onSpeakChunkRef.current) {
+      try { await onSpeakChunkRef.current(blob, text) } catch (e) { console.warn('[Voice] onSpeakChunk error:', e) }
+      return
     }
-
-    isPlayingQueueRef.current = false
+    const url = URL.createObjectURL(blob)
+    playbackUrlRef.current = url
+    // Reusar el <audio> desbloqueado por gesto (kiosko) — un elemento nuevo
+    // puede caer en el bloqueo de autoplay.
+    const audio = getUnlockedAudio() ?? new Audio()
+    playbackAudioRef.current = audio
+    audio.src = url
+    audio.preload = 'auto'
+    await new Promise<void>((resolve) => {
+      audio.onended = () => resolve()
+      audio.onerror = () => resolve()
+      audio.play().catch(() => resolve())
+    })
+    try { URL.revokeObjectURL(url) } catch { /* ignore */ }
+    if (playbackUrlRef.current === url) playbackUrlRef.current = null
+    if (playbackAudioRef.current === audio) playbackAudioRef.current = null
   }, [])
 
   /**
-   * Extrae oraciones completas del buffer y las agrega a la cola TTS.
-   * Una "oración completa" termina en `.` `?` `!` seguidos de espacio o fin.
-   * Devuelve el remainder (texto sin oración terminada todavía).
-   *
-   * Cada entrada de la cola es {text, blobPromise} — el fetch a TTS arranca
-   * en paralelo (synthesizeSentence se llama acá) mientras Claude sigue
-   * streameando. La sincronización con UI ocurre en playFromQueue.
-   */
-  const flushSentencesIntoQueue = useCallback((buffer: string): string => {
-    const re = /([^.!?\n]+[.!?]+)(?=\s|$)/g
-    let lastIdx = 0
-    let match: RegExpExecArray | null
-    while ((match = re.exec(buffer)) !== null) {
-      const sentence = match[1].trim().replace(/\s+/g, ' ')
-      if (sentence.length >= MIN_SENTENCE_CHARS) {
-        speakQueueRef.current.push({
-          text: sentence,
-          blobPromise: synthesizeSentence(sentence),
-        })
-      }
-      lastIdx = match.index + match[0].length
-    }
-    return buffer.slice(lastIdx)
-  }, [synthesizeSentence])
-
-  /**
-   * Manda el transcript del estudiante a Claude vía /api/chat/stream,
-   * acumula el response streaming, y luego sintetiza con TTS.
+   * Manda el transcript del estudiante a Claude, ACUMULA toda la respuesta y la
+   * sintetiza en UNA sola llamada TTS → voz PAREJA (mismo pitch y volumen de
+   * principio a fin). Antes se troceaba por oración (una llamada c/u) y cada
+   * frase sonaba distinta. El texto se revela oración por oración por timing,
+   * en paralelo al audio. Trade-off aceptado: +latencia (espera la respuesta
+   * completa de Claude antes de empezar a hablar).
    */
   const processWithClaude = useCallback(async (userTranscript: string) => {
-    const tStart = performance.now()
-    let firstTokenAt = 0
-    console.log('[timing] ⏱️ ─── nueva respuesta ───')
     onTranscript?.({ role: 'user', content: userTranscript })
 
-    // NOTA: NO guardamos via /api/voice/message acá. Despues de la migracion
-    // a Whisper+Claude+TTS (commit 04c0e45), chat/stream es el unico responsable
-    // de guardar el user message Y disparar la verificacion. Llamar a ambos
-    // duplicaba el mensaje en DB e inflaba el conteo de intentos (caso real
-    // observado con Alcocer: cada mensaje aparecia 2 veces, attempts inflados).
-
+    // NOTA: NO guardamos via /api/voice/message acá — chat/stream es el único
+    // responsable de guardar el user message y disparar la verificación.
     const assistantId = `voice-asst-${Date.now()}`
     onAssistantStreamStart?.(assistantId)
-
-    let accumulated = ''
-    let sentenceBuffer = ''
-    // Reset de la cola para este turno + capturar refs para playFromQueue
-    speakQueueRef.current = []
-    isPlayingQueueRef.current = false
-    cancelPlaybackRef.current = false
     currentAssistantIdRef.current = assistantId
     onDeltaRef.current = onAssistantStreamDelta
+    cancelPlaybackRef.current = false
 
+    // 1. Stream de Claude → solo ACUMULAR (sin trocear).
+    let accumulated = ''
     await new Promise<void>((resolve) => {
       streamChatResponse(
         sessionId,
         userTranscript,
-        (chunk) => {
-          if (!firstTokenAt) {
-            firstTokenAt = performance.now()
-            console.log(`[timing] 🧠 Claude primer token: ${Math.round(firstTokenAt - tStart)}ms`)
-          }
-          accumulated += chunk
-          sentenceBuffer += chunk
-          // IMPORTANTE: NO llamamos a onAssistantStreamDelta acá. El texto se
-          // revela en la UI cuando arranca cada audio (playFromQueue), no
-          // mientras Claude todavía está generándolo. Esto sincroniza texto+voz.
-          const previousQueueLen = speakQueueRef.current.length
-          sentenceBuffer = flushSentencesIntoQueue(sentenceBuffer)
-          if (speakQueueRef.current.length > previousQueueLen) {
-            playFromQueue()
-          }
-        },
-        () => {
-          console.log(`[timing] 🧠 Claude completo: ${Math.round(performance.now() - tStart)}ms`)
-          resolve()
-        },
-        () => {
-          console.warn('[Voice] Claude stream errored')
-          resolve()
-        },
+        (chunk) => { accumulated += chunk },
+        () => resolve(),
+        () => { console.warn('[Voice] Claude stream errored'); resolve() },
       )
     })
 
-    // Stream terminado: si quedó texto sin terminador (última "oración"
-    // sin punto final), la encolamos también.
-    if (sentenceBuffer.trim().length >= 3) {
-      const lastText = sentenceBuffer.trim()
-      speakQueueRef.current.push({
-        text: lastText,
-        blobPromise: synthesizeSentence(lastText),
-      })
-      playFromQueue()
+    if (accumulated.trim()) onTranscript?.({ role: 'assistant', content: accumulated })
+
+    const finish = () => {
+      onAssistantStreamDone?.(assistantId)
+      currentAssistantIdRef.current = null
+      onDeltaRef.current = undefined
+      setState('ready')
     }
 
-    if (accumulated.trim()) {
-      onTranscript?.({ role: 'assistant', content: accumulated })
-    }
+    if (cancelPlaybackRef.current || !accumulated.trim()) { finish(); return }
 
-    // Esperar a que la cola termine de reproducir (texto + audio).
-    while (isPlayingQueueRef.current || speakQueueRef.current.length > 0) {
-      await new Promise((r) => setTimeout(r, 100))
+    // 2. Limpiar markdown para TTS y reveal (texto plano conversacional).
+    const clean = accumulated
+      .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1').replace(/_([^_]+)_/g, '$1')
+      .replace(/`([^`]+)`/g, '$1').replace(/#{1,6}\s+/g, '')
+      .replace(/\n{2,}/g, '. ').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()
+
+    setState('speaking')
+
+    // 3. UNA sola llamada TTS del response completo → voz consistente.
+    const blob = await synthesizeSentence(clean)
+
+    // 4. Reproducir el audio completo + revelar el texto oración por oración
+    //    por timing (~360ms/palabra ≈ ritmo del habla), en paralelo.
+    const sentences = clean.match(/[^.!?]+[.!?]+(\s|$)/g)?.map((s) => s.trim()).filter(Boolean) ?? [clean]
+    const play = blob ? playBlob(blob, clean) : Promise.resolve()
+    const MS_PER_WORD = 360
+    for (let i = 0; i < sentences.length; i++) {
       if (cancelPlaybackRef.current) break
+      if (onDeltaRef.current && currentAssistantIdRef.current) {
+        onDeltaRef.current(assistantId, (i === 0 ? '' : ' ') + sentences[i])
+      }
+      if (i < sentences.length - 1) {
+        const words = sentences[i].split(/\s+/).filter(Boolean).length
+        await new Promise((r) => setTimeout(r, Math.min(7000, Math.max(700, words * MS_PER_WORD))))
+      }
     }
-
-    // Notificar fin del stream del asistente DESPUÉS de que termine el audio,
-    // para que la UI marque el mensaje como completado solo cuando ya se
-    // reveló todo el texto.
-    onAssistantStreamDone?.(assistantId)
-    currentAssistantIdRef.current = null
-    onDeltaRef.current = undefined
-
-    setState('ready')
-  }, [sessionId, onTranscript, onAssistantStreamStart, onAssistantStreamDelta, onAssistantStreamDone, flushSentencesIntoQueue, playFromQueue, synthesizeSentence])
+    await play
+    finish()
+  }, [sessionId, onTranscript, onAssistantStreamStart, onAssistantStreamDelta, onAssistantStreamDone, synthesizeSentence, playBlob])
 
   const handleServerEvent = useCallback((event: MessageEvent) => {
     try {
@@ -528,7 +426,6 @@ export function useVoiceChat({
       abortControllerRef.current = null
     }
     cancelPlaybackRef.current = true
-    speakQueueRef.current = []
     stopPlayback()
     setState('ready')
     setError(null)

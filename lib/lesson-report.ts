@@ -92,7 +92,7 @@ ${a.studentResponses.map((r, j) => `  ${j + 1}. "${r}"`).join('\n') || '  (sin r
 
 REGLAS CRÍTICAS — LEER ANTES DE GENERAR:
 
-1. ALCANCE DE LA RECOMENDACIÓN: Solo podés referirte a conceptos que estén en el OBJECTIVE, los KEY POINTS, o los must_include de las actividades de arriba. NO inventes temas avanzados (cálculos, fórmulas específicas, costos, normativas, equipos no mencionados, optimizaciones, métricas) por más relacionados que parezcan al tema general. Si el estudiante dominó todo lo enseñado, recomendá avanzar — no inventes huecos.
+1. ALCANCE DE LA RECOMENDACIÓN: Solo puedes referirte a conceptos que estén en el OBJECTIVE, los KEY POINTS, o los must_include de las actividades de arriba. NO inventes temas avanzados (cálculos, fórmulas específicas, costos, normativas, equipos no mencionados, optimizaciones, métricas) por más relacionados que parezcan al tema general. Si el estudiante dominó todo lo enseñado, recomienda avanzar — no inventes huecos.
 
 2. TOLERANCIA A ERRORES DE TRANSCRIPCIÓN DE VOZ: Las respuestas pueden venir de Whisper y contener homófonos. NO los menciones como DEBILIDADES — son artefactos técnicos, no fallas conceptuales. Si una palabra suena parecida a un término del tema, interpretala correctamente.
 
@@ -257,7 +257,7 @@ ${a.mustInclude.map((c, j) => `  ${j + 1}. ${c}`).join('\n')}
 - Nivel: ${a.understandingLevel}
 `).join('')}
 
-REGLA CRÍTICA — ALCANCE: Solo podés referirte a conceptos del OBJECTIVE, KEY POINTS o must_include de arriba. NO inventes temas avanzados fuera del alcance.
+REGLA CRÍTICA — ALCANCE: Solo puedes referirte a conceptos del OBJECTIVE, KEY POINTS o must_include de arriba. NO inventes temas avanzados fuera del alcance.
 
 Genera un reporte PARCIAL breve en español con este formato exacto:
 

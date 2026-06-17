@@ -30,9 +30,12 @@ export async function POST(request: Request) {
   const trimmedText = text.slice(0, 4000)
 
   // Instrucciones de voz según idioma. shimmer soporta ambos nativos.
+  // CONSISTENCIA: se pide entrega PAREJA (tono/volumen estables) porque el
+  // audio se genera por partes y, sin esto, cada fragmento sale con pitch y
+  // volumen distintos (se escuchan saltos entre frases).
   const voiceInstructions = lang === 'EN'
-    ? 'Speak in clear, neutral American English. Warm and friendly tone, like a young instructor talking to a student. Pace is calm and clear. Natural intonation, never robotic. Pronounce technical terms clearly.'
-    : 'Habla en español latinoamericano con acento peruano neutro. Tono cálido, amigable y natural, como una instructora joven hablando con un estudiante. Ritmo pausado y claro. Pronuncia "z" y "ce/ci" como "s" (seseo). NUNCA uses acento de España. NUNCA suenes robotizada.'
+    ? 'Speak in clear, neutral American English. Warm, professional instructor tone — calm and even. Keep a STEADY pitch and a CONSTANT volume from start to finish; avoid abrupt changes in pitch, loudness or pace. Uniform, controlled delivery, never robotic. Pronounce technical terms clearly.'
+    : 'Habla en español latinoamericano con acento peruano neutro. Tono cálido y profesional de instructora, calmado y parejo. Mantén un pitch ESTABLE y un volumen CONSTANTE de principio a fin; evita cambios bruscos de tono, intensidad o ritmo. Entrega uniforme y controlada, nunca robotizada. Pronuncia "z" y "ce/ci" como "s" (seseo). NUNCA uses acento de España.'
 
   try {
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
