@@ -112,40 +112,19 @@ export default function EventosPage() {
   const activeCampaigns = data.campaigns.filter((c) => !c.isArchived)
   const archivedCampaigns = data.campaigns.filter((c) => c.isArchived)
 
-  // "Abrir" deja el kiosko usable de inmediato: si está cerrado lo activa
-  // (PATCH isActive) y luego abre /eval/[code]. La pestaña se abre ANTES del
-  // await para no perder el gesto del clic (popup blocker).
-  const handleOpenKiosko = async (a: AssessmentSummary) => {
-    const win = window.open('about:blank', '_blank')
-    if (!a.isActive) {
-      const res = await fetch(`/api/admin/assessments/${a.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: true }),
-      })
-      if (!res.ok) {
-        win?.close()
-        toast.error('No se pudo activar el kiosko')
-        return
-      }
-      toast.success('Kiosko activado')
-      void refetch()
-    }
-    if (win) win.location.href = `/eval/${a.code}`
-  }
-
-  // Cierra el kiosko (deja de recibir participantes). Control manual — útil
-  // para apagarlo de noche o cuando el stand no está atendido.
-  const handleCloseKiosko = async (a: AssessmentSummary) => {
-    if (!confirm(`¿Cerrar el kiosko ${a.code}? Dejará de recibir participantes hasta que lo vuelvas a abrir.`)) return
+  // Switch Activo/Cerrado: alterna isActive. Control manual — abrir cuando el
+  // stand está atendido, cerrar de noche. Al cerrar pide confirmación.
+  const handleToggleKiosko = async (a: AssessmentSummary) => {
+    const next = !a.isActive
+    if (!next && !confirm(`¿Cerrar el kiosko ${a.code}? Dejará de recibir participantes hasta que lo vuelvas a abrir.`)) return
     try {
       const res = await fetch(`/api/admin/assessments/${a.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: false }),
+        body: JSON.stringify({ isActive: next }),
       })
-      if (!res.ok) throw new Error('No se pudo cerrar')
-      toast.success('Kiosko cerrado')
+      if (!res.ok) throw new Error(next ? 'No se pudo abrir' : 'No se pudo cerrar')
+      toast.success(next ? 'Kiosko abierto' : 'Kiosko cerrado')
       await refetch()
     } catch (e) {
       toast.error((e as Error).message)
@@ -211,8 +190,7 @@ export default function EventosPage() {
                 campaign={c}
                 campaigns={data.options.activeCampaigns}
                 onAssignCampaign={handleAssignCampaign}
-                onOpen={handleOpenKiosko}
-                onClose={handleCloseKiosko}
+                onToggle={handleToggleKiosko}
               />
             ))}
           </div>
@@ -233,8 +211,7 @@ export default function EventosPage() {
                   assessment={a}
                   campaigns={data.options.activeCampaigns}
                   onAssignCampaign={handleAssignCampaign}
-                  onOpen={handleOpenKiosko}
-                  onClose={handleCloseKiosko}
+                  onToggle={handleToggleKiosko}
                 />
               ))}
             </div>
@@ -255,8 +232,7 @@ export default function EventosPage() {
                 campaign={c}
                 campaigns={data.options.activeCampaigns}
                 onAssignCampaign={handleAssignCampaign}
-                onOpen={handleOpenKiosko}
-                onClose={handleCloseKiosko}
+                onToggle={handleToggleKiosko}
                 compact
               />
             ))}
@@ -268,13 +244,12 @@ export default function EventosPage() {
 }
 
 function CampaignCard({
-  campaign, campaigns, onAssignCampaign, onOpen, onClose, compact = false,
+  campaign, campaigns, onAssignCampaign, onToggle, compact = false,
 }: {
   campaign: Campaign
   campaigns: ActiveCampaignOption[]
   onAssignCampaign: (assessmentId: string, campaignId: string | null) => void
-  onOpen: (assessment: AssessmentSummary) => void
-  onClose: (assessment: AssessmentSummary) => void
+  onToggle: (assessment: AssessmentSummary) => void
   compact?: boolean
 }) {
   const totalParticipants = campaign.assessments.reduce((s, a) => s + a.stats.totalParticipants, 0)
@@ -323,8 +298,7 @@ function CampaignCard({
                   campaigns={campaigns}
                   currentCampaignId={campaign.id}
                   onAssignCampaign={onAssignCampaign}
-                  onOpen={onOpen}
-                  onClose={onClose}
+                  onToggle={onToggle}
                 />
               ))}
             </div>
@@ -336,14 +310,13 @@ function CampaignCard({
 }
 
 function AssessmentRow({
-  assessment, campaigns, currentCampaignId, onAssignCampaign, onOpen, onClose,
+  assessment, campaigns, currentCampaignId, onAssignCampaign, onToggle,
 }: {
   assessment: AssessmentSummary
   campaigns: ActiveCampaignOption[]
   currentCampaignId?: string
   onAssignCampaign: (assessmentId: string, campaignId: string | null) => void
-  onOpen: (assessment: AssessmentSummary) => void
-  onClose: (assessment: AssessmentSummary) => void
+  onToggle: (assessment: AssessmentSummary) => void
 }) {
   return (
     <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
@@ -390,26 +363,27 @@ function AssessmentRow({
             <option key={c.id} value={c.id}>{c.shortName || c.name}</option>
           ))}
         </select>
+        {/* Switch Activo/Cerrado: alterna el estado del kiosko (control manual). */}
         <button
           type="button"
-          onClick={() => onOpen(assessment)}
+          role="switch"
+          aria-checked={assessment.isActive}
+          onClick={() => onToggle(assessment)}
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${assessment.isActive ? 'bg-green-500' : 'bg-gray-300'}`}
+          title={assessment.isActive ? 'Cerrar kiosko' : 'Abrir kiosko'}
+        >
+          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${assessment.isActive ? 'translate-x-[1.125rem]' : 'translate-x-1'}`} />
+        </button>
+        {/* Abrir la página del kiosko (para usarla/proyectarla en el stand). */}
+        <a
+          href={`/eval/${assessment.code}`}
+          target="_blank"
+          rel="noopener noreferrer"
           className="text-xs text-indigo-600 hover:text-indigo-800 shrink-0"
-          title={assessment.isActive ? 'Abrir kiosko' : 'Activar y abrir kiosko'}
+          title="Abrir la página del kiosko"
         >
           Abrir
-        </button>
-        {/* Cerrar: solo si está activo. Deja de recibir participantes (manual,
-            p. ej. de noche o cuando el stand no está atendido). */}
-        {assessment.isActive && (
-          <button
-            type="button"
-            onClick={() => onClose(assessment)}
-            className="text-xs text-red-600 hover:text-red-800 shrink-0"
-            title="Cerrar kiosko (deja de recibir participantes)"
-          >
-            Cerrar
-          </button>
-        )}
+        </a>
       </div>
     </div>
   )
