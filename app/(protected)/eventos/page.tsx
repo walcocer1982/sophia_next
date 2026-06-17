@@ -134,6 +134,24 @@ export default function EventosPage() {
     if (win) win.location.href = `/eval/${a.code}`
   }
 
+  // Cierra el kiosko (deja de recibir participantes). Control manual — útil
+  // para apagarlo de noche o cuando el stand no está atendido.
+  const handleCloseKiosko = async (a: AssessmentSummary) => {
+    if (!confirm(`¿Cerrar el kiosko ${a.code}? Dejará de recibir participantes hasta que lo vuelvas a abrir.`)) return
+    try {
+      const res = await fetch(`/api/admin/assessments/${a.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: false }),
+      })
+      if (!res.ok) throw new Error('No se pudo cerrar')
+      toast.success('Kiosko cerrado')
+      await refetch()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
   const handleAssignCampaign = async (assessmentId: string, campaignId: string | null) => {
     try {
       const res = await fetch(`/api/admin/assessments/${assessmentId}`, {
@@ -194,6 +212,7 @@ export default function EventosPage() {
                 campaigns={data.options.activeCampaigns}
                 onAssignCampaign={handleAssignCampaign}
                 onOpen={handleOpenKiosko}
+                onClose={handleCloseKiosko}
               />
             ))}
           </div>
@@ -215,6 +234,7 @@ export default function EventosPage() {
                   campaigns={data.options.activeCampaigns}
                   onAssignCampaign={handleAssignCampaign}
                   onOpen={handleOpenKiosko}
+                  onClose={handleCloseKiosko}
                 />
               ))}
             </div>
@@ -236,6 +256,7 @@ export default function EventosPage() {
                 campaigns={data.options.activeCampaigns}
                 onAssignCampaign={handleAssignCampaign}
                 onOpen={handleOpenKiosko}
+                onClose={handleCloseKiosko}
                 compact
               />
             ))}
@@ -247,12 +268,13 @@ export default function EventosPage() {
 }
 
 function CampaignCard({
-  campaign, campaigns, onAssignCampaign, onOpen, compact = false,
+  campaign, campaigns, onAssignCampaign, onOpen, onClose, compact = false,
 }: {
   campaign: Campaign
   campaigns: ActiveCampaignOption[]
   onAssignCampaign: (assessmentId: string, campaignId: string | null) => void
   onOpen: (assessment: AssessmentSummary) => void
+  onClose: (assessment: AssessmentSummary) => void
   compact?: boolean
 }) {
   const totalParticipants = campaign.assessments.reduce((s, a) => s + a.stats.totalParticipants, 0)
@@ -302,6 +324,7 @@ function CampaignCard({
                   currentCampaignId={campaign.id}
                   onAssignCampaign={onAssignCampaign}
                   onOpen={onOpen}
+                  onClose={onClose}
                 />
               ))}
             </div>
@@ -313,13 +336,14 @@ function CampaignCard({
 }
 
 function AssessmentRow({
-  assessment, campaigns, currentCampaignId, onAssignCampaign, onOpen,
+  assessment, campaigns, currentCampaignId, onAssignCampaign, onOpen, onClose,
 }: {
   assessment: AssessmentSummary
   campaigns: ActiveCampaignOption[]
   currentCampaignId?: string
   onAssignCampaign: (assessmentId: string, campaignId: string | null) => void
   onOpen: (assessment: AssessmentSummary) => void
+  onClose: (assessment: AssessmentSummary) => void
 }) {
   return (
     <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
@@ -374,6 +398,18 @@ function AssessmentRow({
         >
           Abrir
         </button>
+        {/* Cerrar: solo si está activo. Deja de recibir participantes (manual,
+            p. ej. de noche o cuando el stand no está atendido). */}
+        {assessment.isActive && (
+          <button
+            type="button"
+            onClick={() => onClose(assessment)}
+            className="text-xs text-red-600 hover:text-red-800 shrink-0"
+            title="Cerrar kiosko (deja de recibir participantes)"
+          >
+            Cerrar
+          </button>
+        )}
       </div>
     </div>
   )
