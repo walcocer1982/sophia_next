@@ -57,7 +57,7 @@ NIVEL DE COMPRENSIÓN ESPERADO: ${expectedLevel}
 RESPUESTA DEL ESTUDIANTE:
 "${userMessage}"
 
-${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO DE LA CONVERSACIÓN PREVIA:\n${conversationHistory.slice(-5).map((m) => `${m.role === 'user' ? 'Estudiante' : 'Instructor'}: ${m.content}`).join('\n\n')}` : ''}
+${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO DE LA CONVERSACIÓN PREVIA (intervenciones del instructor; las respuestas del alumno ya están arriba):\n${conversationHistory.slice(-4).filter((m) => m.role === 'assistant').map((m) => `Instructor: ${m.content}`).join('\n\n')}` : ''}
 
 TAREA:
 Evalúa la CALIDAD DEL RAZONAMIENTO del estudiante, no si menciona palabras clave.
@@ -65,8 +65,7 @@ Evalúa la CALIDAD DEL RAZONAMIENTO del estudiante, no si menciona palabras clav
 REGLA CRÍTICA — CONTEXTO DE CONVERSACIÓN:
 Antes de evaluar, revisa la CONVERSACIÓN PREVIA. Si el instructor hizo una pregunta de seguimiento diferente a la original, evalúa si el estudiante respondió correctamente a ESA pregunta. No marques como "off_topic" si el estudiante responde a lo que le preguntaron.
 
-REGLA CRÍTICA — TOLERANCIA A ERRORES DE TRANSCRIPCIÓN DE VOZ:
-La respuesta del estudiante puede venir de Whisper (transcripción de voz) y contener errores de homófonos o casi-homófonos. Cuando una palabra suene parecida a un término del contexto temático que se está enseñando, interpretala como ese término y procedé como si la hubiera dicho correctamente. NO uses estos errores para no cumplir un criterio ni los señales como debilidades — son artefactos técnicos, no fallas conceptuales. Si la INTENCIÓN del estudiante está clara dentro del contexto de la actividad, el criterio está cumplido.
+REGLA — TOLERANCIA A ERRORES DE VOZ (Whisper): si una palabra suena parecida a un término del tema, interpretala como ese término y procedé como si la hubiera dicho bien. NO descartes un criterio ni señales debilidad por eso — son artefactos técnicos. Si la INTENCIÓN está clara en el contexto, el criterio está cumplido.
 
 CRITERIOS PARA PREGUNTA ABIERTA:
 - ¿Demuestra reflexión genuina sobre el tema?
@@ -120,18 +119,6 @@ Ejemplo 2 — analyzed (DESTACADO):
      causa-efecto explícita ("determina X y Y")
   → Es DESTACADO porque la justificación conecta causa con consecuencia
 
-Ejemplo 3 — understood (PROCESO):
-  Criterios: ["explicar diferencia entre perforación y voladura", "rol del orden de detonación"]
-  Respuesta: "Perforación hace agujeros y voladura los detona"
-  → criteriaMatched: 1/2 (diferencia OK, pero no mencionó el orden de detonación)
-  → understanding_level: "understood"  ← solo 1 criterio claro
-
-Ejemplo 4 — memorized (INICIO):
-  Criterios: ["6 fases del ciclo", "se repite con cada avance"]
-  Respuesta: "Donde la maquinaria pesada trabaja con seguridad"
-  → criteriaMatched: 0/2 (no menciona ninguna fase ni el ciclo)
-  → understanding_level: "memorized"  ← NO aborda los criterios
-
 PATRÓN CLAVE: una respuesta con relación CAUSA→CONSECUENCIA explícita
 ("porque", "lo que hace que", "esto produce", "determina que") sobre 2+
 criterios = analyzed. NO bajes a understood por timidez.
@@ -139,8 +126,8 @@ criterios = analyzed. NO bajes a understood por timidez.
 Responde en formato JSON con esta estructura EXACTA:
 {
   "completed": boolean,
-  "criteriaMatched": [strings LITERALES de "ASPECTOS A OBSERVAR" arriba que la respuesta cubre con claridad — copia el texto tal cual],
-  "criteriaMissing": [strings LITERALES de "ASPECTOS A OBSERVAR" arriba que la respuesta NO cubre — copia el texto tal cual],
+  "criteriaMatched": [NÚMEROS de "ASPECTOS A OBSERVAR" que la respuesta cubre con claridad, ej: [1,3] — solo los números],
+  "criteriaMissing": [NÚMEROS de "ASPECTOS A OBSERVAR" que la respuesta NO cubre, ej: [2] — solo los números],
   "completeness_percentage": number (0-100),
   "understanding_level": "memorized" | "understood" | "applied" | "analyzed",
   "response_type": "correct" | "partial" | "incorrect" | "off_topic",
@@ -151,7 +138,7 @@ Responde en formato JSON con esta estructura EXACTA:
   "next_subquestion": "string o null"
 }
 
-REGLA CRÍTICA — criteriaMatched/criteriaMissing son strings LITERALES de la lista "ASPECTOS A OBSERVAR" de arriba. NO inventes descripciones genéricas como "Respuesta con reflexión" o "Buena participación". Copia el texto exacto del aspecto observado. Si un aspecto NO existe en la lista, NO lo agregues.
+REGLA CRÍTICA — criteriaMatched/criteriaMissing son los NÚMEROS de la lista "ASPECTOS A OBSERVAR" de arriba (ej: [1,3]). NO inventes descripciones ni copies texto: usa SOLO los números de la lista. Si un aspecto no aplica, no lo agregues.
 
 REGLAS PARA ready_to_advance (PREGUNTA ABIERTA — más permisivo):
 - true si el estudiante demuestra reflexión genuina (completeness >= 40%)
@@ -201,7 +188,7 @@ NIVEL DE COMPRENSIÓN ESPERADO: ${expectedLevel}
 RESPUESTA DEL ESTUDIANTE:
 "${userMessage}"
 
-${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO DE LA CONVERSACIÓN PREVIA:\n${conversationHistory.slice(-5).map((m) => `${m.role === 'user' ? 'Estudiante' : 'Instructor'}: ${m.content}`).join('\n\n')}` : ''}
+${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO DE LA CONVERSACIÓN PREVIA (intervenciones del instructor; las respuestas del alumno ya están arriba):\n${conversationHistory.slice(-4).filter((m) => m.role === 'assistant').map((m) => `Instructor: ${m.content}`).join('\n\n')}` : ''}
 
 TAREA:
 Evalúa la respuesta del estudiante contra los criterios de éxito.
@@ -219,8 +206,7 @@ REGLAS DE EVALUACIÓN FLEXIBLE:
 - Si el estudiante demuestra que ENTENDIÓ LA IDEA CENTRAL, marca el criterio como cumplido
 - Solo marca como NO cumplido si claramente NO ENTENDIÓ o tiene información ERRÓNEA
 
-REGLA CRÍTICA — TOLERANCIA A ERRORES DE TRANSCRIPCIÓN DE VOZ:
-La respuesta del estudiante puede venir de Whisper (transcripción de voz) y contener errores de homófonos o casi-homófonos. Cuando una palabra suene parecida a un término del contexto temático de la actividad, interpretala como ese término. NO bajes el nivel ni uses estos artefactos para no cumplir un criterio. Solo cuestioná si la palabra cambia el SIGNIFICADO conceptualmente — no si es un mishearing de Whisper.
+REGLA — TOLERANCIA A ERRORES DE VOZ (Whisper): si una palabra suena parecida a un término del tema, interpretala como ese término y NO bajes el nivel ni descartes un criterio por eso. Solo cuestioná si cambia el SIGNIFICADO conceptual.
 
 NIVELES DE DOMINIO (clasifica por LOGRO del objetivo, no por estilo del lenguaje):
 - "memorized" = EN INICIO: Respuesta con errores conceptuales o tan incompleta que NO demuestra dominio mínimo del tema. Necesita repaso.
@@ -262,8 +248,8 @@ a understood por timidez.
 Responde en formato JSON con esta estructura EXACTA:
 {
   "completed": boolean,
-  "criteriaMatched": [strings LITERALES de "CRITERIOS DE ÉXITO" arriba que la respuesta cumple — copia el texto tal cual],
-  "criteriaMissing": [strings LITERALES de "CRITERIOS DE ÉXITO" arriba que la respuesta NO cumple — copia el texto tal cual],
+  "criteriaMatched": [NÚMEROS de "CRITERIOS DE ÉXITO" que la respuesta cumple, ej: [1,3] — solo los números, NO el texto],
+  "criteriaMissing": [NÚMEROS de "CRITERIOS DE ÉXITO" que la respuesta NO cumple, ej: [2] — solo los números],
   "completeness_percentage": number (0-100),
   "understanding_level": "memorized" | "understood" | "applied" | "analyzed",
   "response_type": "correct" | "partial" | "incorrect" | "off_topic",
@@ -279,6 +265,7 @@ REGLAS PARA response_type:
 - "partial": Cumple algunos criterios pero falta profundidad (40-79%)
 - "incorrect": Tiene errores conceptuales o información equivocada
 - "off_topic": La respuesta no está relacionada con la pregunta
+- "no sé" / "no conozco" / "es la primera vez" / no responde → "incorrect" (NUNCA "off_topic"): es un no-saber, NO un desvío de tema
 
 REGLAS PARA ready_to_advance:
 - true si completeness_percentage >= ${minCompleteness}
@@ -319,7 +306,7 @@ function buildAccumulatedStudentResponse(
   // Extraer los últimos 5 mensajes del estudiante (excluyendo continuaciones cortas)
   const recentStudentMessages = conversationHistory
     .filter(m => m.role === 'user')
-    .slice(-5)
+    .slice(-3)
     .map(m => m.content.trim())
     .filter(m => m.length > 15) // Ignorar "sí", "ok", "listo", etc.
 
@@ -410,6 +397,19 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
     const result: ActivityCompletionResult = JSON.parse(
       extractJsonFromMarkdown(content.text)
     )
+
+    // ⚡ El verificador ahora devuelve NÚMEROS (1-based) en criteriaMatched/
+    // criteriaMissing para ahorrar tokens de salida. Los expandimos a los
+    // strings literales del criterio para no cambiar nada aguas abajo
+    // (dashboard, attempts). Tolera strings por si el modelo igual los manda.
+    const expandCriteria = (arr: unknown): string[] => {
+      if (!Array.isArray(arr)) return []
+      return arr
+        .map((v) => (typeof v === 'number' ? successCriteria.must_include[v - 1] : v))
+        .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    }
+    result.criteriaMatched = expandCriteria(result.criteriaMatched)
+    result.criteriaMissing = expandCriteria(result.criteriaMissing)
 
     // Validar que ready_to_advance sea consistente
     if (result.completeness_percentage >= effectiveThreshold && !result.ready_to_advance) {

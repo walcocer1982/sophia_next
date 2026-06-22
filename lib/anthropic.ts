@@ -15,8 +15,15 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Modelos optimizados por caso de uso
-export const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929' // Chat principal (instructor)
-export const HAIKU_MODEL = 'claude-3-5-haiku-20241022'    // Moderación + Clasificación (tareas básicas)
+export const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929' // Planner/instructor (calidad)
+// Chat del alumno (kiosko + /learn): Haiku 4.5 es mucho más rápido (menor
+// time-to-first-token) y suficiente para la conversación tutelada en vivo.
+export const TUTOR_MODEL = 'claude-haiku-4-5'
+// Moderación + Clasificación (tareas básicas). Antes apuntaba a
+// claude-3-5-haiku-20241022, RETIRADO el 19-feb-2026 → las llamadas fallaban
+// con 404 y caían al fallback. Haiku 4.5 es el reemplazo y baja la latencia
+// del gate previo a la respuesta.
+export const HAIKU_MODEL = 'claude-haiku-4-5'
 
 /**
  * Extract a JSON payload from a model response that may wrap it in a

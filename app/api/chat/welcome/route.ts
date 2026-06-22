@@ -1,6 +1,6 @@
 import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
-import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
+import { anthropic, TUTOR_MODEL } from '@/lib/anthropic'
 import { logger } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { getFirstActivity, getCurrentActivity, getLessonContext } from '@/lib/lesson-parser'
@@ -192,7 +192,7 @@ Genera el mensaje ahora, sin formato, conversacional.`
 
     // Stream response from Claude con bloques cacheables
     const stream = await anthropic.messages.stream({
-      model: DEFAULT_MODEL,
+      model: TUTOR_MODEL,
       max_tokens: 600,
       system: [
         ...staticBlocks,

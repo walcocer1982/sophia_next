@@ -1,6 +1,6 @@
 import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
-import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
+import { anthropic, TUTOR_MODEL } from '@/lib/anthropic'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
 import { buildSystemPrompt, getMaxTokensForActivity, isStudentUnsureStrong } from '@/lib/prompt-builder'
 import { isPassing } from '@/lib/rubric'
@@ -513,7 +513,7 @@ export async function POST(request: Request) {
         const maxTokens = getMaxTokensForActivity(currentActivity.complexity)
 
         const claudeStream = await anthropic.messages.stream({
-          model: DEFAULT_MODEL,
+          model: TUTOR_MODEL,
           max_tokens: maxTokens,
           system: [
             ...staticBlocks,
