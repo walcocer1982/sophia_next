@@ -74,6 +74,29 @@ export interface SuccessCriteria {
 }
 
 /**
+ * Niveles de logro (escala en inglés, mapean 1:1 al español):
+ * beginning=inicio · developing=proceso · achieved=logrado · outstanding=destacado
+ */
+export type RubricLevel = 'beginning' | 'developing' | 'achieved' | 'outstanding'
+
+/**
+ * Rúbrica: respuesta-EJEMPLO de un estudiante en cada nivel de logro.
+ * Son ANCLAS de calibración (no la única respuesta válida), generadas por el
+ * modelo una sola vez al publicar la lección. El verificador compara la
+ * respuesta del alumno contra estas referencias.
+ */
+export type Rubric = Record<RubricLevel, string>
+
+/**
+ * Pista de andamiaje pre-generada para un criterio (por índice en must_include).
+ * Induce hacia el criterio sin revelar la respuesta.
+ */
+export interface ScaffoldHint {
+  criterion: number   // índice en success_criteria.must_include
+  hint: string
+}
+
+/**
  * Verificación de comprensión del estudiante
  */
 export interface Verification {
@@ -82,6 +105,8 @@ export interface Verification {
   max_attempts?: number         // Máximo intentos antes de ofrecer avanzar (default: 3)
   open_ended?: boolean          // Pregunta abierta: evalúa calidad de razonamiento, no keywords específicos
   is_evaluative?: boolean       // Si false: solo participación, no cuenta para nota. Default: true
+  rubric?: Rubric               // 🆕 Respuestas-referencia por nivel (auto-generadas al publicar)
+  scaffold_hints?: ScaffoldHint[]  // 🆕 Pistas por criterio (auto-generadas)
 }
 
 /**

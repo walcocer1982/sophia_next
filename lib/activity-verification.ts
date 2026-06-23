@@ -1,5 +1,20 @@
 import { anthropic, extractJsonFromMarkdown, callAndParseJson } from '@/lib/anthropic'
-import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints } from '@/types/lesson'
+import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric, RubricLevel } from '@/types/lesson'
+
+// Mapeo niveles nuevos (rúbrica, en inglés) ↔ enum viejo (se mantiene en DB/dashboard
+// durante Fase B; el rename del enum es Fase C).
+const NEW_TO_OLD_LEVEL: Record<RubricLevel, UnderstandingLevel> = {
+  beginning: 'memorized',
+  developing: 'understood',
+  achieved: 'applied',
+  outstanding: 'analyzed',
+}
+const OLD_TO_NEW_LEVEL: Record<UnderstandingLevel, RubricLevel> = {
+  memorized: 'beginning',
+  understood: 'developing',
+  applied: 'achieved',
+  analyzed: 'outstanding',
+}
 
 /**
  * Construir sección de hints para el prompt de verificación
@@ -324,6 +339,69 @@ function buildAccumulatedStudentResponse(
 }
 
 /**
+ * Prompt de verificación BASADO EN RÚBRICA (Fase B).
+ * Reemplaza el "manual" genérico por las 4 respuestas-referencia pre-generadas:
+ * el modelo COMPARA contra anclas concretas → prompt corto (~1000-1300 tok).
+ * Devuelve `level` en la escala nueva (beginning/developing/achieved/outstanding);
+ * el caller lo mapea al enum viejo.
+ */
+function buildRubricVerificationPrompt(
+  activity: Activity,
+  userMessage: string,
+  conversationHistory: { role: 'user' | 'assistant'; content: string }[] | undefined,
+  rubric: Rubric,
+  criteria: string[],
+  minCompleteness: number,
+  expectedLevel: UnderstandingLevel,
+  wasExplained: boolean,
+): string {
+  const expectedNew = OLD_TO_NEW_LEVEL[expectedLevel] || 'achieved'
+  const capClause = wasExplained
+    ? `\n- POST-EXPLICACIÓN: ya le explicaste el concepto en esta actividad. Si el alumno solo REPITE lo explicado → "developing" como máximo; NO marques "achieved" ni "outstanding".`
+    : ''
+
+  return `Eres un evaluador pedagógico. Comparás la respuesta del alumno con las respuestas-referencia de cada nivel y devolvés un veredicto.
+
+PREGUNTA: ${activity.verification.question}
+
+CRITERIOS (must_include):
+${criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+
+RESPUESTAS-REFERENCIA POR NIVEL (son EJEMPLOS de cómo se ve cada nivel, NO la única respuesta válida — una respuesta correcta distinta también vale):
+- beginning (inicio):     ${rubric.beginning}
+- developing (proceso):   ${rubric.developing}
+- achieved (logrado):     ${rubric.achieved}
+- outstanding (destacado): ${rubric.outstanding}
+
+RESPUESTA DEL ESTUDIANTE:
+"${userMessage}"
+${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO PREVIO (intervenciones del instructor):\n${conversationHistory.slice(-4).filter((m) => m.role === 'assistant').map((m) => `Instructor: ${m.content}`).join('\n\n')}` : ''}
+
+CÓMO EVALUAR:
+- Elegí el nivel cuya referencia MÁS se parezca en la COMPRENSIÓN demostrada, NO en las palabras exactas. Acepta paráfrasis, sinónimos y ejemplos propios.
+- La condición real de aprobar son los CRITERIOS (must_include); las referencias solo calibran el nivel.
+- Ante duda entre dos niveles, SUBÍ al más alto (no castigues por timidez).
+- Avanza (ready_to_advance=true) si completeness >= ${minCompleteness}% o el nivel es "${expectedNew}" o superior.
+- "no sé" / "no conozco" / "es la primera vez" / no responde → response_type "incorrect" (NUNCA "off_topic").
+- Tolerá errores de transcripción de voz (Whisper): si una palabra suena parecida a un término del tema, interpretala como ese término.${capClause}
+
+Devolvé SOLO este JSON (sin texto adicional):
+{
+  "completed": boolean,
+  "level": "beginning" | "developing" | "achieved" | "outstanding",
+  "criteriaMatched": [NÚMEROS de criterios cumplidos, ej: [1,3] — solo números],
+  "criteriaMissing": [NÚMEROS de criterios NO cumplidos],
+  "completeness_percentage": number (0-100),
+  "response_type": "correct" | "partial" | "incorrect" | "off_topic",
+  "feedback": "feedback conciso y constructivo (máximo 2 oraciones)",
+  "confidence": "high" | "medium" | "low",
+  "ready_to_advance": boolean,
+  "needs_scaffolding": boolean,
+  "next_subquestion": "string o null"
+}`
+}
+
+/**
  * Verificar si el estudiante completó la actividad usando IA
  * Usa la nueva estructura success_criteria con min_completeness y understanding_level
  */
@@ -371,10 +449,18 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
 - Cap absoluto post-explicación: understood (Proceso).`
     : ''
 
-  const verificationPrompt = (isOpenEnded
-    ? buildOpenEndedVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, hintsSection, expectedLevel)
-    : buildStandardVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, successCriteria, hintsSection, minCompleteness, expectedLevel)
-  ) + explainedClause
+  // Fase B: si la actividad tiene rúbrica pre-generada, usamos el prompt corto
+  // basado en referencias. Si no, el camino tradicional (manual genérico).
+  const rubric = activity.verification.rubric
+  const useRubric = !!rubric &&
+    !!rubric.beginning && !!rubric.developing && !!rubric.achieved && !!rubric.outstanding
+
+  const verificationPrompt = useRubric
+    ? buildRubricVerificationPrompt(activity, accumulatedResponse, conversationHistory, rubric, successCriteria.must_include, minCompleteness, expectedLevel, wasExplained)
+    : (isOpenEnded
+        ? buildOpenEndedVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, hintsSection, expectedLevel)
+        : buildStandardVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, successCriteria, hintsSection, minCompleteness, expectedLevel)
+      ) + explainedClause
 
   try {
     const response = await anthropic.messages.create({
@@ -410,6 +496,13 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
     }
     result.criteriaMatched = expandCriteria(result.criteriaMatched)
     result.criteriaMissing = expandCriteria(result.criteriaMissing)
+
+    // Fase B: el prompt de rúbrica devuelve `level` (escala nueva). Lo mapeamos
+    // al enum viejo (understanding_level) para no romper DB/dashboard.
+    const rawLevel = (result as unknown as { level?: string }).level
+    if (useRubric && rawLevel && rawLevel in NEW_TO_OLD_LEVEL) {
+      result.understanding_level = NEW_TO_OLD_LEVEL[rawLevel as RubricLevel]
+    }
 
     // Validar que ready_to_advance sea consistente
     if (result.completeness_percentage >= effectiveThreshold && !result.ready_to_advance) {
