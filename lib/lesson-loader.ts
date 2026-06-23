@@ -7,8 +7,15 @@ import { parseContentJson } from '@/lib/lesson-parser'
 import { logger } from '@/lib/logger'
 import type { LessonContent } from '@/types/lesson'
 
+// Cache en proceso del contenido YA PARSEADO. El contentJson no cambia durante
+// una sesión/evento, así que re-consultar Neon + re-parsear el JSON en cada
+// mensaje era latencia pura. TTL corto (60s) para reflejar ediciones del
+// instructor sin reiniciar el server.
+const LESSON_CONTENT_TTL_MS = 60_000
+const lessonContentCache = new Map<string, { value: LessonContent; expiresAt: number }>()
+
 /**
- * Carga el contenido de una lección desde DB
+ * Carga el contenido de una lección desde DB (con cache de 60s).
  *
  * @param lessonId - ID de la lección
  * @returns LessonContent parseado o null si no existe
@@ -16,6 +23,11 @@ import type { LessonContent } from '@/types/lesson'
 export async function getLessonContent(
   lessonId: string
 ): Promise<LessonContent | null> {
+  const cached = lessonContentCache.get(lessonId)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value
+  }
+
   try {
     const lesson = await prisma.lesson.findUnique({
       where: { id: lessonId },
@@ -33,13 +45,12 @@ export async function getLessonContent(
       return null
     }
 
-    logger.info('lesson.loader.database', {
-      lessonId,
-      title: lesson.title,
-      source: 'database',
+    const parsed = parseContentJson(lesson.contentJson) as LessonContent
+    lessonContentCache.set(lessonId, {
+      value: parsed,
+      expiresAt: Date.now() + LESSON_CONTENT_TTL_MS,
     })
-
-    return parseContentJson(lesson.contentJson) as LessonContent
+    return parsed
   } catch (error) {
     logger.error('lesson.loader.database.error', {
       lessonId,

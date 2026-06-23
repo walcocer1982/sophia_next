@@ -829,6 +829,7 @@ PREGUNTA ORIGINAL A REFORMULAR AL FINAL:
 "${verification.question}"
 
 ⛔ PROHIBIDO:
+- Abrir VALIDANDO ("Está bien", "Correcto", "Bien", "Vale") — el alumno admitió que no sabe; abrí con calma ("No te preocupes" / "Tranquilo, te explico"), NO como si su respuesta fuera correcta
 - Empezar con la pregunta (primero ENSEÑÁ)
 - Dar la respuesta exacta a la pregunta (solo el CONCEPTO base que necesita)
 - Listar criterios literal (parafraseá)
@@ -854,6 +855,7 @@ CÓMO RESPONDER (máx 60 palabras):
 3. La sub-pregunta debe inducir, NO revelar la respuesta
 
 ⛔ PROHIBIDO:
+- Abrir VALIDANDO ("Está bien", "Correcto", "Bien", "Vale") — el alumno no sabe; reconocé sin validar ("No te preocupes") y guiá
 - Listar opciones para que elija ("¿es A o B?")
 - Dar la respuesta dentro de la sub-pregunta
 - Re-explicar toda la teoría

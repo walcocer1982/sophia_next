@@ -1,3 +1,6 @@
+import type { UnderstandingLevel } from '@/types/lesson'
+import { normalizeLevel } from '@/lib/levels'
+
 /**
  * Centralized grading formula.
  *
@@ -31,20 +34,20 @@
  * Escala discreta 0-25-50-75-100 alineada a los 4 niveles oficiales de
  * la rúbrica peruana (sin sub-categorías):
  *
- * - 25  = memorized   → Inicio    (errores conceptuales)
- * - 50  = understood  → Proceso   (comprende parcialmente)
- * - 75  = applied     → Logrado   (cumple la mayoría de criterios)
- * - 100 = analyzed    → Destacado (va más allá)
+ * - 25  = beginning    → Inicio    (errores conceptuales)
+ * - 50  = developing   → Proceso   (comprende parcialmente)
+ * - 75  = achieved     → Logrado   (cumple la mayoría de criterios)
+ * - 100 = outstanding  → Destacado (va más allá)
  *
- * Para llegar a Logrado, el AI debe clasificar la respuesta como "applied".
- * La generosidad de esa clasificación se controla en activity-verification.ts
- * (cubrir ≥60% de criterios = applied, no understood).
+ * Para llegar a Logrado, el AI debe clasificar la respuesta como "achieved".
+ * Los niveles se leen con normalizeLevel(), así que los registros históricos
+ * (memorized/understood/applied/analyzed) puntúan igual que siempre.
  */
-export const COMPREHENSION_SCORES: Record<string, number> = {
-  memorized: 25,   // INICIO     (errores o no responde)
-  understood: 50,  // PROCESO    (comprende parcialmente, le faltan elementos)
-  applied: 75,     // LOGRADO    (cumple la mayoría de criterios)
-  analyzed: 100,   // DESTACADO  (analiza, compara, evalúa)
+export const COMPREHENSION_SCORES: Record<UnderstandingLevel, number> = {
+  beginning: 25,    // INICIO     (errores o no responde)
+  developing: 50,   // PROCESO    (comprende parcialmente, le faltan elementos)
+  achieved: 75,     // LOGRADO    (cumple la mayoría de criterios)
+  outstanding: 100, // DESTACADO  (analiza, compara, evalúa)
 }
 
 /** Minimal shape needed to score an activity. Compatible con ActivityProgress. */
@@ -76,7 +79,7 @@ export function activityScore(ap: ScorableActivity): number {
   if (attempts.length === 0) return 0
 
   const scoresPerAttempt = attempts.map((att) => {
-    const level = att.analysis?.understanding_level || 'memorized'
+    const level = normalizeLevel(att.analysis?.understanding_level)
     return COMPREHENSION_SCORES[level] ?? 25
   })
 

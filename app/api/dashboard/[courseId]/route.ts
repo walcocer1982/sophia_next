@@ -5,6 +5,7 @@ import { checkAndGeneratePartialReports } from '@/lib/lesson-report'
 import { cleanupInactiveGuestsForCourse } from '@/lib/cleanup-guests'
 import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '@/lib/rubric'
 import { calculateGrade } from '@/lib/grading'
+import { normalizeLevel, LEGACY_LABEL } from '@/lib/levels'
 import { logger } from '@/lib/logger'
 import type { LessonContent } from '@/types/lesson'
 
@@ -387,13 +388,14 @@ export async function GET(
         ? +(attemptCounts.reduce((a, b) => a + b, 0) / attemptCounts.length).toFixed(1)
         : 0
 
-      // Understanding level distribution
+      // Understanding level distribution. Mantenemos las claves LEGADAS en la
+      // salida para no romper el frontend; normalizamos new→old para contar
+      // tanto intentos históricos (memorized…) como nuevos (beginning…).
       const levels: Record<string, number> = { memorized: 0, understood: 0, applied: 0, analyzed: 0 }
       for (const ap of allAttempts) {
         const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
         const lastAttempt = evidence?.attempts?.at(-1)
-        const level = lastAttempt?.analysis?.understanding_level || 'memorized'
-        if (levels[level] !== undefined) levels[level]++
+        levels[LEGACY_LABEL[normalizeLevel(lastAttempt?.analysis?.understanding_level)]]++
       }
 
       // Most failed criterion
