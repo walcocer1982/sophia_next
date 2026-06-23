@@ -25,7 +25,10 @@ export type ActivityComplexity = 'simple' | 'moderate' | 'complex'
 /**
  * Nivel de comprensión demostrado
  */
-export type UnderstandingLevel = 'memorized' | 'understood' | 'applied' | 'analyzed'
+// Escala de logro (mapea 1:1 a inicio/proceso/logrado/destacado).
+// Antes era la escala cognitiva (memorized/understood/applied/analyzed); ver
+// lib/levels.ts → normalizeLevel para la compatibilidad con datos históricos.
+export type UnderstandingLevel = 'beginning' | 'developing' | 'achieved' | 'outstanding'
 
 /**
  * Tipo de respuesta del estudiante (útil para feedback diferenciado)

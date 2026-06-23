@@ -1,20 +1,6 @@
 import { anthropic, extractJsonFromMarkdown, callAndParseJson } from '@/lib/anthropic'
-import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric, RubricLevel } from '@/types/lesson'
-
-// Mapeo niveles nuevos (rúbrica, en inglés) ↔ enum viejo (se mantiene en DB/dashboard
-// durante Fase B; el rename del enum es Fase C).
-const NEW_TO_OLD_LEVEL: Record<RubricLevel, UnderstandingLevel> = {
-  beginning: 'memorized',
-  developing: 'understood',
-  achieved: 'applied',
-  outstanding: 'analyzed',
-}
-const OLD_TO_NEW_LEVEL: Record<UnderstandingLevel, RubricLevel> = {
-  memorized: 'beginning',
-  understood: 'developing',
-  applied: 'achieved',
-  analyzed: 'outstanding',
-}
+import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric } from '@/types/lesson'
+import { normalizeLevel } from '@/lib/levels'
 
 /**
  * Construir sección de hints para el prompt de verificación
@@ -355,7 +341,7 @@ function buildRubricVerificationPrompt(
   expectedLevel: UnderstandingLevel,
   wasExplained: boolean,
 ): string {
-  const expectedNew = OLD_TO_NEW_LEVEL[expectedLevel] || 'achieved'
+  const expectedNew = expectedLevel
   const capClause = wasExplained
     ? `\n- POST-EXPLICACIÓN: ya le explicaste el concepto en esta actividad. Si el alumno solo REPITE lo explicado → "developing" como máximo; NO marques "achieved" ni "outstanding".`
     : ''
@@ -383,6 +369,7 @@ CÓMO EVALUAR:
 - Ante duda entre dos niveles, SUBÍ al más alto (no castigues por timidez).
 - Avanza (ready_to_advance=true) si completeness >= ${minCompleteness}% o el nivel es "${expectedNew}" o superior.
 - "no sé" / "no conozco" / "es la primera vez" / no responde → response_type "incorrect" (NUNCA "off_topic").
+- Si la respuesta trata de OTRO tema distinto al de ESTA pregunta (contesta algo que no se preguntó acá — p.ej. responde sobre el tema de otra actividad) → response_type "off_topic". Distinción: "incorrect" = intento sobre ESTE tema pero equivocado; "off_topic" = habla de un tema diferente al preguntado.
 - Tolerá errores de transcripción de voz (Whisper): si una palabra suena parecida a un término del tema, interpretala como ese término.${capClause}
 
 Devolvé SOLO este JSON (sin texto adicional):
@@ -417,10 +404,10 @@ export async function verifyActivityCompletion(
   const successCriteria = activity.verification.success_criteria || {
     must_include: (activity.verification as { criteria?: string[] }).criteria || [],
     min_completeness: 50,
-    understanding_level: 'understood' as const
+    understanding_level: 'developing' as const
   }
   const minCompleteness = successCriteria.min_completeness ?? 50
-  const expectedLevel = successCriteria.understanding_level ?? 'understood'
+  const expectedLevel = normalizeLevel(successCriteria.understanding_level)
   const hints = successCriteria.hints || {}
 
   // Old: activity.agent_instruction, New: activity.teaching.agent_instruction
@@ -497,12 +484,11 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
     result.criteriaMatched = expandCriteria(result.criteriaMatched)
     result.criteriaMissing = expandCriteria(result.criteriaMissing)
 
-    // Fase B: el prompt de rúbrica devuelve `level` (escala nueva). Lo mapeamos
-    // al enum viejo (understanding_level) para no romper DB/dashboard.
+    // Normalizar el nivel: el prompt de rúbrica devuelve `level` (escala nueva);
+    // el prompt fallback devuelve understanding_level (escala vieja).
+    // normalizeLevel unifica ambos al enum nuevo.
     const rawLevel = (result as unknown as { level?: string }).level
-    if (useRubric && rawLevel && rawLevel in NEW_TO_OLD_LEVEL) {
-      result.understanding_level = NEW_TO_OLD_LEVEL[rawLevel as RubricLevel]
-    }
+    result.understanding_level = normalizeLevel(rawLevel ?? result.understanding_level)
 
     // Validar que ready_to_advance sea consistente
     if (result.completeness_percentage >= effectiveThreshold && !result.ready_to_advance) {
@@ -536,11 +522,11 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
       result.ready_to_advance = true
     }
 
-    // Defensa en profundidad: si Sophia ya enseñó, cap absoluto en 'understood'
+    // Defensa en profundidad: si Sophia ya enseñó, cap absoluto en 'developing'
     // (Proceso). El cap por código garantiza que aunque el AI ignore la regla
     // del prompt, el nivel nunca pase de Proceso post-explicación.
-    if (wasExplained && (result.understanding_level === 'applied' || result.understanding_level === 'analyzed')) {
-      result.understanding_level = 'understood'
+    if (wasExplained && (result.understanding_level === 'achieved' || result.understanding_level === 'outstanding')) {
+      result.understanding_level = 'developing'
     }
 
     return result
@@ -592,7 +578,7 @@ function fallbackVerification(
       criteriaMatched,
       criteriaMissing,
       completeness_percentage,
-      understanding_level: hasSubstance ? 'understood' : 'memorized',
+      understanding_level: hasSubstance ? 'developing' : 'beginning',
       response_type: hasSubstance ? 'correct' : 'partial',
       feedback: hasSubstance
         ? 'Buena reflexión sobre el tema.'
@@ -650,7 +636,7 @@ function fallbackVerification(
     criteriaMatched,
     criteriaMissing,
     completeness_percentage,
-    understanding_level: 'understood' as UnderstandingLevel, // Default en fallback
+    understanding_level: 'developing' as UnderstandingLevel, // Default en fallback
     response_type,
     feedback: completed
       ? '¡Excelente! Has comprendido los conceptos clave.'
@@ -709,7 +695,7 @@ Responde ÚNICAMENTE con JSON:
       criteriaMatched: completed ? ['Paso completado'] : [],
       criteriaMissing: completed ? [] : ['Paso pendiente'],
       completeness_percentage: completed ? 100 : 0,
-      understanding_level: 'applied' as UnderstandingLevel, // No aplica en CODE
+      understanding_level: 'achieved' as UnderstandingLevel, // No aplica en CODE
       response_type: (completed ? 'correct' : 'partial') as ResponseType,
       feedback: '',
       confidence: 'high',
@@ -722,7 +708,7 @@ Responde ÚNICAMENTE con JSON:
       criteriaMatched: [],
       criteriaMissing: ['Paso pendiente'],
       completeness_percentage: 0,
-      understanding_level: 'applied' as UnderstandingLevel,
+      understanding_level: 'achieved' as UnderstandingLevel,
       response_type: 'partial' as ResponseType,
       feedback: '',
       confidence: 'low',

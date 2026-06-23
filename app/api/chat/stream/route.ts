@@ -1,6 +1,7 @@
 import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { prisma } from '@/lib/prisma'
 import { anthropic, TUTOR_MODEL } from '@/lib/anthropic'
+import { normalizeLevel, LEVEL_LABEL_ES } from '@/lib/levels'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
 import { buildSystemPrompt, getMaxTokensForActivity, isStudentUnsureStrong } from '@/lib/prompt-builder'
 import { isPassing } from '@/lib/rubric'
@@ -311,7 +312,7 @@ export async function POST(request: Request) {
           criteriaMatched: [] as string[],
           criteriaMissing: [] as string[],
           completeness_percentage: 0,
-          understanding_level: 'memorized' as const,
+          understanding_level: 'beginning' as const,
           response_type: 'off_topic' as const,
           feedback: 'No te entendí bien, ¿podés repetir?',
           confidence: 'high' as const,
@@ -329,7 +330,7 @@ export async function POST(request: Request) {
           criteriaMatched: [] as string[],
           criteriaMissing: [] as string[],
           completeness_percentage: 100,
-          understanding_level: 'understood' as const,
+          understanding_level: 'developing' as const,
           response_type: 'correct' as const,
           feedback: '',
           confidence: 'high' as const,
@@ -878,16 +879,24 @@ export async function POST(request: Request) {
             },
             timestamp: new Date().toISOString(),
           }
+          // Desfase de actividad: cuando el alumno contesta OTRO tema (p.ej. un
+          // follow-up de Sophia sobre el tema anterior, justo después de avanzar),
+          // el verificador lo marca off_topic. NO es un intento fallido de ESTE
+          // criterio → no lo guardamos como intento puntuado ni incrementamos el
+          // contador, para que no arrastre el promedio de la nota.
+          const isOffTopic = verification.response_type === 'off_topic'
           const failedEvidence = JSON.parse(JSON.stringify({
-            attempts: [...(existingEvidence.attempts || []), failedAttempt],
+            attempts: isOffTopic
+              ? (existingEvidence.attempts || [])
+              : [...(existingEvidence.attempts || []), failedAttempt],
             // Conservar y avanzar el contador de desglose si Sophia va a desglosar
             scaffoldingTurns: willScaffold ? scaffoldingTurns + 1 : scaffoldingTurns,
             // Mantener/setear el flag de explicación didáctica
             wasExplained: wasExplained || willExplainThisTurn,
           }))
 
-          // Si es turno de scaffolding, NO contamos attempt — solo evidencia.
-          const attemptsIncrement = willScaffold ? 0 : 1
+          // Scaffolding y off_topic NO cuentan attempt — solo evidencia/contexto.
+          const attemptsIncrement = (willScaffold || isOffTopic) ? 0 : 1
 
           await prisma.activityProgress.upsert({
             where: {
@@ -941,7 +950,7 @@ export async function POST(request: Request) {
               return pct > bestPct ? att : best
             })
 
-            const bestLevel = bestAttempt.analysis?.understanding_level || 'memorized'
+            const bestLevel = LEVEL_LABEL_ES[normalizeLevel(bestAttempt.analysis?.understanding_level)]
 
             // Mark activity as completed by limit
             await prisma.activityProgress.update({

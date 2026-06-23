@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { ActivityCard, type ActivityEdits } from './activity-card'
 import type { Activity } from '@/types/lesson'
+import { normalizeLevel } from '@/lib/levels'
 
 interface Props {
   lessonId: string
@@ -94,7 +95,7 @@ export function VerificationManager({
                 must_include: updates.must_include,
               }),
               ...(updates.understanding_level !== undefined && {
-                understanding_level: updates.understanding_level as 'memorized' | 'understood' | 'applied' | 'analyzed',
+                understanding_level: normalizeLevel(updates.understanding_level),
               }),
             },
           },

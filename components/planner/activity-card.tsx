@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronUp, Check, RotateCcw, Pencil, X } from 'lucide-react'
 import type { Activity } from '@/types/lesson'
+import { normalizeLevel, LEVEL_LABEL_ES } from '@/lib/levels'
 
 interface ActivityCardProps {
   activity: Activity
@@ -40,7 +41,7 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
   const [editCriteria, setEditCriteria] = useState(activity.verification.success_criteria.must_include.join('\n'))
   const [editOpenEnded, setEditOpenEnded] = useState(activity.verification.open_ended ?? false)
   const [editMaxAttempts, setEditMaxAttempts] = useState(activity.verification.max_attempts ?? 5)
-  const [editUnderstandingLevel, setEditUnderstandingLevel] = useState<string>(activity.verification.success_criteria?.understanding_level ?? 'understood')
+  const [editUnderstandingLevel, setEditUnderstandingLevel] = useState<string>(normalizeLevel(activity.verification.success_criteria?.understanding_level))
   const keyPoint = activity.keyPointIndex !== null
     ? (keyPoints[activity.keyPointIndex] || `Punto ${activity.keyPointIndex + 1}`)
     : 'Cierre general'
@@ -176,10 +177,10 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                       onChange={(e) => setEditUnderstandingLevel(e.target.value)}
                       className="rounded border border-gray-300 px-2 py-1 text-sm"
                     >
-                      <option value="memorized">Memoriza</option>
-                      <option value="understood">Comprende</option>
-                      <option value="applied">Aplica</option>
-                      <option value="analyzed">Analiza</option>
+                      <option value="beginning">Inicio</option>
+                      <option value="developing">Proceso</option>
+                      <option value="achieved">Logrado</option>
+                      <option value="outstanding">Destacado</option>
                     </select>
                   </label>
                 </div>
@@ -191,7 +192,7 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                 </span>
                 <span>
                   Nivel:{' '}
-                  {activity.verification.success_criteria.understanding_level ?? 'understood'}
+                  {LEVEL_LABEL_ES[normalizeLevel(activity.verification.success_criteria.understanding_level)]}
                 </span>
                 <span>
                   Max intentos: {activity.verification.max_attempts ?? 5}
@@ -263,7 +264,7 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                       setEditCriteria(activity.verification.success_criteria.must_include.join('\n'))
                       setEditOpenEnded(activity.verification.open_ended ?? false)
                       setEditMaxAttempts(activity.verification.max_attempts ?? 5)
-                      setEditUnderstandingLevel(activity.verification.success_criteria?.understanding_level ?? 'understood')
+                      setEditUnderstandingLevel(normalizeLevel(activity.verification.success_criteria?.understanding_level))
                       setIsEditing(false)
                     }}
                   >

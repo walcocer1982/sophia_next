@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { normalizeLevel } from '@/lib/levels'
 
 // ─── Input: formulario del instructor ───
 
@@ -34,8 +35,15 @@ const SuccessCriteriaSchema = z.object({
   must_include: z.array(z.string()).min(1).max(7),
   min_completeness: z.number().min(0).max(100).optional(),
   understanding_level: z
-    .enum(['memorized', 'understood', 'applied', 'analyzed'])
-    .optional(),
+    // Acepta la escala nueva (logro) y la vieja (cognitiva) para que las
+    // lecciones históricas sigan validando; el transform las unifica al enum
+    // nuevo, así el tipo de salida es UnderstandingLevel.
+    .enum([
+      'beginning', 'developing', 'achieved', 'outstanding',
+      'memorized', 'understood', 'applied', 'analyzed',
+    ])
+    .optional()
+    .transform((v) => (v ? normalizeLevel(v) : undefined)),
   hints: VerificationHintsSchema.optional(),
 })
 
