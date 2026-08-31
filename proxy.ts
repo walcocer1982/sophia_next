@@ -27,8 +27,32 @@ const ADMIN_PATHS = ['/planner']
 const SUPERADMIN_PATHS = ['/admin']
 
 export async function proxy(request: NextRequest) {
-  const session = await auth()
   const { pathname } = request.nextUrl
+
+  // «Ver como» es solo lectura. Este es el único punto que ve el método HTTP de
+  // todas las rutas a la vez, así que el bloqueo vive acá y no repartido por
+  // diez endpoints: mientras la cookie esté puesta, nada muta.
+  // Se exceptúan /api/ver-como (para poder salir del modo) y /api/auth.
+  if (
+    request.method !== 'GET' &&
+    request.method !== 'HEAD' &&
+    request.cookies.get('ver-como') &&
+    !pathname.startsWith('/api/ver-como') &&
+    !pathname.startsWith('/api/auth')
+  ) {
+    return NextResponse.json(
+      { error: 'Estás viendo como otra persona. Salí del modo para poder editar.' },
+      { status: 409 }
+    )
+  }
+
+  // Las rutas de API se van acá: el proxy solo las mira para el bloqueo de
+  // arriba. Si siguieran, la regla de «sin sesión -> redirigir a /login» les
+  // devolvería un redirect en vez de un 401. Y evita llamar a auth() en cada
+  // request de API, que antes no ocurría.
+  if (pathname.startsWith('/api')) return NextResponse.next()
+
+  const session = await auth()
 
   // Verificar si es una ruta pública
   const isPublicPath = PUBLIC_PATHS.some(
@@ -91,12 +115,12 @@ export const config = {
   matcher: [
     /*
      * Match todas las rutas excepto:
-     * - api (API routes)
+     * - api solo pasa por el bloqueo de «ver como» y sale
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - Archivos públicos (images, etc.)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\..*|_next).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\..*|_next).*)',
   ],
 }

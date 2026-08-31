@@ -1,4 +1,5 @@
-import { requireRole, isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
+import { requireRole, isOwnerOrSuperadmin } from '@/lib/auth-utils'
+import { esAdminDelCurso } from '@/lib/alcance'
 import { prisma } from '@/lib/prisma'
 import { SessionUpdateSchema } from '@/lib/planner/validation'
 import type { Prisma } from '@prisma/client'
@@ -36,7 +37,7 @@ export async function PATCH(request: Request) {
     select: {
       id: true,
       contentJson: true,
-      course: { select: { userId: true, careerId: true } },
+      course: { select: { userId: true, scope: true, careers: { select: { id: true } }, sedes: { select: { id: true } } } },
     },
   })
 
@@ -46,7 +47,7 @@ export async function PATCH(request: Request) {
 
   const isAllowed =
     isOwnerOrSuperadmin(session, lesson.course.userId) ||
-    isAdminSameCareer(session, lesson.course.careerId)
+    esAdminDelCurso(session, lesson.course)
 
   if (!isAllowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

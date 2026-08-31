@@ -1,6 +1,7 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
+import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
+import { esAdminDelCurso } from '@/lib/alcance'
 import { notFound, redirect } from 'next/navigation'
 import { AssessmentsManager } from '@/components/admin/assessments-manager'
 
@@ -19,7 +20,7 @@ export default async function AssessmentsPage({
   const lesson = await prisma.lesson.findFirst({
     where: { id: lessonId, courseId },
     include: {
-      course: { select: { userId: true, careerId: true, title: true } },
+      course: { select: { userId: true, scope: true, careers: { select: { id: true } }, sedes: { select: { id: true } }, title: true } },
     },
   })
   if (!lesson) notFound()
@@ -27,7 +28,7 @@ export default async function AssessmentsPage({
   // Permission check
   const canAccess =
     isOwnerOrSuperadmin(session, lesson.course.userId) ||
-    isAdminSameCareer(session, lesson.course.careerId)
+    esAdminDelCurso(session, lesson.course)
   if (!canAccess) notFound()
 
   const assessments = await prisma.assessment.findMany({

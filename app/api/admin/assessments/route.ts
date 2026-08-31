@@ -1,6 +1,7 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
+import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
+import { esAdminDelCurso } from '@/lib/alcance'
 import { generateAssessmentCode } from '@/lib/assessment-utils'
 import { NextResponse } from 'next/server'
 
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
 
   const lesson = await prisma.lesson.findUnique({
     where: { id: lessonId },
-    include: { course: { select: { userId: true, careerId: true, title: true } } },
+    include: { course: { select: { userId: true, scope: true, careers: { select: { id: true } }, sedes: { select: { id: true } }, title: true } } },
   })
   if (!lesson) {
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   // Check permissions: owner, superadmin or career admin
   const canCreate =
     isOwnerOrSuperadmin(session, lesson.course.userId) ||
-    isAdminSameCareer(session, lesson.course.careerId)
+    esAdminDelCurso(session, lesson.course)
   if (!canCreate) {
     return NextResponse.json({ error: 'No autorizado para esta lección' }, { status: 403 })
   }
