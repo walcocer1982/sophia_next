@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { seccionesVisibles } from '@/lib/alcance'
+import { alcanceEfectivo } from '@/lib/ver-como'
+import type { Prisma } from '@prisma/client'
 
 export const runtime = 'nodejs'
 
@@ -33,24 +36,17 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const includeArchived = searchParams.get('includeArchived') === 'true'
 
-  // Para INSTRUCTOR: filtrar a sus secciones asignadas
-  let sectionWhere: {
-    course: { track: 'REGULAR'; deletedAt: null }
-    id?: { in: string[] }
-    period?: { isActive: boolean }
-    isArchived?: boolean
-  } = {
+  let sectionWhere: Prisma.SectionWhereInput = {
     course: { track: 'REGULAR', deletedAt: null },
   }
-  if (role === 'INSTRUCTOR') {
-    const myAssignments = await prisma.sectionInstructor.findMany({
-      where: { userId: session.user.id },
-      select: { sectionId: true },
-    })
-    sectionWhere = {
-      ...sectionWhere,
-      id: { in: myAssignments.map((a) => a.sectionId) },
-    }
+  // Antes solo el INSTRUCTOR se recortaba, y por sección asignada; ADMIN veía
+  // todas las sedes. Ahora los tres roles pasan por el mismo alcance: sede x
+  // carrera, con comodín para los cursos transversales.
+  const { alcance, viendoComo } = await alcanceEfectivo(session)
+  if (alcance.role !== 'SUPERADMIN') {
+    // AND y no spread: el alcance trae su propio `course` y `OR`, que pisarían
+    // el filtro de track REGULAR.
+    sectionWhere = { AND: [sectionWhere, seccionesVisibles(alcance)] }
   }
 
   // Si no se incluye archived, filtrar secciones de períodos cerrados Y
@@ -72,7 +68,12 @@ export async function GET(request: Request) {
     prisma.sede.findMany({
       where: { isActive: true },
       orderBy: { code: 'asc' },
-      select: { id: true, code: true, name: true },
+      // careers: alimenta el nivel de carreras de la navegación
+      // (período → sede → CARRERA → curso → sesión).
+      select: {
+        id: true, code: true, name: true,
+        careers: { select: { id: true, code: true, name: true, slug: true }, orderBy: { name: 'asc' } },
+      },
     }),
     prisma.section.findMany({
       where: sectionWhere,
@@ -99,9 +100,17 @@ export async function GET(request: Request) {
             career: {
               select: { id: true, code: true, name: true },
             },
+            // careers (m:n): a qué carreras sirve el curso. Con scope
+            // TRANSVERSAL se ignora — sirve a todas.
+            careers: {
+              select: { id: true, code: true, name: true, slug: true },
+            },
             lessons: {
               orderBy: { order: 'asc' },
-              select: { id: true, title: true, order: true, isPublished: true },
+              // contentJson solo para contar actividades: con eso la UI puede
+              // avisar cuando la ventana horaria queda corta para el plan.
+              // No se envía al cliente.
+              select: { id: true, title: true, order: true, isPublished: true, contentJson: true },
             },
           },
         },
@@ -126,7 +135,10 @@ export async function GET(request: Request) {
     ? await prisma.course.findMany({
         where: { track: 'REGULAR', deletedAt: null },
         orderBy: { title: 'asc' },
-        select: { id: true, title: true },
+        select: {
+          id: true, title: true, scope: true,
+          careers: { select: { id: true } },
+        },
       })
     : []
 
@@ -148,6 +160,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     currentUserRole: role,
+    viendoComo,
     canCreate,
     periods,
     sedes,
@@ -166,7 +179,17 @@ export async function GET(request: Request) {
         title: s.course.title,
         scope: s.course.scope,
         career: s.course.career,
-        lessons: s.course.lessons,
+        careers: s.course.careers,
+        lessons: s.course.lessons.map((l) => {
+          const cj = l.contentJson as { activities?: unknown[] } | null
+          return {
+            id: l.id,
+            title: l.title,
+            order: l.order,
+            isPublished: l.isPublished,
+            activityCount: Array.isArray(cj?.activities) ? cj.activities.length : 0,
+          }
+        }),
       },
       enrolledCount: s._count.enrollments,
       enrolledStudents: s.enrollments.map((e) => ({
