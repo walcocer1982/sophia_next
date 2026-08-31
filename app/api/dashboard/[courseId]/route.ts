@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { tituloActividad } from '@/lib/actividad-titulo'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
 import { checkAndGeneratePartialReports } from '@/lib/lesson-report'
@@ -226,7 +227,7 @@ export async function GET(
     if (!content?.activities) continue
     content.activities.forEach((act, idx) => {
       activityMeta[act.id] = {
-        title: act.teaching?.agent_instruction?.slice(0, 80) || `Actividad ${idx + 1}`,
+        title: tituloActividad(act, idx),
         lessonTitle: lesson.title,
         index: idx + 1,
         total: content.activities.length,
@@ -418,7 +419,7 @@ export async function GET(
       return {
         id: act.id,
         index: idx + 1,
-        title: act.teaching?.agent_instruction?.slice(0, 80) || `Actividad ${idx + 1}`,
+        title: tituloActividad(act, idx),
         completed: completions.length,
         total: totalStudents,
         percentage: totalStudents > 0 ? Math.round((completions.length / totalStudents) * 100) : 0,

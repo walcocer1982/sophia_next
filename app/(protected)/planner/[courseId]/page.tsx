@@ -1,10 +1,12 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
+import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
+import { esAdminDelCurso } from '@/lib/alcance'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, Megaphone, CalendarDays } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { AgregarSesion } from '@/components/planner/agregar-sesion'
 import { PublishToggle } from '@/components/planner/publish-toggle'
 import { TestLessonButton } from '@/components/planner/test-lesson-button'
 import { DeleteCourseButton } from '@/components/planner/delete-course-button'
@@ -98,7 +100,7 @@ export default async function CourseOverviewPage({
 
   // Check if user is lead instructor, SUPERADMIN, career-match ADMIN, or section instructor
   const isLeadOrSuper = isOwnerOrSuperadmin(session, course.userId)
-  const isCareerAdmin = !isLeadOrSuper && isAdminSameCareer(session, course.careerId)
+  const isCareerAdmin = !isLeadOrSuper && esAdminDelCurso(session, course)
   const sectionInstructor = !isLeadOrSuper && !isCareerAdmin
     ? await prisma.sectionInstructor.findFirst({
         where: { userId: session.user.id, section: { courseId } },
@@ -217,7 +219,10 @@ export default async function CourseOverviewPage({
 
       {/* Sessions list */}
       <div className="space-y-3">
-        <h2 className="mb-4 text-lg font-semibold text-gray-700">Sesiones</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gray-700">Sesiones</h2>
+          {canDesign && <AgregarSesion courseId={course.id} />}
+        </div>
 
         {course.lessons.map((lesson) => {
           const json = lesson.contentJson as { activities?: Array<{
@@ -389,14 +394,11 @@ export default async function CourseOverviewPage({
                             {lesson._count.assessments} evento{lesson._count.assessments !== 1 ? 's' : ''}
                           </Link>
                         )}
-                        {/* "Publicar" se mudó a Programación (por sección).
-                            Acá solo botón directo si querés ir allá rápido. */}
-                        <Link href="/programacion">
-                          <Button variant="outline" size="sm" className="gap-1.5" title="Abrir/cerrar lecciones por sección">
-                            <CalendarDays className="h-3.5 w-3.5" />
-                            Programar
-                          </Button>
-                        </Link>
+                        {/* «Programar» vivía acá como enlace suelto a /programacion:
+                            el mismo destino repetido en cada sesión, que además no
+                            llevaba a programar ESTA sesión sino a la raíz. Programar
+                            necesita saber admisión, sede y sección — contexto que
+                            Diseño no tiene. Se hace en Programación. */}
                       </>
                     )}
                   </>

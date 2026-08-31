@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#f5f5f5; color:#101828; }
+    a { color:#4f46e5; text-decoration:none; } a:hover { color:#432dd7; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+  </style>
+</helmet>
+
+<div style="width:1040px; height:760px; background:#f5f5f5; padding:32px; box-sizing:border-box; display:flex; flex-direction:column; gap:16px">
+
+  <div style="display:flex; flex-direction:column; gap:4px">
+    <h2 style="margin:0; font-size:18px; font-weight:600; letter-spacing:-0.01em">Estados y avisos de una fila</h2>
+    <p style="margin:0; font-size:13px; color:#6a7282">Cuatro estados y tres avisos. Los avisos se calculan mientras editas, no al guardar.</p>
+  </div>
+
+  <div style="background:#ffffff; border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); overflow:hidden">
+
+    <div style="display:grid; grid-template-columns:36px 148px minmax(0,1fr) 132px 104px; align-items:center; gap:18px; padding:18px 22px">
+      <span class="mono" style="font-size:12px; color:#99a1af">0</span>
+      <span style="font-size:15px; font-weight:600; color:#99a1af">Sin fecha</span>
+      <span style="font-size:15px; color:#4a5565">Nadie puede entrar todavía</span>
+      <span style="height:24px; padding:0 10px; border-radius:999px; background:#f5f5f5; color:#6a7282; font-size:12px; font-weight:500; display:inline-flex; align-items:center; justify-self:start">Sin programar</span>
+      <div style="height:32px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500">Programar</div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:36px 148px minmax(0,1fr) 132px 104px; align-items:center; gap:18px; padding:18px 22px; border-top:1px solid #f0f0f0">
+      <span class="mono" style="font-size:12px; color:#99a1af">1</span>
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:15px; font-weight:600; color:#101828">25 ago</span>
+        <span class="mono" style="font-size:12px; color:#6a7282">20:00 – 21:00</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <span style="font-size:15px; font-weight:500; color:#101828">Tiene fecha, todavía no abre</span>
+        <span style="font-size:12px; color:#99a1af">hoy · en 3 h 20 min</span>
+      </div>
+      <span style="height:24px; padding:0 10px; border-radius:999px; background:#eef2ff; color:#4f46e5; font-size:12px; font-weight:500; display:inline-flex; align-items:center; justify-self:start">Programada</span>
+      <div style="height:32px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; color:#364153; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500">Cambiar</div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:36px 148px minmax(0,1fr) 132px 104px; align-items:center; gap:18px; padding:18px 22px; border-top:1px solid #f0f0f0; background:#f0fdf4">
+      <span class="mono" style="font-size:12px; color:#008236">2</span>
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:15px; font-weight:600; color:#101828">25 ago</span>
+        <span class="mono" style="font-size:12px; color:#008236">19:00 – 22:00</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <span style="font-size:15px; font-weight:600; color:#101828">Abierta ahora mismo</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:#008236">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#008236" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 7v5l3 2"/></svg>
+          cierra en 1 h 40 · 3 estudiantes dentro
+        </span>
+      </div>
+      <span style="height:24px; padding:0 10px; border-radius:999px; background:#ffffff; border:1px solid #a4f4cf; color:#008236; font-size:12px; font-weight:600; display:inline-flex; align-items:center; gap:6px; justify-self:start">
+        <span style="width:6px; height:6px; border-radius:99px; background:#00bc7d"></span>Abierta
+      </span>
+      <div style="height:32px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; color:#364153; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500">Cambiar</div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:36px 148px minmax(0,1fr) 132px 104px; align-items:center; gap:18px; padding:18px 22px; border-top:1px solid #f0f0f0">
+      <span class="mono" style="font-size:12px; color:#99a1af">3</span>
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:15px; font-weight:600; color:#4a5565">19 ago</span>
+        <span class="mono" style="font-size:12px; color:#99a1af">20:00 – 21:00</span>
+      </div>
+      <span style="font-size:15px; color:#4a5565">Ya pasó su ventana</span>
+      <span style="height:24px; padding:0 10px; border-radius:999px; background:#f5f5f5; color:#6a7282; font-size:12px; font-weight:500; display:inline-flex; align-items:center; justify-self:start">Cerrada</span>
+      <div style="height:32px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; color:#364153; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500">Cambiar</div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:3px; margin-top:6px">
+    <h2 style="margin:0; font-size:18px; font-weight:600; letter-spacing:-0.01em">Los tres avisos</h2>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:10px">
+
+    <div style="background:#ffffff; border:1.5px solid #ffc9c9; border-radius:12px; padding:16px; display:flex; gap:12px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" style="flex-shrink:0; margin-top:1px"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <div style="flex-grow:1; display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:14px; font-weight:600">Choque de horario</span>
+        <span style="font-size:13px; color:#4a5565; line-height:1.5">Dos sesiones de la misma sección con ventanas que se solapan. Los 12 estudiantes solo podrán entrar a una.</span>
+      </div>
+      <div style="height:32px; padding:0 12px; border-radius:8px; border:1px solid #ffc9c9; background:#ffffff; display:flex; align-items:center; align-self:center; font-size:14px; font-weight:600; color:#e7000b">Resolver</div>
+    </div>
+
+    <div style="background:#ffffff; border:1px solid #fee685; border-radius:12px; padding:16px; display:flex; gap:12px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#bb4d00" stroke-width="2" stroke-linecap="round" style="flex-shrink:0; margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 7v5l3 2"/></svg>
+      <div style="flex-grow:1; display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:14px; font-weight:600">Ventana corta</span>
+        <span style="font-size:13px; color:#4a5565; line-height:1.5">2 h para 5 actividades — sugerido 4 h. Se calcula a 45 min por actividad.</span>
+      </div>
+      <div style="height:32px; padding:0 12px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; align-self:center; font-size:14px; font-weight:500">Ampliar a 4 h</div>
+    </div>
+
+    <div style="background:#ffffff; border:1px solid #e5e5e5; border-radius:12px; padding:16px; display:flex; gap:12px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6a7282" stroke-width="2" stroke-linecap="round" style="flex-shrink:0; margin-top:1px"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+      <div style="flex-grow:1; display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:14px; font-weight:600">Quedó atrás del plan</span>
+        <span style="font-size:13px; color:#4a5565; line-height:1.5">Una sesión posterior se dictó antes que esta, y su ventana ya venció.</span>
+      </div>
+      <div style="height:32px; padding:0 12px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; align-self:center; font-size:14px; font-weight:500; color:#364153">Reprogramar</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

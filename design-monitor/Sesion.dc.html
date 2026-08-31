@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#f5f5f5; color:#101828; }
+    a { color:#4f46e5; text-decoration:none; } a:hover { color:#432dd7; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+  </style>
+</helmet>
+
+<div style="width:1040px; height:800px; background:#f5f5f5; padding:32px; box-sizing:border-box; display:flex; flex-direction:column; gap:18px">
+
+  <div style="display:flex; flex-direction:column; gap:5px">
+    <h2 style="margin:0; font-size:20px; font-weight:700; letter-spacing:-0.01em">S0 — Construye tu plan</h2>
+    <p style="margin:0; font-size:13px; color:#6a7282">
+      Junio ABQ · 30 jul, 20:00–22:00 · 10 estudiantes en la sección
+    </p>
+  </div>
+
+  <!-- Lo primero: quién NO entró. Hoy ese número no existe en ninguna pantalla. -->
+  <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px">
+    <div style="background:#ffffff; border:1.5px solid #ffc9c9; border-radius:12px; padding:16px">
+      <p style="margin:0; font-size:26px; font-weight:700; color:#e7000b">8</p>
+      <p style="margin:3px 0 0; font-size:13px; color:#4a5565">no abrieron la sesión</p>
+    </div>
+    <div style="background:#ffffff; border:1px solid #e5e5e5; border-radius:12px; padding:16px">
+      <p style="margin:0; font-size:26px; font-weight:700">1</p>
+      <p style="margin:3px 0 0; font-size:13px; color:#4a5565">la terminó</p>
+    </div>
+    <div style="background:#ffffff; border:1px solid #fee685; border-radius:12px; padding:16px">
+      <p style="margin:0; font-size:26px; font-weight:700; color:#bb4d00">19 min</p>
+      <p style="margin:3px 0 0; font-size:13px; color:#4a5565">le sobraron a Jesús antes del cierre</p>
+    </div>
+  </div>
+
+  <!-- Fricción por actividad, no alcance -->
+  <div style="background:#ffffff; border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); padding:18px 20px; display:flex; flex-direction:column; gap:14px; flex-grow:1">
+    <div style="display:flex; align-items:baseline; justify-content:space-between">
+      <h3 style="margin:0; font-size:15px; font-weight:600">Dónde se atascan</h3>
+      <span style="font-size:12px; color:#99a1af">intentos promedio · % que cumplió criterios</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:22px minmax(0,1fr) 168px 96px 82px; align-items:center; gap:12px">
+      <span class="mono" style="font-size:11px; color:#99a1af">1</span>
+      <span style="font-size:13px; color:#364153">Su ciclo cerrado</span>
+      <div style="height:8px; background:#f0f0f0; border-radius:99px; overflow:hidden"><div style="width:29%; height:100%; background:#c6d2ff"></div></div>
+      <span class="mono" style="font-size:13px; color:#4a5565">2.0 intentos</span>
+      <span style="justify-self:end; font-size:13px; color:#008236; font-weight:500">100 %</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:22px minmax(0,1fr) 168px 96px 82px; align-items:center; gap:12px; padding:9px 10px; margin:0 -10px; background:#fffbeb; border-radius:8px">
+      <span class="mono" style="font-size:11px; color:#bb4d00">2</span>
+      <span style="font-size:13px; font-weight:500">Diagnosticar el caso de Renzo</span>
+      <div style="height:8px; background:#f0f0f0; border-radius:99px; overflow:hidden"><div style="width:71%; height:100%; background:#fdc700"></div></div>
+      <span class="mono" style="font-size:13px; font-weight:600; color:#bb4d00">5.0 intentos</span>
+      <span style="justify-self:end; font-size:13px; color:#bb4d00; font-weight:600">50 %</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:22px minmax(0,1fr) 168px 96px 82px; align-items:center; gap:12px">
+      <span class="mono" style="font-size:11px; color:#99a1af">3</span>
+      <span style="font-size:13px; color:#364153">Revisar el razonamiento</span>
+      <div style="height:8px; background:#f0f0f0; border-radius:99px; overflow:hidden"><div style="width:29%; height:100%; background:#c6d2ff"></div></div>
+      <span class="mono" style="font-size:13px; color:#4a5565">2.0 intentos</span>
+      <span style="justify-self:end; font-size:13px; color:#008236; font-weight:500">100 %</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:22px minmax(0,1fr) 168px 96px 82px; align-items:center; gap:12px; padding:9px 10px; margin:0 -10px; background:#fffbeb; border-radius:8px">
+      <span class="mono" style="font-size:11px; color:#bb4d00">4</span>
+      <span style="font-size:13px; font-weight:500">Priorizar el plan</span>
+      <div style="height:8px; background:#f0f0f0; border-radius:99px; overflow:hidden"><div style="width:71%; height:100%; background:#fdc700"></div></div>
+      <span class="mono" style="font-size:13px; font-weight:600; color:#bb4d00">5.0 intentos</span>
+      <span style="justify-self:end; font-size:13px; color:#bb4d00; font-weight:600">50 %</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:22px minmax(0,1fr) 168px 96px 82px; align-items:center; gap:12px">
+      <span class="mono" style="font-size:11px; color:#99a1af">5</span>
+      <span style="font-size:13px; color:#364153">Cierre</span>
+      <div style="height:8px; background:#f0f0f0; border-radius:99px; overflow:hidden"><div style="width:43%; height:100%; background:#c6d2ff"></div></div>
+      <span class="mono" style="font-size:13px; color:#4a5565">3.0 intentos</span>
+      <span style="justify-self:end; font-size:13px; color:#008236; font-weight:500">100 %</span>
+    </div>
+
+    <div style="height:1px; background:#f0f0f0; margin-top:2px"></div>
+
+    <div style="display:flex; gap:11px; align-items:flex-start">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#bb4d00" stroke-width="2" stroke-linecap="round" style="flex-shrink:0; margin-top:1px"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <p style="margin:0; font-size:13px; color:#364153; line-height:1.55">
+        <strong style="color:#101828">Las actividades 2 y 4 no funcionan.</strong>
+        Cinco intentos de media y la mitad no cumple criterios, mientras el resto de la sesión pasa a la primera.
+        Eso es un problema del diseño de la sesión, no de los estudiantes — y es lo que esta pantalla debe decir en voz alta.
+      </p>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

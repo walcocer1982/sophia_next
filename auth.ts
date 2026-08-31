@@ -113,6 +113,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.sub = dbUser.id
         token.role = dbUser.role
         token.careerId = dbUser.careerId
+        token.sedeId = dbUser.sedeId
         const enrollmentCount = await prisma.enrollment.count({
           where: { userId: dbUser.id },
         })
@@ -125,11 +126,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Fetch role, careerId and enrollment for credentials provider
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { role: true, careerId: true },
+          select: { role: true, careerId: true, sedeId: true },
         })
         if (dbUser) {
           token.role = dbUser.role
           token.careerId = dbUser.careerId
+          token.sedeId = dbUser.sedeId
         }
         const enrollmentCount = await prisma.enrollment.count({
           where: { userId: user.id },
@@ -145,11 +147,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (token.sub) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
-          select: { role: true, careerId: true },
+          select: { role: true, careerId: true, sedeId: true },
         })
         if (dbUser) {
           token.role = dbUser.role
           token.careerId = dbUser.careerId
+          token.sedeId = dbUser.sedeId
         }
         if (!token.hasEnrollment) {
           const enrollmentCount = await prisma.enrollment.count({
@@ -166,6 +169,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.sub
         session.user.role = (token.role as string) || 'STUDENT'
         session.user.careerId = (token.careerId as string) || null
+        session.user.sedeId = (token.sedeId as string) || null
         session.user.hasEnrollment = !!token.hasEnrollment
       }
       return session

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireRole, isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
+import { requireRole, isOwnerOrSuperadmin } from '@/lib/auth-utils'
+import { esAdminDelCurso } from '@/lib/alcance'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
     where: { id: body.lessonId },
     select: {
       id: true,
-      course: { select: { userId: true, careerId: true } },
+      course: { select: { userId: true, scope: true, careers: { select: { id: true } }, sedes: { select: { id: true } } } },
     },
   })
   if (!lesson) {
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
 
   const canEdit =
     isOwnerOrSuperadmin(session, lesson.course.userId) ||
-    isAdminSameCareer(session, lesson.course.careerId)
+    esAdminDelCurso(session, lesson.course)
   if (!canEdit) {
     return NextResponse.json({ error: 'No autorizado para este curso' }, { status: 403 })
   }

@@ -3,22 +3,22 @@
  *
  * DOS escalas distintas:
  *
- * 1) NOTA GLOBAL de la lección (promedio 0-100) → bandas definidas por
- *    política de evaluación (2026-06-10):
+ * 1) NOTA GLOBAL de la lección (promedio 0-100) → bandas en intervalos
+ *    de 5/20 (política de evaluación 2026-06-23):
  *
- *    | Nivel              | Rango 0-100 | En /20      |
- *    |--------------------|-------------|-------------|
- *    | Logrado Destacado  | >= 87.5     | 17.5 - 20   |
- *    | Logrado            | >= 75       | 15 - 17.4   |
- *    | En Proceso         | >= 62.5     | 12.5 - 14.9 |
- *    | En Inicio          | < 62.5      | < 12.5      |
+ *    | Nivel              | En /20    | En /100    |
+ *    |--------------------|-----------|------------|
+ *    | Logrado Destacado  | 15 a 20   | 75 a 100   |
+ *    | Logrado            | 10 a < 15 | 50 a < 75  |
+ *    | En Proceso         | 5 a < 10  | 25 a < 50  |
+ *    | En Inicio          | 0 a < 5   | 0 a < 25   |
  *
  *    Convención de borde: el límite inferior pertenece al nivel superior
- *    (15.0 es Logrado, 17.5 es Destacado). Passing grade: 75 = 15/20.
+ *    (5 es Proceso, 10 es Logrado, 15 es Destacado). Passing grade: 50 = 10/20.
  *
  * 2) NIVEL POR ACTIVIDAD: escala discreta 0-25-50-75-100 del evaluador
- *    (memorized/understood/applied/analyzed) → ver calculateRubricLevel.
- *    NO usa las bandas globales: 50 = understood siempre es Proceso.
+ *    (beginning/developing/achieved/outstanding) → ver calculateRubricLevel.
+ *    NO usa las bandas globales: 50 = developing siempre es Proceso.
  *
  * SOURCE OF TRUTH: la rúbrica se deriva del grade numérico calculado en
  * lib/grading.ts. Esta capa solo mapea el número al label.
@@ -27,13 +27,13 @@
 import { activityScore, type ScorableActivity } from './grading'
 
 export const GRADE_THRESHOLDS = {
-  LOGRADO_DESTACADO: 87.5, // 17.5/20 — alcanzable sin perfección absoluta
-  LOGRADO: 75,             // 15/20 — passing
-  EN_PROCESO: 62.5,        // 12.5/20
+  LOGRADO_DESTACADO: 75, // 15/20 — antes era 17.5/20
+  LOGRADO: 50,           // 10/20 — passing (antes era 15/20)
+  EN_PROCESO: 25,        // 5/20  — antes era 12.5/20
   EN_INICIO: 0,
 } as const
 
-export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 75 = applied = Logrado
+export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 50 = 10/20 = Logrado
 
 export type RubricLevel = 'logrado_destacado' | 'logrado' | 'en_proceso' | 'en_inicio'
 
@@ -81,6 +81,9 @@ export function calculateRubricLevel(
 ): RubricLevel {
   if (!passedCriteria) return 'en_inicio'
   const score = activityScore(ap)
+  // Sin nivel legible no se puede afirmar nada del alumno: se reporta el nivel
+  // más bajo y queda como señal de que la evidencia está rota.
+  if (score === null) return 'en_inicio'
   if (score >= 100) return 'logrado_destacado'
   if (score >= 75) return 'logrado'
   if (score >= 50) return 'en_proceso'
@@ -128,7 +131,7 @@ export function gradeToRubricLevel(grade: number): RubricLevel {
 }
 
 /**
- * Check if a grade is passing (>= 65 = 13/20)
+ * Check if a grade is passing (>= 50/100 = 10/20 = Logrado)
  */
 export function isPassing(grade: number): boolean {
   return grade >= PASSING_GRADE

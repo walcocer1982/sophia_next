@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#f5f5f5; color:#101828; }
+    a { color:#4f46e5; text-decoration:none; } a:hover { color:#432dd7; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+  </style>
+</helmet>
+
+<div style="width:1000px; height:720px; background:#f5f5f5; padding:32px; box-sizing:border-box; display:flex; flex-direction:column; gap:18px">
+
+  <div style="display:flex; flex-direction:column; gap:4px">
+    <h2 style="margin:0; font-size:18px; font-weight:600; letter-spacing:-0.01em">Programar todo el plan</h2>
+    <p style="margin:0; font-size:13px; color:#6a7282">Un patrón para las 5 sesiones, con la previsualización antes de aplicar.</p>
+  </div>
+
+  <div style="background:#ffffff; border:1px solid #c6d2ff; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); overflow:hidden">
+
+    <div style="padding:20px 22px; display:flex; flex-direction:column; gap:16px; background:#f8faff">
+
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+        <span style="font-size:14px; color:#364153">Empezar el</span>
+        <div style="height:36px; border:1px solid #e5e5e5; background:#ffffff; border-radius:8px; display:flex; align-items:center; gap:9px; padding:0 12px; font-size:14px; font-weight:500">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6a7282" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          1 sep 2026
+        </div>
+        <span style="font-size:14px; color:#364153">y repetir los</span>
+        <div style="display:flex; gap:5px">
+          <div style="width:36px; height:36px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:13px; color:#99a1af">L</div>
+          <div style="width:36px; height:36px; border-radius:8px; border:1px solid #4f46e5; background:#4f46e5; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; color:#ffffff">M</div>
+          <div style="width:36px; height:36px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:13px; color:#99a1af">M</div>
+          <div style="width:36px; height:36px; border-radius:8px; border:1px solid #4f46e5; background:#4f46e5; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; color:#ffffff">J</div>
+          <div style="width:36px; height:36px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:13px; color:#99a1af">V</div>
+          <div style="width:36px; height:36px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:13px; color:#d4d4d4">S</div>
+          <div style="width:36px; height:36px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:13px; color:#d4d4d4">D</div>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+        <span style="font-size:14px; color:#364153">de</span>
+        <div class="mono" style="height:36px; border:1px solid #e5e5e5; background:#ffffff; border-radius:8px; display:flex; align-items:center; padding:0 12px; font-size:14px">19:00</div>
+        <span style="font-size:14px; color:#6a7282">a</span>
+        <div class="mono" style="height:36px; border:1px solid #e5e5e5; background:#ffffff; border-radius:8px; display:flex; align-items:center; padding:0 12px; font-size:14px">23:00</div>
+        <span style="display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 11px; border-radius:999px; background:#ecfdf5; color:#007a55; font-size:12px; font-weight:500">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#007a55" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+          4 h · alcanza para la sesión más larga (5 actividades)
+        </span>
+      </div>
+    </div>
+
+    <div style="padding:18px 22px; display:flex; flex-direction:column; gap:2px; border-top:1px solid #f0f0f0">
+      <span style="font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#6a7282; margin-bottom:8px">Quedaría así</span>
+
+      <div style="display:grid; grid-template-columns:28px minmax(0,1fr) 168px; align-items:center; gap:14px; padding:9px 0">
+        <span class="mono" style="font-size:12px; color:#99a1af">0</span>
+        <span style="font-size:14px; color:#364153">S0 — Construye tu plan</span>
+        <span class="mono" style="font-size:13px; font-weight:500; color:#101828">mar 1 sep · 19:00</span>
+      </div>
+      <div style="display:grid; grid-template-columns:28px minmax(0,1fr) 168px; align-items:center; gap:14px; padding:9px 0; border-top:1px solid #f5f5f5">
+        <span class="mono" style="font-size:12px; color:#99a1af">1</span>
+        <span style="font-size:14px; color:#364153">S1 — Gana el TC: entiende la rúbrica antes de empezar</span>
+        <span class="mono" style="font-size:13px; font-weight:500; color:#101828">jue 3 sep · 19:00</span>
+      </div>
+      <div style="display:grid; grid-template-columns:28px minmax(0,1fr) 168px; align-items:center; gap:14px; padding:9px 0; border-top:1px solid #f5f5f5">
+        <span class="mono" style="font-size:12px; color:#99a1af">2</span>
+        <span style="font-size:14px; color:#364153">S2 — Tu equipo trabaja contigo, no contra ti</span>
+        <span class="mono" style="font-size:13px; font-weight:500; color:#101828">mar 8 sep · 19:00</span>
+      </div>
+      <div style="display:grid; grid-template-columns:28px minmax(0,1fr) 168px; align-items:center; gap:14px; padding:9px 0; border-top:1px solid #f5f5f5">
+        <span class="mono" style="font-size:12px; color:#99a1af">3</span>
+        <span style="font-size:14px; color:#364153">S3 — Tu tiempo en el internado: un plan que sí funciona</span>
+        <span class="mono" style="font-size:13px; font-weight:500; color:#101828">jue 10 sep · 19:00</span>
+      </div>
+      <div style="display:grid; grid-template-columns:28px minmax(0,1fr) 168px; align-items:center; gap:14px; padding:9px 0; border-top:1px solid #f5f5f5">
+        <span class="mono" style="font-size:12px; color:#99a1af">4</span>
+        <span style="font-size:14px; color:#364153">Técnicas de lectura técnica</span>
+        <span class="mono" style="font-size:13px; font-weight:500; color:#101828">mar 15 sep · 19:00</span>
+      </div>
+    </div>
+
+    <div style="padding:14px 22px; border-top:1px solid #e5e5e5; display:flex; align-items:center; gap:14px">
+      <p style="margin:0; flex-grow:1; font-size:13px; color:#4a5565">
+        Reemplaza las fechas que ya tengan las 5 sesiones de la <strong style="color:#101828">sección A</strong>.
+      </p>
+      <div style="height:36px; padding:0 16px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; font-size:14px; font-weight:500; color:#364153">Cancelar</div>
+      <div style="height:36px; padding:0 16px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; font-size:14px; font-weight:500">Programar 5 sesiones</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

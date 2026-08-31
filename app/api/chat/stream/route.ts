@@ -5,7 +5,7 @@ import { normalizeLevel, LEVEL_LABEL_ES } from '@/lib/levels'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
 import { buildSystemPrompt, getMaxTokensForActivity, isStudentUnsureStrong } from '@/lib/prompt-builder'
 import { isPassing } from '@/lib/rubric'
-import { calculateGrade, calculateCompletionGrade } from '@/lib/grading'
+import { notaDeLaSesion } from '@/lib/grading'
 import { gradeTo20 } from '@/lib/assessment-utils'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { detectHallucination } from '@/lib/hallucination-detector'
@@ -605,13 +605,22 @@ export async function POST(request: Request) {
         const userTimestamp = new Date()
         const assistantTimestamp = new Date(userTimestamp.getTime() + 1) // +1ms para garantizar orden
 
-        await prisma.$transaction([
+        // Desfase de activityId: la respuesta del alumno pertenece a la actividad
+        // de la PREGUNTA que contesta, no al puntero de la sesión. Si el turno
+        // anterior avanzó de actividad mientras Sophia seguía cerrando la previa
+        // (el follow-up descrito en 77a0ea1), el puntero ya apunta a la siguiente
+        // y el mensaje quedaría archivado bajo la actividad equivocada.
+        // `messages` viene ordenado desc, así que el primer assistant es el último.
+        const answeredActivityId =
+          messages.find((m) => m.role === 'assistant')?.activityId ?? currentActivity.id
+
+        const [, assistantMessage] = await prisma.$transaction([
           prisma.message.create({
             data: {
               sessionId: lessonSession.id,
               role: 'user',
               content: message,
-              activityId: currentActivity.id,
+              activityId: answeredActivityId,
               timestamp: userTimestamp,
             },
           }),
@@ -649,6 +658,101 @@ export async function POST(request: Request) {
           input: inputTokens,
           output: outputTokens,
         })
+
+
+        /**
+         * Cierra la lección: nota, completedAt, progreso e informe.
+         *
+         * Vive en una función porque hay DOS caminos que terminan la última
+         * actividad y solo uno la cerraba. El otro es el avance forzado a los 5
+         * intentos: marcaba la actividad como completada, buscaba la siguiente,
+         * no encontraba ninguna y no hacía nada más — la sesión quedaba abierta
+         * para siempre, sin nota. Y como las actividades de cierre promedian
+         * 5-7 intentos, el bug caía justo donde más pasa: 38 sesiones terminadas
+         * que figuraban «a medias», 22 de ellas en la S1.
+         */
+        const cerrarLeccion = async () => {
+const allActivities = await prisma.activityProgress.findMany({
+              where: {
+                lessonSessionId: lessonSession.id,
+                status: 'COMPLETED',
+              },
+              select: {
+                activityId: true,
+                attempts: true,
+                tangentCount: true,
+                evidenceData: true,
+                passedCriteria: true,
+              },
+            })
+
+            // Punto ÚNICO de cálculo. Antes este camino armaba la nota por su
+            // cuenta —sin pesos por tipo y sin denominador esperado— así que un
+            // mismo alumno sacaba distinto según entrara por el chat o por el
+            // kiosko.
+            const grade = notaDeLaSesion(
+              contentJson.activities,
+              allActivities,
+              lessonSession.lesson.course?.methodology
+            )
+
+            logger.info('chat.stream.grade_calculated', {
+              sessionId,
+              totalActivitiesCompleted: allActivities.length,
+              grade,
+            })
+
+            // grade null = la evidencia no permite afirmar nada. La sesión se
+            // cierra igual, sin nota: mejor una casilla vacía que un número
+            // inventado sobre evidencia rota.
+            await prisma.lessonSession.update({
+              where: { id: lessonSession.id },
+              data: {
+                completedAt: new Date(),
+                passed: grade !== null && isPassing(grade),
+                progress: 100,
+                grade,
+              },
+            })
+
+            // Si la sesión pertenece a un participante de kiosko, persistir su
+            // nota AQUÍ y no solo al presionar "Salir": los visitantes de feria
+            // suelen abandonar el stand sin salir y quedaban sin calificación.
+            await prisma.assessmentParticipant.updateMany({
+              where: { sessionId: lessonSession.id, completedAt: null },
+              data: {
+                grade,
+                gradeOver20: grade === null ? null : gradeTo20(grade),
+                passed: grade !== null && isPassing(grade),
+                completedAt: new Date(),
+              },
+            })
+
+            logger.info('chat.stream.lesson_completed', {
+              sessionId,
+              totalActivities: getTotalActivities(contentJson),
+              completedActivities: allActivities.length,
+              grade,
+              duration: new Date().getTime() - new Date(lessonSession.startedAt).getTime(),
+            })
+
+            // Generate AI report asynchronously (don't block the response).
+            // Pasamos objective + keyPoints para que el reporte tenga el ALCANCE
+            // de la lección y no invente temas fuera de ese alcance. Language
+            // de la sesión decide en qué idioma se genera el reporte.
+            generateLessonReport(
+              lessonSession.id,
+              lessonTitle,
+              lessonObjective,
+              lessonKeyPoints,
+              allActivities,
+              grade ?? 0,
+              contentJson,
+              lessonSession.language,
+            ).catch((err: unknown) => {
+              logger.error('chat.stream.report_generation_failed', { sessionId, error: String(err) })
+            })
+        }
 
         // 5. Guardar resultado de verificación en ActivityProgress
         // (La verificación ya corrió ANTES del streaming, usamos ese resultado)
@@ -756,102 +860,22 @@ export async function POST(request: Request) {
               },
             })
 
+            // La respuesta de Sophia en este mismo turno es la de transición:
+            // introduce la actividad NUEVA, así que se archiva bajo ella. Con eso
+            // el próximo mensaje del alumno hereda la actividad correcta.
+            await prisma.message.update({
+              where: { id: assistantMessage.id },
+              data: { activityId: nextActivityContext.activityId },
+            })
+
             logger.info('chat.stream.activity_progressed', {
               sessionId,
               fromActivityId: currentActivity.id,
               toActivityId: nextActivityContext.activityId,
             })
           } else {
-            // Era la última actividad → calcular nota y marcar lección como completada
-            const allActivities = await prisma.activityProgress.findMany({
-              where: {
-                lessonSessionId: lessonSession.id,
-                status: 'COMPLETED',
-              },
-              select: {
-                activityId: true,
-                attempts: true,
-                tangentCount: true,
-                evidenceData: true,
-              },
-            })
-
-            // Identify which activities are evaluative (counts for grade)
-            // Activities with verification.is_evaluative === false are skipped
-            const activityEvaluativeMap = new Map<string, boolean>()
-            for (const a of contentJson.activities) {
-              activityEvaluativeMap.set(a.id, a.verification?.is_evaluative !== false)
-            }
-
-            // Scoring: comprensión (70%) + eficiencia (30%).
-            // Shared formula — see lib/grading.ts
-            // Only evaluate activities marked as evaluative
-            const evaluativeActivities = allActivities.filter(ap =>
-              activityEvaluativeMap.get(ap.activityId) !== false
-            )
-
-            // CODE: nota = % de pasos completados (sin rúbrica de comprensión).
-            // REFLECTIVE: fórmula comprensión/eficiencia.
-            const totalEvaluativeCount = Array.from(activityEvaluativeMap.values())
-              .filter(Boolean).length
-            const grade = lessonSession.lesson.course?.methodology === 'CODE'
-              ? calculateCompletionGrade(evaluativeActivities.length, totalEvaluativeCount)
-              : calculateGrade(evaluativeActivities)
-
-            logger.info('chat.stream.grade_calculated', {
-              sessionId,
-              totalActivitiesCompleted: allActivities.length,
-              evaluativeActivitiesCount: evaluativeActivities.length,
-              grade,
-            })
-
-            await prisma.lessonSession.update({
-              where: { id: lessonSession.id },
-              data: {
-                completedAt: new Date(),
-                passed: isPassing(grade),
-                progress: 100,
-                grade,
-              },
-            })
-
-            // Si la sesión pertenece a un participante de kiosko, persistir su
-            // nota AQUÍ y no solo al presionar "Salir": los visitantes de feria
-            // suelen abandonar el stand sin salir y quedaban sin calificación.
-            await prisma.assessmentParticipant.updateMany({
-              where: { sessionId: lessonSession.id, completedAt: null },
-              data: {
-                grade,
-                gradeOver20: gradeTo20(grade),
-                passed: isPassing(grade),
-                completedAt: new Date(),
-              },
-            })
-
-            logger.info('chat.stream.lesson_completed', {
-              sessionId,
-              totalActivities,
-              completedActivities: completedCount + 1,
-              grade,
-              duration: new Date().getTime() - new Date(lessonSession.startedAt).getTime(),
-            })
-
-            // Generate AI report asynchronously (don't block the response).
-            // Pasamos objective + keyPoints para que el reporte tenga el ALCANCE
-            // de la lección y no invente temas fuera de ese alcance. Language
-            // de la sesión decide en qué idioma se genera el reporte.
-            generateLessonReport(
-              lessonSession.id,
-              lessonTitle,
-              lessonObjective,
-              lessonKeyPoints,
-              allActivities,
-              grade,
-              contentJson,
-              lessonSession.language,
-            ).catch((err: unknown) => {
-              logger.error('chat.stream.report_generation_failed', { sessionId, error: String(err) })
-            })
+            // Era la última actividad → cerrar la lección
+            await cerrarLeccion()
           }
         } else if (verification.response_type !== 'continuation' && !hallucinationCheck.isHallucination) {
           // Guardar evidencia + (condicionalmente) incrementar attempts.
@@ -977,6 +1001,17 @@ export async function POST(request: Request) {
                 where: { id: lessonSession.id },
                 data: { activityId: nextAct.id },
               })
+              // Igual que en el avance normal: la respuesta de este turno ya
+              // pertenece a la actividad nueva.
+              await prisma.message.update({
+                where: { id: assistantMessage.id },
+                data: { activityId: nextAct.id },
+              })
+            } else {
+              // No hay siguiente: el avance forzado ocurrió EN la última
+              // actividad, así que la lección terminó acá. Antes este camino no
+              // cerraba nada.
+              await cerrarLeccion()
             }
 
             // Notify frontend

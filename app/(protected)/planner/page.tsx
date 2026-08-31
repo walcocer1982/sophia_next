@@ -1,323 +1,151 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { cursosVisibles } from '@/lib/alcance'
+import { alcanceEfectivo } from '@/lib/ver-como'
 import Link from 'next/link'
-import { Plus, BookOpen, ChevronRight, GraduationCap, Users } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { redirect } from 'next/navigation'
+import { Explorador, type CursoLista, type GrupoLista } from '@/components/planner/explorador'
 
-type CourseWithLessons = {
-  id: string
-  title: string
-  slug: string
-  capacidad: string | null
-  isPublished: boolean
-  createdAt: Date
-  careerId: string | null
-  user: { name: string | null } | null
-  _count: { lessons: number }
-  lessons: Array<{ id: string; contentJson: unknown; isPublished: boolean }>
-}
+export const runtime = 'nodejs'
 
-function getCourseStats(course: CourseWithLessons) {
-  const designedCount = course.lessons.filter((l) => {
-    const json = l.contentJson as { activities?: unknown[] } | null
-    return json?.activities && json.activities.length > 0
-  }).length
-  const publishedCount = course.lessons.filter((l) => l.isPublished).length
-  const totalLessons = course._count.lessons
-  return { designedCount, publishedCount, totalLessons }
-}
+const TRANSVERSAL = '__transversal'
+const SIN_CARRERA = '__sin-carrera'
 
-function CourseCard({ course }: { course: CourseWithLessons; showInstructor?: boolean }) {
-  const { designedCount, publishedCount, totalLessons } = getCourseStats(course)
-
-  return (
-    <Link
-      href={`/planner/${course.id}`}
-      className="group rounded-lg border bg-white p-5 transition-shadow hover:shadow-md"
-    >
-      <div className="mb-3 flex items-start justify-between">
-        <h3 className="font-semibold text-gray-800 group-hover:text-primary">
-          {course.title}
-        </h3>
-        <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5" />
-      </div>
-
-      {course.capacidad && (
-        <p className="mb-3 line-clamp-2 text-sm text-gray-500">
-          {course.capacidad}
-        </p>
-      )}
-
-      {course.user?.name && (
-        <p className="mb-2 flex items-center gap-1.5 text-xs text-indigo-600">
-          <Users className="h-3 w-3" />
-          {course.user.name}
-        </p>
-      )}
-
-      <div className="flex items-center gap-3 text-xs text-gray-400">
-        <span>{totalLessons} sesiones</span>
-        <span className="text-gray-300">|</span>
-        <span>
-          {designedCount}/{totalLessons} diseñadas
-        </span>
-        <span className="text-gray-300">|</span>
-        <span>
-          {publishedCount}/{totalLessons} publicadas
-        </span>
-        {!course.isPublished && (
-          <>
-            <span className="text-gray-300">|</span>
-            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-600">
-              Borrador
-            </span>
-          </>
-        )}
-      </div>
-    </Link>
-  )
-}
-
-export default async function PlannerPage() {
+/**
+ * Catálogo de cursos, con el mismo patrón que Programación: barra para
+ * ubicarse, panel para trabajar.
+ *
+ * El árbol tiene un solo nivel —la carrera— porque acá se diseña la PLANTILLA,
+ * y la plantilla no tiene admisión ni sede: un curso se diseña una vez y se
+ * dicta en muchas partes. Y el curso se abre a pantalla completa, no en el
+ * panel: poner fechas cabe en 900 px, diseñar una sesión no.
+ */
+export default async function PlannerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ carrera?: string }>
+}) {
   const session = await auth()
   if (!session?.user?.id) redirect('/login')
 
   const role = session.user.role || 'STUDENT'
-  const isSuperadmin = role === 'SUPERADMIN'
-  const isInstructor = role === 'INSTRUCTOR'
-
-  // Students can't access planner
   if (role === 'STUDENT') redirect('/lessons')
 
-  if (isSuperadmin) {
-    return <SuperadminPlannerView />
-  }
+  const { carrera } = await searchParams
+  const seleccion = carrera ?? null
 
-  // INSTRUCTOR: see courses where they are section instructors
-  // ADMIN: see own courses + same career courses + section instructor courses
-  let courseFilter: Record<string, unknown>
-  if (isInstructor) {
-    const sectionAssignments = await prisma.sectionInstructor.findMany({
-      where: { userId: session.user.id },
-      select: { section: { select: { courseId: true } } },
-    })
-    const courseIds = [...new Set(sectionAssignments.map(s => s.section.courseId))]
-    courseFilter = { id: { in: courseIds }, deletedAt: null }
-  } else {
-    // ADMIN: own courses + section instructor + same career
-    const sectionAssignments = await prisma.sectionInstructor.findMany({
-      where: { userId: session.user.id },
-      select: { section: { select: { courseId: true } } },
-    })
-    const sectionCourseIds = [...new Set(sectionAssignments.map(s => s.section.courseId))]
-    const careerId = session.user.careerId
-    courseFilter = {
-      deletedAt: null,
-      OR: [
-        { userId: session.user.id },
-        ...(sectionCourseIds.length > 0 ? [{ id: { in: sectionCourseIds } }] : []),
-        ...(careerId ? [{ careerId }] : []),
-      ],
+  // Qué cursos ve cada rol. Antes había dos vistas duplicadas —una para
+  // superadmin y otra para el resto—; ahora solo cambia el filtro.
+  let where: Record<string, unknown> = { deletedAt: null }
+  const { alcance } = await alcanceEfectivo(session)
+  if (alcance.role !== 'SUPERADMIN') {
+    // El alcance ya no distingue ADMIN de INSTRUCTOR: ambos son dueños de su
+    // carrera en su sede. Antes el INSTRUCTOR solo veía las secciones que le
+    // asignaron — y los cuatro instructores del sistema tenían cero.
+    where = {
+      AND: [cursosVisibles(alcance), { deletedAt: null }],
     }
   }
 
-  const courses = (await prisma.course.findMany({
-    where: courseFilter,
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      title: true,
-      slug: true,
-      capacidad: true,
-      isPublished: true,
-      createdAt: true,
-      careerId: true,
-      user: { select: { name: true } },
-      _count: { select: { lessons: true } },
-      lessons: {
-        select: { id: true, contentJson: true, isPublished: true },
-        orderBy: { order: 'asc' },
+  const [cursosRaw, carreras] = await Promise.all([
+    prisma.course.findMany({
+      where,
+      orderBy: { title: 'asc' },
+      select: {
+        id: true, title: true, capacidad: true, isPublished: true,
+        scope: true, track: true, careerId: true,
+        careers: { select: { id: true } },
+        user: { select: { name: true } },
+        lessons: { select: { contentJson: true, isPublished: true } },
       },
-    },
-  })) as CourseWithLessons[]
+    }),
+    prisma.career.findMany({ orderBy: { name: 'asc' }, select: { id: true, code: true, name: true } }),
+  ])
+
+  const cursos: CursoLista[] = cursosRaw.map((c) => {
+    const disenadas = c.lessons.filter((l) => {
+      const j = l.contentJson as { activities?: unknown[] } | null
+      return Array.isArray(j?.activities) && j.activities.length > 0
+    }).length
+
+    // Un curso pertenece a varias carreras (m:n). Los transversales no tienen
+    // carrera porque sirven a todas — no es un dato faltante.
+    const grupos =
+      c.scope === 'TRANSVERSAL'
+        ? [TRANSVERSAL]
+        : c.careers.length > 0
+          ? c.careers.map((x) => x.id)
+          : c.careerId
+            ? [c.careerId]
+            : [SIN_CARRERA]
+
+    return {
+      id: c.id,
+      title: c.title,
+      capacidad: c.capacidad,
+      isPublished: c.isPublished,
+      track: c.track,
+      scope: c.scope,
+      instructor: c.user?.name ?? null,
+      total: c.lessons.length,
+      disenadas,
+      listas: c.lessons.filter((l) => l.isPublished).length,
+      grupos,
+    }
+  })
+
+  // Solo se listan los grupos que tienen cursos: una carrera vacía en la barra
+  // es ruido, no información.
+  const acumular = (clave: string, nombre: string, tipo: GrupoLista['tipo']): GrupoLista | null => {
+    const suyos = cursos.filter((c) => c.grupos.includes(clave))
+    if (suyos.length === 0) return null
+    return {
+      clave, nombre, tipo,
+      cursos: suyos.length,
+      disenadas: suyos.reduce((n, c) => n + c.disenadas, 0),
+      total: suyos.reduce((n, c) => n + c.total, 0),
+    }
+  }
+
+  const grupos = [
+    acumular(TRANSVERSAL, 'Transversales', 'transversal'),
+    ...carreras.map((c) => acumular(c.id, c.code ?? c.name, 'carrera')),
+    acumular(SIN_CARRERA, 'Sin carrera', 'sin'),
+  ].filter((g): g is GrupoLista => g !== null)
+
+  const sinDisenar = cursos.reduce((n, c) => n + (c.total - c.disenadas), 0)
+  const listas = cursos.reduce((n, c) => n + c.listas, 0)
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="mx-auto max-w-7xl space-y-6 p-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="mb-1 text-3xl font-bold">{isInstructor ? 'Mis Secciones' : 'Mis Cursos'}</h1>
-          <p className="text-muted-foreground">
-            {isInstructor ? 'Gestiona los horarios de tus secciones asignadas' : 'Crea y gestiona tus cursos con ayuda de la IA'}
+          <h1 className="text-2xl font-bold text-gray-900">Diseño</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            {cursos.length} curso{cursos.length !== 1 ? 's' : ''}
+            {sinDisenar > 0 && (
+              <>
+                {' · '}
+                <span className="font-medium text-amber-700">{sinDisenar} sesiones sin diseñar</span>
+              </>
+            )}
+            {' · '}
+            {listas} listas para programar
           </p>
         </div>
-        {!isInstructor && (
+        {role !== 'INSTRUCTOR' && (
           <Link href="/planner/new">
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nuevo Curso
+            <Button size="sm" className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" />
+              Nuevo curso
             </Button>
           </Link>
         )}
       </div>
 
-      {courses.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-16 text-center">
-          <BookOpen className="mx-auto mb-4 h-12 w-12 text-gray-300" />
-          <h2 className="mb-2 text-lg font-medium text-gray-600">
-            No tienes cursos aún
-          </h2>
-          <p className="mb-6 text-sm text-muted-foreground">
-            Crea tu primer curso y la IA te ayudará a definir la capacidad y las sesiones
-          </p>
-          <Link href="/planner/new">
-            <Button variant="outline" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Crear mi primer curso
-            </Button>
-          </Link>
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {courses.map((course) => (
-            <CourseCard key={course.id} course={course} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-async function SuperadminPlannerView() {
-  const [allCourses, careers] = await Promise.all([
-    prisma.course.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        capacidad: true,
-        isPublished: true,
-        createdAt: true,
-        careerId: true,
-        user: { select: { name: true } },
-        _count: { select: { lessons: true } },
-        lessons: {
-          select: { id: true, contentJson: true, isPublished: true },
-          orderBy: { order: 'asc' },
-        },
-      },
-    }) as Promise<CourseWithLessons[]>,
-    prisma.career.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true },
-    }),
-  ])
-
-  // Group courses by career
-  const coursesByCareer = new Map<string | null, CourseWithLessons[]>()
-  for (const course of allCourses) {
-    const key = course.careerId
-    if (!coursesByCareer.has(key)) coursesByCareer.set(key, [])
-    coursesByCareer.get(key)!.push(course)
-  }
-
-  const careerMap = new Map(careers.map((c) => [c.id, c.name]))
-
-  // Compute global stats
-  const totalLessons = allCourses.reduce((sum, c) => sum + c._count.lessons, 0)
-  const allLessons = allCourses.flatMap((c) => c.lessons)
-  const designedTotal = allLessons.filter((l) => {
-    const json = l.contentJson as { activities?: unknown[] } | null
-    return json?.activities && json.activities.length > 0
-  }).length
-  const publishedTotal = allLessons.filter((l) => l.isPublished).length
-
-  // Ordered career groups: existing careers first, then null
-  const careerGroups: Array<{ id: string | null; name: string }> = []
-  for (const career of careers) {
-    if (coursesByCareer.has(career.id)) {
-      careerGroups.push({ id: career.id, name: career.name })
-    }
-  }
-  if (coursesByCareer.has(null)) {
-    careerGroups.push({ id: null, name: 'Sin Carrera Asignada' })
-  }
-
-  return (
-    <div className="container mx-auto px-4 py-12">
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="mb-1 text-3xl font-bold">Todos los Cursos</h1>
-          <p className="text-muted-foreground">
-            Vista general de cursos por carrera
-          </p>
-        </div>
-        <Link href="/planner/new">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nuevo Curso
-          </Button>
-        </Link>
-      </div>
-
-      {/* Stats bar */}
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border bg-white p-4">
-          <p className="text-2xl font-bold text-gray-900">{careers.length}</p>
-          <p className="text-xs text-gray-500">Carreras</p>
-        </div>
-        <div className="rounded-lg border bg-white p-4">
-          <p className="text-2xl font-bold text-gray-900">{allCourses.length}</p>
-          <p className="text-xs text-gray-500">Cursos</p>
-        </div>
-        <div className="rounded-lg border bg-white p-4">
-          <p className="text-2xl font-bold text-emerald-600">{publishedTotal}</p>
-          <p className="text-xs text-gray-500">Sesiones publicadas</p>
-        </div>
-        <div className="rounded-lg border bg-white p-4">
-          <p className="text-2xl font-bold text-gray-900">
-            {designedTotal}<span className="text-sm font-normal text-gray-400">/{totalLessons}</span>
-          </p>
-          <p className="text-xs text-gray-500">Sesiones diseñadas</p>
-        </div>
-      </div>
-
-      {/* Career groups */}
-      {allCourses.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-16 text-center">
-          <BookOpen className="mx-auto mb-4 h-12 w-12 text-gray-300" />
-          <h2 className="mb-2 text-lg font-medium text-gray-600">
-            No hay cursos en el sistema
-          </h2>
-        </div>
-      ) : (
-        <div className="space-y-10">
-          {careerGroups.map((group) => {
-            const courses = coursesByCareer.get(group.id) || []
-            return (
-              <section key={group.id ?? 'null'}>
-                <div className="mb-4 flex items-center gap-2">
-                  <GraduationCap className="h-5 w-5 text-gray-500" />
-                  <h2 className="text-lg font-semibold text-gray-700">
-                    {group.name}
-                  </h2>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                    {courses.length} {courses.length === 1 ? 'curso' : 'cursos'}
-                  </span>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {courses.map((course) => (
-                    <CourseCard key={course.id} course={course} showInstructor />
-                  ))}
-                </div>
-              </section>
-            )
-          })}
-        </div>
-      )}
+      <Explorador grupos={grupos} cursos={cursos} seleccion={seleccion} />
     </div>
   )
 }

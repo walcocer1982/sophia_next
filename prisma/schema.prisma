@@ -31,6 +31,19 @@ model User {
   image         String?
   googleId      String?   @unique
   avatar        String?
+  // ── Datos oficiales del padrón académico (importados, no autodeclarados) ──
+  // El DNI es la llave del padrón: es lo que aparece en el reporte de notas y
+  // lo que el líder usa para armar las listas de tutoría.
+  dni                String? @unique
+  // Correo institucional (e202620153@estudiantes.cetemin.edu.pe). Hoy el alumno
+  // entra con su correo personal (`email`); cuando migren a Microsoft entrará
+  // con este, y hay que reconocerlo como el mismo usuario.
+  institutionalEmail String? @unique
+  // Celular de WhatsApp — el circuito de seguimiento del Objetivo 3.
+  phone              String?
+  // Grupo del padrón dentro de su carrera y sede («1», «2»…). Es lo que
+  // determina a qué sección va cuando se agrega un curso a su carrera.
+  academicSection    String?
   role          UserRole  @default(STUDENT)
   careerId      String?
   // Sede de pertenencia (opcional — superadmins pueden no tener sede)
@@ -54,6 +67,7 @@ model User {
 
   @@index([email])
   @@index([googleId])
+  @@index([dni])
   @@index([careerId])
   @@index([sedeId])
   @@index([admissionPeriodId])
@@ -98,7 +112,10 @@ model Career {
 
   // Relaciones
   users   User[]
+  // DEPRECADO: lado inverso de Course.careerId. Ver coursesShared.
   courses Course[]
+  // m:n con Course: qué cursos sirven a esta carrera.
+  coursesShared Course[] @relation("CourseCareers")
   // m:n con Sede: en qué sedes se dicta esta carrera.
   // Ej: EOM se dicta en ABQ + FCHB, PM solo en ABQ.
   sedes   Sede[]   @relation("CareerSedes")
@@ -200,7 +217,14 @@ model Course {
 
   // Relaciones
   user     User?     @relation(fields: [userId], references: [id])
+  // DEPRECADO: una sola carrera por curso. Se conserva mientras se migran los
+  // lectores a `careers`; ver careers[] abajo.
   career   Career?   @relation(fields: [careerId], references: [id])
+  // Un curso puede servir a VARIAS carreras (m:n) — la malla de EOM y la de PM
+  // pueden compartir el mismo curso sin duplicarlo. Con scope TRANSVERSAL la
+  // lista se ignora: sirve a todas las carreras, incluidas las que no existen
+  // todavía (por eso conviene el flag y no listar las nueve a mano).
+  careers  Career[]  @relation("CourseCareers")
   lessons  Lesson[]
   sections Section[]
   // Un curso puede ofrecerse en VARIAS sedes (m:n). CONTINUA puede no tener
@@ -498,6 +522,9 @@ model Assessment {
   lessonId        String
   createdById     String              // Admin que la creó (Paola)
   isActive        Boolean   @default(true)
+  // Viene de la rama experimento/avatar-3d, que ya la aplicó a esta base. Se
+  // declara acá para que `db push` desde otras ramas no la borre.
+  avatarEnabled   Boolean   @default(true)  // Avatar 3D de Sophia (off = modo liviano sin avatar, para equipos débiles)
   timeLimitMin    Int       @default(10)  // Minutos por participante
   collectEmail    Boolean   @default(false) // Solicitar email opcional
   collectDni      Boolean   @default(true)  // Solicitar DNI

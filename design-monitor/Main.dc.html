@@ -1,0 +1,241 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#ffffff; color:#101828; }
+    a { color:#4f46e5; text-decoration:none; } a:hover { color:#432dd7; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+  </style>
+</helmet>
+
+<div style="width:1440px; height:900px; background:#ffffff; padding:32px; box-sizing:border-box; display:flex; flex-direction:column; gap:20px; overflow:hidden">
+
+  <div style="display:flex; align-items:center; gap:7px; font-size:12px; color:#6a7282">
+    <span>Monitor</span><span style="color:#d4d4d4">/</span>
+    <span>2026-1</span><span style="color:#d4d4d4">/</span>
+    <span>ABQ</span><span style="color:#d4d4d4">/</span>
+    <span>PM · sección 1</span>
+  </div>
+
+  <!-- Identidad del estudiante -->
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:28px">
+    <div style="display:flex; flex-direction:column; gap:8px">
+      <h1 style="margin:0; font-size:26px; font-weight:700; letter-spacing:-0.02em">Jhoan Dionisio Ramos</h1>
+      <div style="display:flex; align-items:center; gap:12px; font-size:14px; color:#4a5565">
+        <span class="mono">DNI 71642833</span>
+        <span style="color:#d4d4d4">·</span>
+        <span>Procesos Metalúrgicos</span>
+        <span style="color:#d4d4d4">·</span>
+        <span>ABQ</span>
+        <span style="color:#d4d4d4">·</span>
+        <span>sección 1</span>
+        <span style="color:#d4d4d4">·</span>
+        <span>admisión 2026-1</span>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px">
+      <div style="height:36px; padding:0 14px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; gap:7px; font-size:14px; font-weight:500; color:#364153">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4a5565" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+        Ver conversación
+      </div>
+      <div style="height:36px; padding:0 14px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; gap:7px; font-size:14px; font-weight:500">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+        WhatsApp · 951234567
+      </div>
+    </div>
+  </div>
+
+  <!-- La señal: qué le pasa a este alumno, en una línea -->
+  <div style="display:flex; align-items:center; gap:11px; padding:12px 16px; border:1px solid #fee685; background:#fffbeb; border-radius:10px">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#bb4d00" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+    <p style="margin:0; font-size:13px; color:#364153">
+      <strong style="color:#101828">Se esfuerza y no le sale.</strong>
+      Terminó las 5 actividades pero falló dos tras agotar los intentos, con el doble de respuestas y de tiempo que la media del grupo.
+      Faltó además a la sesión del 7 de agosto.
+    </p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:20px; flex-grow:1; overflow:hidden">
+
+    <!-- HISTORIAL — una línea por sesión PROGRAMADA, no por sesión hecha -->
+    <div style="display:flex; flex-direction:column; gap:10px; min-height:0">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <h2 style="margin:0; font-size:15px; font-weight:600">Historial</h2>
+        <span style="font-size:12px; color:#99a1af">las 5 sesiones programadas a su sección</span>
+      </div>
+
+      <div style="border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); overflow:hidden">
+
+        <div style="display:grid; grid-template-columns:26px 96px minmax(0,1fr) 118px; align-items:center; gap:14px; padding:14px 16px">
+          <span class="mono" style="font-size:11px; color:#99a1af">0</span>
+          <div style="display:flex; flex-direction:column; gap:2px">
+            <span style="font-size:14px; font-weight:600">30 jul</span>
+            <span class="mono" style="font-size:11px; color:#6a7282">20:00–22:00</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:3px">
+            <span style="font-size:14px; font-weight:500">S0 — Construye tu plan</span>
+            <span style="font-size:12px; color:#6a7282">5 de 5 actividades · 39 min · 35 mensajes</span>
+          </div>
+          <span style="height:24px; padding:0 10px; border-radius:999px; background:#fffbeb; border:1px solid #fee685; color:#bb4d00; font-size:12px; font-weight:600; display:inline-flex; align-items:center; justify-self:start">2 sin lograr</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:26px 96px minmax(0,1fr) 118px; align-items:center; gap:14px; padding:14px 16px; border-top:1px solid #f0f0f0; background:#fef2f2">
+          <span class="mono" style="font-size:11px; color:#99a1af">1</span>
+          <div style="display:flex; flex-direction:column; gap:2px">
+            <span style="font-size:14px; font-weight:600; color:#4a5565">7 ago</span>
+            <span class="mono" style="font-size:11px; color:#99a1af">14:00–22:00</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:3px">
+            <span style="font-size:14px; font-weight:500; color:#4a5565">S1 — Gana el TC</span>
+            <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; color:#e7000b">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              nunca abrió la sesión
+            </span>
+          </div>
+          <span style="height:24px; padding:0 10px; border-radius:999px; background:#ffffff; border:1px solid #ffc9c9; color:#e7000b; font-size:12px; font-weight:600; display:inline-flex; align-items:center; justify-self:start">No entró</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:26px 96px minmax(0,1fr) 118px; align-items:center; gap:14px; padding:14px 16px; border-top:1px solid #f0f0f0">
+          <span class="mono" style="font-size:11px; color:#99a1af">2</span>
+          <div style="display:flex; flex-direction:column; gap:2px">
+            <span style="font-size:14px; font-weight:600">11 ago</span>
+            <span class="mono" style="font-size:11px; color:#6a7282">20:30–22:30</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:3px">
+            <span style="font-size:14px; font-weight:500">S2 — Tu equipo trabaja contigo</span>
+            <span style="font-size:12px; color:#6a7282">3 de 5 · quedó en la actividad 3 · 22 min</span>
+          </div>
+          <span style="height:24px; padding:0 10px; border-radius:999px; background:#fffbeb; border:1px solid #fee685; color:#bb4d00; font-size:12px; font-weight:600; display:inline-flex; align-items:center; justify-self:start">A medias</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:26px 96px minmax(0,1fr) 118px; align-items:center; gap:14px; padding:14px 16px; border-top:1px solid #f0f0f0">
+          <span class="mono" style="font-size:11px; color:#99a1af">3</span>
+          <div style="display:flex; flex-direction:column; gap:2px">
+            <span style="font-size:14px; font-weight:600">18 ago</span>
+            <span class="mono" style="font-size:11px; color:#6a7282">20:00–21:00</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:3px">
+            <span style="font-size:14px; font-weight:500">S3 — Tu tiempo en el internado</span>
+            <span style="font-size:12px; color:#6a7282">5 de 5 · 28 min · sin fricción</span>
+          </div>
+          <span style="height:24px; padding:0 10px; border-radius:999px; background:#f0fdf4; border:1px solid #a4f4cf; color:#008236; font-size:12px; font-weight:600; display:inline-flex; align-items:center; justify-self:start">Completa</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:26px 96px minmax(0,1fr) 118px; align-items:center; gap:14px; padding:14px 16px; border-top:1px solid #f0f0f0">
+          <span class="mono" style="font-size:11px; color:#99a1af">4</span>
+          <div style="display:flex; flex-direction:column; gap:2px">
+            <span style="font-size:14px; font-weight:600; color:#4a5565">25 ago</span>
+            <span class="mono" style="font-size:11px; color:#99a1af">20:00–21:00</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:3px">
+            <span style="font-size:14px; color:#4a5565">Técnicas de lectura técnica</span>
+            <span style="font-size:12px; color:#99a1af">hoy · abre en 3 h 20 min</span>
+          </div>
+          <span style="height:24px; padding:0 10px; border-radius:999px; background:#eef2ff; color:#4f46e5; font-size:12px; font-weight:500; display:inline-flex; align-items:center; justify-self:start">Programada</span>
+        </div>
+      </div>
+
+      <p style="margin:0; font-size:12px; color:#99a1af">
+        Las sesiones a las que no entró aparecen igual. Hoy son invisibles: sin sesión abierta no existe ningún registro.
+      </p>
+    </div>
+
+    <!-- DETALLE — dónde se atascó dentro de una sesión -->
+    <div style="display:flex; flex-direction:column; gap:10px; min-height:0">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <h2 style="margin:0; font-size:15px; font-weight:600">S0 — actividad por actividad</h2>
+      </div>
+
+      <div style="border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); padding:14px 16px; display:flex; flex-direction:column; gap:11px">
+
+        <div style="display:grid; grid-template-columns:20px minmax(0,1fr) 62px 74px; align-items:center; gap:10px; font-size:11px; color:#99a1af; font-weight:600; text-transform:uppercase; letter-spacing:.05em">
+          <span></span><span></span><span style="text-align:right">Intentos</span><span></span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:20px minmax(0,1fr) 62px 74px; align-items:center; gap:10px">
+          <span class="mono" style="font-size:11px; color:#99a1af">1</span>
+          <span style="font-size:13px; color:#364153">Su ciclo cerrado</span>
+          <span class="mono" style="font-size:13px; text-align:right; color:#4a5565">2</span>
+          <span style="justify-self:end; height:22px; padding:0 9px; border-radius:999px; background:#f0fdf4; color:#008236; font-size:11px; font-weight:600; display:inline-flex; align-items:center">logró</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:20px minmax(0,1fr) 62px 74px; align-items:center; gap:10px; padding:8px 10px; margin:0 -10px; background:#fffbeb; border-radius:8px">
+          <span class="mono" style="font-size:11px; color:#bb4d00">2</span>
+          <span style="font-size:13px; font-weight:500">Diagnosticar el caso</span>
+          <span class="mono" style="font-size:13px; text-align:right; font-weight:600; color:#bb4d00">5</span>
+          <span style="justify-self:end; height:22px; padding:0 9px; border-radius:999px; background:#ffffff; border:1px solid #fee685; color:#bb4d00; font-size:11px; font-weight:600; display:inline-flex; align-items:center">no logró</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:20px minmax(0,1fr) 62px 74px; align-items:center; gap:10px">
+          <span class="mono" style="font-size:11px; color:#99a1af">3</span>
+          <span style="font-size:13px; color:#364153">Revisar el razonamiento</span>
+          <span class="mono" style="font-size:13px; text-align:right; color:#4a5565">2</span>
+          <span style="justify-self:end; height:22px; padding:0 9px; border-radius:999px; background:#f0fdf4; color:#008236; font-size:11px; font-weight:600; display:inline-flex; align-items:center">logró</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:20px minmax(0,1fr) 62px 74px; align-items:center; gap:10px; padding:8px 10px; margin:0 -10px; background:#fffbeb; border-radius:8px">
+          <span class="mono" style="font-size:11px; color:#bb4d00">4</span>
+          <span style="font-size:13px; font-weight:500">Priorizar el plan</span>
+          <span class="mono" style="font-size:13px; text-align:right; font-weight:600; color:#bb4d00">5</span>
+          <span style="justify-self:end; height:22px; padding:0 9px; border-radius:999px; background:#ffffff; border:1px solid #fee685; color:#bb4d00; font-size:11px; font-weight:600; display:inline-flex; align-items:center">no logró</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:20px minmax(0,1fr) 62px 74px; align-items:center; gap:10px">
+          <span class="mono" style="font-size:11px; color:#99a1af">5</span>
+          <span style="font-size:13px; color:#364153">Cierre</span>
+          <span class="mono" style="font-size:13px; text-align:right; color:#4a5565">3</span>
+          <span style="justify-self:end; height:22px; padding:0 9px; border-radius:999px; background:#f0fdf4; color:#008236; font-size:11px; font-weight:600; display:inline-flex; align-items:center">logró</span>
+        </div>
+
+        <div style="height:1px; background:#f0f0f0; margin:2px 0"></div>
+
+        <p style="margin:0; font-size:12px; color:#6a7282; line-height:1.5">
+          Sesión no evaluativa: <strong style="color:#101828">no lleva nota</strong>. Lo que se mira son los intentos y si cumplió los criterios.
+        </p>
+      </div>
+
+      <!-- SEÑALES — lo que los números solos no dicen -->
+      <div style="border:1px solid #e5e5e5; border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:10px">
+        <span style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:#6a7282">Cómo escribió</span>
+
+        <div style="display:flex; align-items:flex-end; gap:6px; height:64px">
+          <div style="flex-grow:1; display:flex; flex-direction:column; align-items:center; gap:4px">
+            <div style="width:100%; height:56px; background:#c6d2ff; border-radius:3px 3px 0 0"></div>
+            <span class="mono" style="font-size:10px; color:#99a1af">193</span>
+          </div>
+          <div style="flex-grow:1; display:flex; flex-direction:column; align-items:center; gap:4px">
+            <div style="width:100%; height:25px; background:#c6d2ff; border-radius:3px 3px 0 0"></div>
+            <span class="mono" style="font-size:10px; color:#99a1af">87</span>
+          </div>
+          <div style="flex-grow:1; display:flex; flex-direction:column; align-items:center; gap:4px">
+            <div style="width:100%; height:33px; background:#c6d2ff; border-radius:3px 3px 0 0"></div>
+            <span class="mono" style="font-size:10px; color:#99a1af">113</span>
+          </div>
+          <div style="flex-grow:1; display:flex; flex-direction:column; align-items:center; gap:4px">
+            <div style="width:100%; height:14px; background:#ffc9c9; border-radius:3px 3px 0 0"></div>
+            <span class="mono" style="font-size:10px; color:#99a1af">48</span>
+          </div>
+          <div style="flex-grow:1; display:flex; flex-direction:column; align-items:center; gap:4px">
+            <div style="width:100%; height:14px; background:#ffc9c9; border-radius:3px 3px 0 0"></div>
+            <span class="mono" style="font-size:10px; color:#99a1af">48</span>
+          </div>
+        </div>
+
+        <p style="margin:0; font-size:12px; color:#4a5565; line-height:1.5">
+          Caracteres por respuesta, de la actividad 1 a la 5. <strong style="color:#101828">Empieza contando y termina en monosílabos</strong> — se desgasta. En la 4 tardó 2 min para escribir media línea: eso es fricción, no reflexión.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

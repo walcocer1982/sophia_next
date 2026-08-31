@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#ffffff; color:#101828; }
+    a { color:#4f46e5; text-decoration:none; } a:hover { color:#432dd7; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+  </style>
+</helmet>
+
+<div style="width:390px; min-height:900px; background:#ffffff; display:flex; flex-direction:column">
+
+  <div style="padding:28px 20px 20px; display:flex; flex-direction:column; gap:14px">
+    <div style="width:44px; height:44px; border-radius:99px; background:#ecfdf5; display:flex; align-items:center; justify-content:center">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#008236" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:6px">
+      <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-0.02em; line-height:1.2">Terminaste<br>tu sesión</h1>
+      <p style="margin:0; font-size:15px; color:#4a5565">S0 — Construye tu plan · 38 min</p>
+    </div>
+
+    <!-- Dónde va dentro del plan: le da continuidad a lo que hace -->
+    <div style="display:flex; flex-direction:column; gap:7px; margin-top:4px">
+      <div style="display:flex; gap:5px">
+        <span style="flex-grow:1; height:5px; border-radius:99px; background:#00bc7d"></span>
+        <span style="flex-grow:1; height:5px; border-radius:99px; background:#e5e5e5"></span>
+        <span style="flex-grow:1; height:5px; border-radius:99px; background:#e5e5e5"></span>
+        <span style="flex-grow:1; height:5px; border-radius:99px; background:#e5e5e5"></span>
+        <span style="flex-grow:1; height:5px; border-radius:99px; background:#e5e5e5"></span>
+      </div>
+      <span style="font-size:13px; color:#6a7282">Sesión 1 de 5 del Plan de Tutoría</span>
+    </div>
+  </div>
+
+  <!-- Lo primero que lee: lo que se lleva, con sus palabras -->
+  <div style="margin:0 20px; padding:20px; background:#f8faff; border:1px solid #c6d2ff; border-radius:12px; display:flex; flex-direction:column; gap:10px">
+    <p style="margin:0; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#4f46e5">Lo que te llevas</p>
+    <p style="margin:0; font-size:17px; line-height:1.5; font-weight:500; text-wrap:pretty">
+      «Pedir ayuda con el tema que no entendí, antes de que se acumule.»
+    </p>
+    <p style="margin:0; font-size:13px; color:#6a7282; line-height:1.5">
+      Lo elegiste tú al armarle el plan a Renzo.
+    </p>
+  </div>
+
+  <div style="padding:24px 20px 20px; display:flex; flex-direction:column; gap:14px">
+    <p style="margin:0; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#6a7282">Qué trabajaste</p>
+
+    <div style="display:flex; align-items:flex-start; gap:11px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#008236" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0; margin-top:2px"><path d="M20 6 9 17l-5-5"/></svg>
+      <span style="font-size:15px; line-height:1.45; color:#364153">Contaste cómo te fue en el ciclo que cerraste</span>
+    </div>
+    <div style="display:flex; align-items:flex-start; gap:11px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#008236" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0; margin-top:2px"><path d="M20 6 9 17l-5-5"/></svg>
+      <span style="font-size:15px; line-height:1.45; color:#364153">Diagnosticaste qué le pasaba a Renzo</span>
+    </div>
+    <div style="display:flex; align-items:flex-start; gap:11px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#008236" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0; margin-top:2px"><path d="M20 6 9 17l-5-5"/></svg>
+      <span style="font-size:15px; line-height:1.45; color:#364153">Encontraste el error en su razonamiento y explicaste por qué</span>
+    </div>
+    <div style="display:flex; align-items:flex-start; gap:11px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#008236" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0; margin-top:2px"><path d="M20 6 9 17l-5-5"/></svg>
+      <span style="font-size:15px; line-height:1.45; color:#364153">Le armaste un plan y ordenaste sus pasos</span>
+    </div>
+  </div>
+
+  <div style="margin:0 20px; padding:18px; background:#fafafa; border-radius:12px; display:flex; gap:12px; align-items:flex-start">
+    <div style="width:32px; height:32px; border-radius:99px; background:#09222d; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fbc50b; font-size:13px; font-weight:700">S</div>
+    <p style="margin:0; font-size:15px; line-height:1.55; color:#364153; text-wrap:pretty">
+      Lo que mejor hiciste fue notar que a Renzo <strong style="color:#101828">le faltaba pedir ayuda a tiempo</strong> — eso no te lo dije yo, lo viste tú.
+    </p>
+  </div>
+
+  <!-- Lo siguiente, con fecha: cierra el bucle -->
+  <div style="margin:20px 20px 0; padding:16px 18px; border:1px solid #e5e5e5; border-radius:12px; display:flex; align-items:center; gap:13px">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+    <div style="display:flex; flex-direction:column; gap:2px">
+      <span style="font-size:15px; font-weight:500">Siguiente sesión</span>
+      <span style="font-size:13px; color:#6a7282">jueves 7 de agosto, 2:00 p. m.</span>
+    </div>
+  </div>
+
+  <div style="padding:20px; display:flex; flex-direction:column; gap:12px; margin-top:auto">
+    <div style="height:48px; border-radius:10px; background:#101828; color:#ffffff; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:500">
+      Volver a mis clases
+    </div>
+    <p style="margin:0; text-align:center; font-size:13px; color:#99a1af">Esta sesión no lleva nota.</p>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

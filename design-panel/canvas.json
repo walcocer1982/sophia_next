@@ -1,0 +1,15 @@
+{
+  "artboards": [
+    { "file": "Cursos.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Main.dc.html", "x": 1560, "y": 0, "w": 1440, "h": 900 },
+    { "file": "ProgramarPlan.dc.html", "x": 0, "y": 1060, "w": 1000, "h": 720 },
+    { "file": "Estados.dc.html", "x": 1120, "y": 1060, "w": 1040, "h": 760 }
+  ],
+  "annotations": [
+    { "id": "nota-cursos", "x": 0, "y": -150, "w": 620, "text": "1 · Click en la CARRERA\nEl árbol llega hasta carrera y ahí se detiene. El panel lista los cursos de esa carrera en esa sede, con su avance y sus avisos. El curso transversal ya no se repite en el árbol: aparece una vez, acá." },
+    { "id": "nota-sesiones", "x": 1560, "y": -150, "w": 620, "text": "2 · Click en el CURSO\nLa fecha pasa a ser la primera columna y lo primero que se lee. Fila de 18 px de aire en vez de 12, título completo, y el aviso debajo del título en vez de perdido al costado." },
+    { "id": "nota-plan", "x": 0, "y": 990, "w": 620, "text": "3 · Programar todo el plan\nUn patrón — inicio, días, ventana — y la previsualización de las 5 fechas antes de aplicar. Dice en voz alta que reemplaza lo que ya había." },
+    { "id": "nota-estados", "x": 1120, "y": 990, "w": 620, "text": "4 · Referencia\nCuatro estados y tres avisos, para fijar los colores: verde solo cuando está abierta de verdad, rojo solo para choque, ámbar para lo que conviene revisar." }
+  ],
+  "launch": { "view": "canvas" }
+}

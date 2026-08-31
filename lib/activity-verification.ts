@@ -1,4 +1,5 @@
 import { anthropic, extractJsonFromMarkdown, callAndParseJson } from '@/lib/anthropic'
+import { logger } from '@/lib/logger'
 import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric } from '@/types/lesson'
 import { normalizeLevel } from '@/lib/levels'
 
@@ -88,49 +89,43 @@ NIVELES DE DOMINIO (4 niveles oficiales, definiciones operacionales claras):
 
 REGLAS CRÍTICAS PARA CLASIFICAR:
 - Contá los criterios de "must_include" que la respuesta cubre con claridad:
-  * 0 criterios cubiertos + respuesta básica/vacía → memorized (INICIO)
-  * 1 criterio cubierto parcialmente, intento confuso → understood (PROCESO)
-  * 2 o más criterios cubiertos con claridad → applied (LOGRADO)
-  * Cualquier nivel + SUSTENTACIÓN/argumento del por qué → analyzed (DESTACADO)
-- La SUSTENTACIÓN es la marca de DESTACADO. Sin sustentación es máximo Logrado.
-- "Profundidad cognitiva" NO es el criterio — el criterio es CUMPLIR los criterios + SUSTENTAR.
-- Ante duda entre understood y applied: si cubre 2+ criterios claros → applied.
-- Ante duda entre applied y analyzed: si da el por qué (argumento, no solo lista) → analyzed.
+PROFUNDIDAD (campo goes_beyond):
+- true SOLO si cumple TODOS los aspectos Y ademas sustenta el porque, aporta un
+  ejemplo propio o conecta con otro tema — algo que el aspecto no pedia.
+- false en cualquier otro caso. Ante la duda, false.
 
-⚠️ ANTI-SESGO CONSERVADOR — leelo antes de clasificar:
-Tendés a defaultear a "understood" por seguridad. NO LO HAGAS. Si la respuesta
-cumple los criterios, escalá al nivel que corresponde. Castigar a un estudiante
-con "understood" cuando demostró "applied" o "analyzed" es UN ERROR que afecta
-su nota final. Si dudás entre dos niveles, SUBÍ al más alto, no bajés al más bajo.
+NO clasifiques el nivel de comprension: se deriva de los aspectos que marques
+como cubiertos. Tu trabajo es decidir, aspecto por aspecto, si esta cubierto.
 
-EJEMPLOS DE ESCALACIÓN (estudia estos patrones):
+EJEMPLOS:
 
-Ejemplo 1 — applied (LOGRADO):
-  Criterios: ["ventilación para evacuar gases", "desate de rocas sueltas", "sostenimiento"]
-  Respuesta: "Ventilar primero, después hacer el desate y poner pernos"
-  → criteriaMatched: 3/3 (los 3 criterios cubiertos con palabras propias)
-  → understanding_level: "applied"  ← NO "understood", cumple 2+ criterios
-  → Sin sustentación explícita del POR QUÉ → no llega a analyzed
+Ejemplo 1 — cubre todo, sin sustentar:
+  Aspectos: ["ventilacion para evacuar gases", "desate de rocas sueltas", "sostenimiento"]
+  Respuesta: "Ventilar primero, despues hacer el desate y poner pernos"
+  → criteriaMatched: [1,2,3]   goes_beyond: false
 
-Ejemplo 2 — analyzed (DESTACADO):
-  Criterios: ["elige una fase específica", "la justifica con argumento razonado"]
-  Respuesta: "La perforación porque determina cuánto se avanza y qué tan fragmentada termina la roca"
-  → criteriaMatched: 2/2 (eligió "perforación" + dio argumento causal)
-  → understanding_level: "analyzed"  ← NO "understood", da una RELACIÓN
-     causa-efecto explícita ("determina X y Y")
-  → Es DESTACADO porque la justificación conecta causa con consecuencia
+Ejemplo 2 — cubre todo y sustenta:
+  Aspectos: ["elige una fase especifica", "la justifica con argumento razonado"]
+  Respuesta: "La perforacion porque determina cuanto se avanza y que tan fragmentada termina la roca"
+  → criteriaMatched: [1,2]   goes_beyond: true
 
-PATRÓN CLAVE: una respuesta con relación CAUSA→CONSECUENCIA explícita
-("porque", "lo que hace que", "esto produce", "determina que") sobre 2+
-criterios = analyzed. NO bajes a understood por timidez.
+Ejemplo 3 — cubre parte:
+  Aspectos: ["ventilacion", "desate de rocas", "sostenimiento"]
+  Respuesta: "Hay que ventilar antes de entrar"
+  → criteriaMatched: [1]   criteriaMissing: [2,3]   goes_beyond: false
+
+Ejemplo 4 — no cubre ninguno:
+  Aspectos: ["ventilacion", "desate de rocas", "sostenimiento"]
+  Respuesta: "Se saca el mineral con el scoop"
+  → criteriaMatched: []   criteriaMissing: [1,2,3]   goes_beyond: false
 
 Responde en formato JSON con esta estructura EXACTA:
 {
   "completed": boolean,
   "criteriaMatched": [NÚMEROS de "ASPECTOS A OBSERVAR" que la respuesta cubre con claridad, ej: [1,3] — solo los números],
   "criteriaMissing": [NÚMEROS de "ASPECTOS A OBSERVAR" que la respuesta NO cubre, ej: [2] — solo los números],
-  "completeness_percentage": number (0-100),
-  "understanding_level": "memorized" | "understood" | "applied" | "analyzed",
+  "completeness_percentage": number (0-100) — tu estimación; el sistema calcula la suya con los criterios y compara,
+  "goes_beyond": boolean,
   "response_type": "correct" | "partial" | "incorrect" | "off_topic",
   "feedback": "feedback conciso y constructivo (máximo 2 oraciones)",
   "confidence": "high" | "medium" | "low",
@@ -209,50 +204,23 @@ REGLAS DE EVALUACIÓN FLEXIBLE:
 
 REGLA — TOLERANCIA A ERRORES DE VOZ (Whisper): si una palabra suena parecida a un término del tema, interpretala como ese término y NO bajes el nivel ni descartes un criterio por eso. Solo cuestioná si cambia el SIGNIFICADO conceptual.
 
-NIVELES DE DOMINIO (clasifica por LOGRO del objetivo, no por estilo del lenguaje):
-- "memorized" = EN INICIO: Respuesta con errores conceptuales o tan incompleta que NO demuestra dominio mínimo del tema. Necesita repaso.
-- "understood" = EN PROCESO: Parcialmente correcta. Idea general OK pero le faltan elementos clave o tiene confusiones menores. Va por buen camino.
-- "applied" = LOGRADO: Cumple los criterios de la actividad. Sabe el tema — sea por memoria correcta, paráfrasis o ejemplo. ESTE es el nivel esperado cuando responde bien.
-- "analyzed" = DESTACADO: Va MÁS ALLÁ de lo pedido. Aporta ejemplo propio no requerido, conecta con otro tema, identifica matices, o propone variantes.
+PROFUNDIDAD (campo goes_beyond):
+- true SOLO si la respuesta cumple TODOS los criterios Y además aporta algo que
+  no se pidió: un ejemplo propio, una conexión con otro tema, una relación
+  causa→consecuencia explícita, o un matiz que el criterio no exige.
+- false en cualquier otro caso. Ante la duda, false.
 
-IMPORTANTE:
-- Memorizar correctamente una definición = LOGRADO (no inicio).
-- Equivocarse o tener errores conceptuales = INICIO.
-- "Profundidad cognitiva" NO es el criterio — el criterio es DOMINIO DEL OBJETIVO.
-
-⚠️ ANTI-SESGO CONSERVADOR — leelo antes de clasificar:
-Tendés a defaultear a "understood" por seguridad. NO LO HAGAS. Si la respuesta
-cumple los criterios, escalá al nivel que corresponde. Castigar a un estudiante
-con "understood" cuando demostró "applied" o "analyzed" es UN ERROR que afecta
-su nota final. Si dudás entre dos niveles, SUBÍ al más alto, no bajés al más bajo.
-
-EJEMPLOS DE ESCALACIÓN:
-
-Ejemplo 1 — applied (LOGRADO):
-  Pregunta: "¿Qué pasos se ejecutan después de la voladura?"
-  Criterios: ["ventilación para evacuar gases", "desate de rocas", "sostenimiento"]
-  Respuesta: "Ventilar primero, después desate y poner pernos"
-  → criteriaMatched: 3/3 con palabras propias
-  → understanding_level: "applied"  ← NO "understood"
-
-Ejemplo 2 — analyzed (DESTACADO):
-  Pregunta: "¿Cuál fase decide la productividad y por qué?"
-  Criterios: ["elige fase específica", "justifica con argumento"]
-  Respuesta: "La perforación porque determina cuánto se avanza y qué tan fragmentada termina la roca"
-  → criteriaMatched: 2/2 + relación CAUSA→CONSECUENCIA explícita
-  → understanding_level: "analyzed"  ← NO "understood", da el POR QUÉ
-
-PATRÓN CLAVE: relación causa-efecto explícita ("porque", "determina que",
-"esto produce", "lo que hace que") sobre 2+ criterios = analyzed. NO bajes
-a understood por timidez.
+NO clasifiques el nivel de comprensión. El nivel se deriva de los criterios que
+marques como cumplidos, no de una impresión general: tu trabajo es decidir, para
+cada criterio, si la respuesta lo cubre o no.
 
 Responde en formato JSON con esta estructura EXACTA:
 {
   "completed": boolean,
   "criteriaMatched": [NÚMEROS de "CRITERIOS DE ÉXITO" que la respuesta cumple, ej: [1,3] — solo los números, NO el texto],
   "criteriaMissing": [NÚMEROS de "CRITERIOS DE ÉXITO" que la respuesta NO cumple, ej: [2] — solo los números],
-  "completeness_percentage": number (0-100),
-  "understanding_level": "memorized" | "understood" | "applied" | "analyzed",
+  "completeness_percentage": number (0-100) — tu estimación; el sistema calcula la suya con los criterios y compara,
+  "goes_beyond": boolean,
   "response_type": "correct" | "partial" | "incorrect" | "off_topic",
   "feedback": "feedback conciso y constructivo (máximo 2 oraciones)",
   "confidence": "high" | "medium" | "low",
@@ -268,10 +236,12 @@ REGLAS PARA response_type:
 - "off_topic": La respuesta no está relacionada con la pregunta
 - "no sé" / "no conozco" / "es la primera vez" / no responde → "incorrect" (NUNCA "off_topic"): es un no-saber, NO un desvío de tema
 
-REGLAS PARA ready_to_advance:
+REGLAS PARA ready_to_advance (decisión PEDAGÓGICA — que el alumno no se trabe):
 - true si completeness_percentage >= ${minCompleteness}
-- true si understanding_level es igual o superior a "${expectedLevel}"
+- true si cumple los criterios centrales aunque le falte alguno accesorio
 - false si el estudiante claramente no entendió el concepto central
+- Ante la duda, dejá avanzar: trabar a alguien cuesta más que dejarlo seguir.
+  Esta generosidad NO afecta su nota — la nota sale de los criterios cumplidos.
 
 REGLAS PARA needs_scaffolding (DESGLOSE):
 - true SOLO si: response_type=partial o incorrect Y NO está listo para avanzar Y NO es off_topic
@@ -366,7 +336,6 @@ ${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO PREVIO (in
 CÓMO EVALUAR:
 - Elegí el nivel cuya referencia MÁS se parezca en la COMPRENSIÓN demostrada, NO en las palabras exactas. Acepta paráfrasis, sinónimos y ejemplos propios.
 - La condición real de aprobar son los CRITERIOS (must_include); las referencias solo calibran el nivel.
-- Ante duda entre dos niveles, SUBÍ al más alto (no castigues por timidez).
 - Avanza (ready_to_advance=true) si completeness >= ${minCompleteness}% o el nivel es "${expectedNew}" o superior.
 - "no sé" / "no conozco" / "es la primera vez" / no responde → response_type "incorrect" (NUNCA "off_topic").
 - Si la respuesta trata de OTRO tema distinto al de ESTA pregunta (contesta algo que no se preguntó acá — p.ej. responde sobre el tema de otra actividad) → response_type "off_topic". Distinción: "incorrect" = intento sobre ESTE tema pero equivocado; "off_topic" = habla de un tema diferente al preguntado.
@@ -488,7 +457,40 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
     // el prompt fallback devuelve understanding_level (escala vieja).
     // normalizeLevel unifica ambos al enum nuevo.
     const rawLevel = (result as unknown as { level?: string }).level
-    result.understanding_level = normalizeLevel(rawLevel ?? result.understanding_level)
+    const nivelDelModelo = rawLevel || result.understanding_level
+      ? normalizeLevel(rawLevel ?? result.understanding_level)
+      : null
+
+    // ── El nivel se DERIVA de los criterios, no se le pide al modelo ─────────
+    //
+    // Antes el prompt pedía un nivel holístico y le ordenaba «si dudás, subí al
+    // más alto»: el 95% de los intentos salía «logrado» y la nota era esa
+    // palabra. Ahora el modelo decide algo más chico y más verificable —qué
+    // criterios cubre la respuesta— y el nivel es una función de eso:
+    //
+    //   < 40% de los criterios → en inicio
+    //   < 100%                 → en proceso
+    //   100%                   → logrado
+    //   100% + goes_beyond     → destacado
+    //
+    // Si además hay rúbrica por niveles (prompt con referencias), su veredicto
+    // puede BAJAR el derivado pero nunca subirlo: la rúbrica afina dentro del
+    // margen que fijan los criterios contables.
+    const total = successCriteria.must_include.length
+    const cobertura = total > 0 ? result.criteriaMatched.length / total : 0
+    const goesBeyond = (result as unknown as { goes_beyond?: boolean }).goes_beyond === true
+
+    const ORDEN: UnderstandingLevel[] = ['beginning', 'developing', 'achieved', 'outstanding']
+    let derivado: UnderstandingLevel =
+      cobertura >= 1 ? (goesBeyond ? 'outstanding' : 'achieved')
+      : cobertura >= 0.4 ? 'developing'
+      : 'beginning'
+
+    if (nivelDelModelo && ORDEN.indexOf(nivelDelModelo) < ORDEN.indexOf(derivado)) {
+      derivado = nivelDelModelo
+    }
+    result.understanding_level = derivado
+
 
     // Validar que ready_to_advance sea consistente
     if (result.completeness_percentage >= effectiveThreshold && !result.ready_to_advance) {
@@ -527,6 +529,25 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
     // del prompt, el nivel nunca pase de Proceso post-explicación.
     if (wasExplained && (result.understanding_level === 'achieved' || result.understanding_level === 'outstanding')) {
       result.understanding_level = 'developing'
+    }
+
+    // La completitud que se GUARDA se deriva de los criterios, así los dos
+    // campos que cruza la nota son coherentes por construcción. Va al final a
+    // propósito: las reglas de avance de arriba siguen usando la estimación del
+    // modelo, que es la decisión pedagógica y debe quedarse generosa. La
+    // diferencia entre ambas es la primera medida de calibración que tenemos
+    // sin etiquetar nada a mano.
+    const reportada = result.completeness_percentage
+    result.completeness_reported = reportada
+    result.completeness_percentage = Math.round(cobertura * 100)
+    if (typeof reportada === 'number' && Math.abs(reportada - result.completeness_percentage) >= 30) {
+      logger.warn('verification.completeness_divergence', {
+        activityId: activity.id,
+        reportada,
+        derivada: result.completeness_percentage,
+        criterios: total,
+        cubiertos: result.criteriaMatched.length,
+      })
     }
 
     return result

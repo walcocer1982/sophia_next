@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { tituloActividad } from '@/lib/actividad-titulo'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
 import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '@/lib/rubric'
@@ -120,7 +121,7 @@ export async function GET(
       return {
         id: actDef.id,
         index: idx + 1,
-        title: actDef.teaching?.agent_instruction?.slice(0, 100) || `Actividad ${idx + 1}`,
+        title: tituloActividad(actDef, idx),
         status: progress?.status || 'NOT_STARTED',
         attempts: progress?.attempts || 0,
         tangentCount: progress?.tangentCount || 0,

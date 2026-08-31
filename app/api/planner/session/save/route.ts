@@ -1,4 +1,5 @@
-import { requireRole, isOwnerOrSuperadmin, isAdminSameCareer } from '@/lib/auth-utils'
+import { requireRole, isOwnerOrSuperadmin } from '@/lib/auth-utils'
+import { esAdminDelCurso } from '@/lib/alcance'
 import { prisma } from '@/lib/prisma'
 import { SessionSaveSchema } from '@/lib/planner/validation'
 import { NextResponse } from 'next/server'
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     where: { id: lessonId },
     select: {
       id: true,
-      course: { select: { userId: true, careerId: true } },
+      course: { select: { userId: true, scope: true, careers: { select: { id: true } }, sedes: { select: { id: true } } } },
     },
   })
 
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   // permitir editar — commit 8e91d8a).
   const isAllowed =
     isOwnerOrSuperadmin(session, lesson.course.userId) ||
-    isAdminSameCareer(session, lesson.course.careerId)
+    esAdminDelCurso(session, lesson.course)
 
   if (!isAllowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

@@ -1,4 +1,5 @@
 import { auth } from '@/auth'
+import { tituloActividad } from '@/lib/actividad-titulo'
 import { prisma } from '@/lib/prisma'
 import { ChatInterface } from '@/components/learning/chat-interface'
 import { LearningLayout } from '@/components/learning/learning-layout'
@@ -109,10 +110,10 @@ export default async function ChatPage({
   const testMode = lessonSession.isTest && lessonSession.lesson.course
     ? {
         courseId: lessonSession.lesson.course.id,
-        activities: (contentJson?.activities || []).map((a) => ({
+        activities: (contentJson?.activities || []).map((a, i) => ({
           id: a.id,
           type: a.type,
-          title: a.teaching.agent_instruction,
+          title: tituloActividad(a, i),
         })),
       }
     : undefined
