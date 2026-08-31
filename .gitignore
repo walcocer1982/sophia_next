@@ -57,3 +57,19 @@ Informacion/videos/
 
 # Claude harness internal
 .claude/scheduled_tasks.lock
+
+# investigación interna (no subir)
+investigacion/
+
+# Avatares 3D de experimentación (119 MB). Ninguno está referenciado por la app
+# —el kiosko carga el modelo desde readyplayer.me— y meterlos infla el repo
+# para siempre. Viven en la máquina de quien experimenta.
+public/talkinghead/avatars/
+
+# Lienzos de diseño: se versionan las fuentes .dc.html y canvas.json (288 KB),
+# no el archivo publicado, que pesa 2.6 MB cada uno y se regenera con el helper.
+design-*/*.html
+!design-*/*.dc.html
+
+# Salida de corridas locales
+logs/
