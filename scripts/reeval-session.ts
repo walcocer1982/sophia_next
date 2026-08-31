@@ -143,7 +143,7 @@ async function main() {
 
   console.log(`Nota anterior:    ${oldGrade}/100`)
   console.log(`Nota re-evaluada: ${newGrade}/100`)
-  const delta = newGrade - oldGrade
+  const delta = (newGrade ?? 0) - oldGrade
   console.log(`Delta:            ${delta > 0 ? '+' : ''}${delta} puntos`)
   if (delta >= 20) console.log(`✅ El fix mejoró la nota significativamente`)
   else if (delta > 0) console.log(`🟡 Mejora moderada`)

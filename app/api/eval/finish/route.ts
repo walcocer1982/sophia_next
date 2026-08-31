@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { gradeTo20 } from '@/lib/assessment-utils'
 import { isPassing } from '@/lib/rubric'
 import { verifyActivityCompletion } from '@/lib/activity-verification'
-import { calculateGrade, calculateCompletionGrade } from '@/lib/grading'
+import { notaDeLaSesion } from '@/lib/grading'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -179,43 +179,15 @@ export async function POST(request: Request) {
     })
   }
 
-  // Enriquecer cada ActivityProgress con su type/weight del contentJson para
-  // que calculateGrade pueda hacer el promedio ponderado.
-  const evaluativeActivities = updatedActivities
-    .filter((ap) => activityMetaMap.get(ap.activityId)?.isEvaluative !== false)
-    .map((ap) => {
-      const meta = activityMetaMap.get(ap.activityId)
-      return {
-        ...ap,
-        activityType: meta?.activityType,
-        weight: meta?.weight,
-      }
-    })
-
-  // Denominator = suma de pesos ESPERADOS de todas las actividades evaluativas
-  // de la lesson (no solo las completadas). Penaliza sesiones incompletas.
-  const totalWeightExpected = contentJson.activities
-    .filter((a) => a.verification?.is_evaluative !== false)
-    .reduce((sum, a) => {
-      const explicit = typeof a.weight === 'number' ? a.weight : null
-      if (explicit !== null) return sum + explicit
-      // Default por tipo
-      const w = a.type === 'closing' ? 4
-        : a.type === 'practice' ? 3
-        : a.type === 'reflection' ? 2
-        : 1
-      return sum + w
-    }, 0)
-
-  // Para CODE (binario) seguimos usando cuenta simple; para REFLECTIVE el
-  // grade es ponderado. Shared formula — ver lib/grading.ts.
-  const totalEvaluativeCount = Array.from(activityMetaMap.values())
-    .filter((m) => m.isEvaluative).length
-  const grade = session.lesson.course?.methodology === 'CODE'
-    ? calculateCompletionGrade(evaluativeActivities.length, totalEvaluativeCount)
-    : calculateGrade(evaluativeActivities, totalWeightExpected)
-  const gradeOver20 = gradeTo20(grade)
-  const passed = isPassing(grade)
+  // Punto único de cálculo — antes este camino era el ÚNICO que enriquecía con
+  // tipo y peso, así que el kiosko calificaba distinto que el chat.
+  const grade = notaDeLaSesion(
+    contentJson.activities,
+    updatedActivities,
+    session.lesson.course?.methodology
+  )
+  const gradeOver20 = grade === null ? null : gradeTo20(grade)
+  const passed = grade !== null && isPassing(grade)
 
   // Update participant
   await prisma.assessmentParticipant.update({

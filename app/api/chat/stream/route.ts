@@ -5,7 +5,7 @@ import { normalizeLevel, LEVEL_LABEL_ES } from '@/lib/levels'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
 import { buildSystemPrompt, getMaxTokensForActivity, isStudentUnsureStrong } from '@/lib/prompt-builder'
 import { isPassing } from '@/lib/rubric'
-import { calculateGrade, calculateCompletionGrade } from '@/lib/grading'
+import { notaDeLaSesion } from '@/lib/grading'
 import { gradeTo20 } from '@/lib/assessment-utils'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { detectHallucination } from '@/lib/hallucination-detector'
@@ -682,43 +682,34 @@ const allActivities = await prisma.activityProgress.findMany({
                 attempts: true,
                 tangentCount: true,
                 evidenceData: true,
+                passedCriteria: true,
               },
             })
 
-            // Identify which activities are evaluative (counts for grade)
-            // Activities with verification.is_evaluative === false are skipped
-            const activityEvaluativeMap = new Map<string, boolean>()
-            for (const a of contentJson.activities) {
-              activityEvaluativeMap.set(a.id, a.verification?.is_evaluative !== false)
-            }
-
-            // Scoring: comprensión (70%) + eficiencia (30%).
-            // Shared formula — see lib/grading.ts
-            // Only evaluate activities marked as evaluative
-            const evaluativeActivities = allActivities.filter(ap =>
-              activityEvaluativeMap.get(ap.activityId) !== false
+            // Punto ÚNICO de cálculo. Antes este camino armaba la nota por su
+            // cuenta —sin pesos por tipo y sin denominador esperado— así que un
+            // mismo alumno sacaba distinto según entrara por el chat o por el
+            // kiosko.
+            const grade = notaDeLaSesion(
+              contentJson.activities,
+              allActivities,
+              lessonSession.lesson.course?.methodology
             )
-
-            // CODE: nota = % de pasos completados (sin rúbrica de comprensión).
-            // REFLECTIVE: fórmula comprensión/eficiencia.
-            const totalEvaluativeCount = Array.from(activityEvaluativeMap.values())
-              .filter(Boolean).length
-            const grade = lessonSession.lesson.course?.methodology === 'CODE'
-              ? calculateCompletionGrade(evaluativeActivities.length, totalEvaluativeCount)
-              : calculateGrade(evaluativeActivities)
 
             logger.info('chat.stream.grade_calculated', {
               sessionId,
               totalActivitiesCompleted: allActivities.length,
-              evaluativeActivitiesCount: evaluativeActivities.length,
               grade,
             })
 
+            // grade null = la evidencia no permite afirmar nada. La sesión se
+            // cierra igual, sin nota: mejor una casilla vacía que un número
+            // inventado sobre evidencia rota.
             await prisma.lessonSession.update({
               where: { id: lessonSession.id },
               data: {
                 completedAt: new Date(),
-                passed: isPassing(grade),
+                passed: grade !== null && isPassing(grade),
                 progress: 100,
                 grade,
               },
@@ -731,8 +722,8 @@ const allActivities = await prisma.activityProgress.findMany({
               where: { sessionId: lessonSession.id, completedAt: null },
               data: {
                 grade,
-                gradeOver20: gradeTo20(grade),
-                passed: isPassing(grade),
+                gradeOver20: grade === null ? null : gradeTo20(grade),
+                passed: grade !== null && isPassing(grade),
                 completedAt: new Date(),
               },
             })
@@ -755,7 +746,7 @@ const allActivities = await prisma.activityProgress.findMany({
               lessonObjective,
               lessonKeyPoints,
               allActivities,
-              grade,
+              grade ?? 0,
               contentJson,
               lessonSession.language,
             ).catch((err: unknown) => {

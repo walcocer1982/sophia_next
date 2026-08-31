@@ -13,7 +13,7 @@
  *   npx tsx scripts/reparar-sesiones-sin-cerrar.ts --aplicar
  */
 import { prisma } from '../lib/prisma'
-import { calculateGrade, calculateCompletionGrade } from '../lib/grading'
+import { notaDeLaSesion } from '../lib/grading'
 import { isPassing } from '../lib/rubric'
 
 const aplicar = process.argv.includes('--aplicar')
@@ -73,10 +73,24 @@ async function main() {
       continue
     }
 
-    const grade =
-      s.lesson.course?.methodology === 'CODE'
-        ? calculateCompletionGrade(evaluables.length, totalEvaluables)
-        : calculateGrade(evaluables)
+    const grade = notaDeLaSesion(
+      (s.lesson.contentJson as { activities: never[] }).activities,
+      s.activities,
+      s.lesson.course?.methodology
+    )
+    if (grade === null) {
+      console.log(
+        `${(s.user.name ?? '').slice(0, 26).padEnd(28)} ${s.lesson.title.slice(0, 26).padEnd(28)} SIN NOTA · evidencia no puntuable`
+      )
+      if (aplicar) {
+        await prisma.lessonSession.update({
+          where: { id: s.id },
+          data: { completedAt: new Date(), passed: false, progress: 100, grade: null },
+        })
+        sinNota++
+      }
+      continue
+    }
 
     console.log(
       `${(s.user.name ?? '').slice(0, 26).padEnd(28)} ${s.lesson.title.slice(0, 26).padEnd(28)} nota ${String(Math.round(grade)).padStart(3)} ${isPassing(grade) ? 'aprobó' : 'desaprobó'}`

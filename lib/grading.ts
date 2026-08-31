@@ -2,6 +2,19 @@ import type { UnderstandingLevel } from '@/types/lesson'
 import { normalizeLevel } from '@/lib/levels'
 
 /**
+ * Nivel reconocido, o null. A diferencia de normalizeLevel —que devuelve
+ * 'developing' ante cualquier cosa— acá un valor desconocido se propaga como
+ * ausencia, para que un fallo del verificador se vea como un fallo y no como
+ * una clase entera en «en proceso».
+ */
+function strictLevel(v: unknown): UnderstandingLevel | null {
+  if (typeof v !== 'string') return null
+  const conocidos = ['beginning', 'developing', 'achieved', 'outstanding',
+    'memorized', 'understood', 'applied', 'analyzed']
+  return conocidos.includes(v) ? normalizeLevel(v) : null
+}
+
+/**
  * Centralized grading formula.
  *
  * Single source of truth para la calificación 0-100. La rúbrica
@@ -59,6 +72,10 @@ export type ScorableActivity = {
   activityType?: 'explanation' | 'practice' | 'reflection' | 'closing'
   /** Override manual del peso (0-10). Si no se setea, se usa el default por tipo. */
   weight?: number | null
+  /** false = avanzó por límite de intentos sin cumplir criterios. */
+  passedCriteria?: boolean | null
+  /** Intentos que la actividad permite. Calibra la penalidad. */
+  maxAttempts?: number | null
 }
 
 /** Peso default por tipo de actividad en el promedio ponderado de la lección.
@@ -97,36 +114,81 @@ export function getActivityWeight(ap: ScorableActivity): number {
  * Penalty por tangentes (>3 ramas) sigue aplicando ×0.9 sobre el resultado.
  * Si no hay intentos registrados, score = 0.
  */
-export function activityScore(ap: ScorableActivity): number {
+export function activityScore(ap: ScorableActivity): number | null {
   const evidence = ap.evidenceData as {
-    attempts?: Array<{ analysis?: { understanding_level?: string } }>
+    attempts?: Array<{ analysis?: { understanding_level?: string; completeness_percentage?: number } }>
   } | null
   const attempts = evidence?.attempts || []
-  if (attempts.length === 0) return 0
+  if (attempts.length === 0) return null
 
-  const scoresPerAttempt = attempts.map((att) => {
-    const level = normalizeLevel(att.analysis?.understanding_level)
-    return COMPREHENSION_SCORES[level] ?? 25
-  })
+  // Nivel ESTRICTO: un valor que no reconocemos es un fallo del verificador, no
+  // un alumno mediocre. Antes normalizeLevel devolvía 'developing' en silencio,
+  // así que un enum cambiado o una respuesta en español bajaba a toda la clase
+  // a «en proceso» sin que nadie se enterara.
+  const puntajes: number[] = []
+  for (const att of attempts) {
+    const bruto = att.analysis?.understanding_level
+    const nivel = strictLevel(bruto)
+    if (!nivel) continue
 
-  const maxScore = Math.max(...scoresPerAttempt)
-  const tangentPenalty = (ap.tangentCount || 0) > 3 ? 0.9 : 1.0
+    let score = COMPREHENSION_SCORES[nivel]
 
-  // Camino 1: alcanzó Logrado (75) o más → max × penalty por intentos
-  if (maxScore >= 75) {
-    const firstReachedIdx = scoresPerAttempt.findIndex((s) => s === maxScore)
-    const attemptsToReach = firstReachedIdx + 1
-    let attemptPenalty: number
-    if (attemptsToReach >= 5) attemptPenalty = 0.85
-    else if (attemptsToReach === 4) attemptPenalty = 0.90
-    else if (attemptsToReach === 3) attemptPenalty = 0.95
-    else attemptPenalty = 1.00 // 1-2 intentos: primer error perdonado
-    return Math.round(maxScore * attemptPenalty * tangentPenalty)
+    // Coherencia entre los dos campos que el verificador devuelve. «Logrado con
+    // 0% de completitud» es una contradicción: en junio hubo 2.400 intentos así
+    // y la fórmula los tradujo a 75. Ante la contradicción gana el número, que
+    // es más difícil de inventar que la etiqueta.
+    const pct = att.analysis?.completeness_percentage
+    if (typeof pct === 'number' && score >= 75 && pct < 40) {
+      score = COMPREHENSION_SCORES.developing
+    }
+    puntajes.push(score)
+  }
+  if (puntajes.length === 0) return null
+
+  const maxScore = Math.max(...puntajes)
+
+  // Un solo estimador: el mejor intento, siempre. Antes se usaba el máximo si
+  // llegaba a 75 y el promedio si no, así que [25,25,75] daba 64 y [25,25,50]
+  // daba 33 — treinta y un puntos de salto por una etiqueta.
+  let score = maxScore
+
+  // Avanzar no es aprobar: quien agotó los intentos sin cumplir un criterio
+  // recibió una decisión pedagógica —que no se trabe—, no un logro.
+  //
+  // El tope exige las DOS condiciones porque `passedCriteria` tiene default
+  // false en el esquema: en los registros viejos ese false significa «nunca se
+  // escribió», no «no cumplió». Aplicarlo a secas aplastó a Química entre 38 y
+  // 50 —menos discriminación que antes de tocar nada—. Con los intentos
+  // agotados como segunda condición, el avance forzado queda identificado sin
+  // castigar datos que nadie llenó.
+  const permitidos = ap.maxAttempts && ap.maxAttempts > 0 ? ap.maxAttempts : 5
+  if (ap.passedCriteria === false && ap.attempts >= permitidos) {
+    score = Math.min(score, COMPREHENSION_SCORES.developing)
   }
 
-  // Camino 2: nunca alcanzó Logrado → promedio
-  const avg = scoresPerAttempt.reduce((sum, s) => sum + s, 0) / scoresPerAttempt.length
-  return Math.round(avg * tangentPenalty)
+  return Math.round(score * attemptPenalty(ap, puntajes, maxScore))
+}
+
+/**
+ * Penalidad por intentos, relativa a los que la actividad PERMITE.
+ *
+ * El umbral fijo anterior (5+ intentos → ×0.85) castigaba lo normal: en el
+ * corpus las actividades de cierre promedian 5-7 intentos, y el límite de
+ * avance forzado es 5. Ahora se mide contra el max_attempts de la propia
+ * actividad, que es un número que el diseñador eligió para ESE ejercicio.
+ */
+function attemptPenalty(
+  ap: ScorableActivity,
+  puntajes: number[],
+  maxScore: number
+): number {
+  const permitidos = ap.maxAttempts && ap.maxAttempts > 0 ? ap.maxAttempts : 5
+  const usados = puntajes.findIndex((s) => s === maxScore) + 1
+  const fraccion = usados / permitidos
+
+  if (fraccion <= 0.5) return 1.0
+  if (fraccion <= 0.8) return 0.95
+  return 0.9
 }
 
 /**
@@ -144,21 +206,25 @@ export function activityScore(ap: ScorableActivity): number {
 export function calculateGrade(
   activities: ScorableActivity[],
   denominator?: number,
-): number {
-  if (activities.length === 0 && (denominator ?? 0) <= 0) return 0
+): number | null {
+  if (activities.length === 0 && (denominator ?? 0) <= 0) return null
 
-  // Numerador: suma de (score × peso)
-  const weightedSum = activities.reduce(
-    (sum, ap) => sum + activityScore(ap) * getActivityWeight(ap),
+  // Una actividad sin nivel legible no se puntúa: no aporta ni al numerador ni
+  // al denominador. Si NINGUNA es puntuable, no hay nota — mejor una sesión sin
+  // calificar que un número inventado sobre evidencia rota.
+  const puntuables = activities.filter((ap) => activityScore(ap) !== null)
+  if (puntuables.length === 0) return null
+
+  const weightedSum = puntuables.reduce(
+    (sum, ap) => sum + (activityScore(ap) ?? 0) * getActivityWeight(ap),
     0,
   )
 
-  // Denominador: override o suma de pesos de las actividades
   const totalWeight =
     denominator ??
-    activities.reduce((sum, ap) => sum + getActivityWeight(ap), 0)
+    puntuables.reduce((sum, ap) => sum + getActivityWeight(ap), 0)
 
-  if (totalWeight <= 0) return 0
+  if (totalWeight <= 0) return null
   return Math.round(weightedSum / totalWeight)
 }
 
@@ -172,4 +238,83 @@ export function calculateCompletionGrade(
 ): number {
   if (total <= 0) return 0
   return Math.round((Math.min(completed, total) / total) * 100)
+}
+
+/** Actividad tal como viene en contentJson, en lo que importa para calificar. */
+type ActividadDelPlan = {
+  id: string
+  type?: string
+  weight?: number | null
+  verification?: { is_evaluative?: boolean; max_attempts?: number }
+}
+
+/** Registro de progreso tal como sale de Prisma. */
+type ProgresoGuardado = {
+  activityId: string
+  attempts: number
+  tangentCount?: number | null
+  evidenceData: unknown
+  passedCriteria?: boolean | null
+}
+
+/**
+ * La nota de una sesión. ÚNICO punto donde se calcula.
+ *
+ * Había tres: chat/stream (sin pesos ni denominador), voice/message (igual) y
+ * eval/finish (con ambos). O sea, tres notas distintas para el mismo alumno
+ * según por dónde entrara. Los pesos por tipo de actividad —exposición 1,
+ * cierre 4— existían en la fórmula pero solo llegaban desde el kiosko: en los
+ * cursos generales todo pesaba 1 y nadie lo notó.
+ *
+ * Devuelve null cuando la evidencia no permite afirmar nada. La sesión se cierra
+ * igual; lo que no se hace es inventarle un número.
+ */
+export function notaDeLaSesion(
+  actividadesDelPlan: ActividadDelPlan[],
+  progreso: ProgresoGuardado[],
+  metodologia: 'CODE' | 'REFLECTIVE' | string | null | undefined
+): number | null {
+  const meta = new Map(actividadesDelPlan.map((a) => [a.id, a]))
+  const esEvaluativa = (id: string) => meta.get(id)?.verification?.is_evaluative !== false
+
+  const evaluativas = progreso.filter((p) => esEvaluativa(p.activityId))
+  const totalEvaluativas = actividadesDelPlan.filter(
+    (a) => a.verification?.is_evaluative !== false
+  ).length
+
+  // CODE mide avance, no comprensión: es el porcentaje de pasos cumplidos.
+  if (metodologia === 'CODE') {
+    return calculateCompletionGrade(evaluativas.length, totalEvaluativas)
+  }
+
+  const enriquecidas: ScorableActivity[] = evaluativas.map((p) => {
+    const a = meta.get(p.activityId)
+    return {
+      attempts: p.attempts,
+      tangentCount: p.tangentCount,
+      evidenceData: p.evidenceData,
+      passedCriteria: p.passedCriteria,
+      activityType: a?.type as ScorableActivity['activityType'],
+      weight: a?.weight,
+      maxAttempts: a?.verification?.max_attempts,
+    }
+  })
+
+  // Denominador = pesos ESPERADOS de todas las evaluativas de la lección, no
+  // solo de las completadas: dejar tres actividades sin hacer debe pesar.
+  const denominador = actividadesDelPlan
+    .filter((a) => a.verification?.is_evaluative !== false)
+    .reduce(
+      (sum, a) =>
+        sum +
+        getActivityWeight({
+          attempts: 0,
+          evidenceData: null,
+          activityType: a.type as ScorableActivity['activityType'],
+          weight: a.weight,
+        }),
+      0
+    )
+
+  return calculateGrade(enriquecidas, denominador)
 }

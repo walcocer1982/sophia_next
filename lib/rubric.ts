@@ -81,6 +81,9 @@ export function calculateRubricLevel(
 ): RubricLevel {
   if (!passedCriteria) return 'en_inicio'
   const score = activityScore(ap)
+  // Sin nivel legible no se puede afirmar nada del alumno: se reporta el nivel
+  // más bajo y queda como señal de que la evidencia está rota.
+  if (score === null) return 'en_inicio'
   if (score >= 100) return 'logrado_destacado'
   if (score >= 75) return 'logrado'
   if (score >= 50) return 'en_proceso'

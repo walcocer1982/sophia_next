@@ -57,7 +57,7 @@ async function main() {
 
   const grade100 = calculateGrade(scorables, totalEvaluative)
   console.log('\n' + '═'.repeat(90))
-  console.log(`🧮 Promedio sobre ${totalEvaluative} actividades = ${grade100}/100 → ${(grade100 / 100 * 20).toFixed(1)}/20`)
+  console.log(`🧮 Promedio sobre ${totalEvaluative} actividades = ${grade100 ?? 'sin nota'}/100 → ${(((grade100 ?? 0) / 100) * 20).toFixed(1)}/20`)
 
   await prisma.$disconnect()
 }

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { getNextActivity, getTotalActivities } from '@/lib/lesson-parser'
 import { verifyActivityCompletion, verifyStepCompletion } from '@/lib/activity-verification'
 import { detectHallucination } from '@/lib/hallucination-detector'
-import { calculateGrade, calculateCompletionGrade } from '@/lib/grading'
+import { notaDeLaSesion } from '@/lib/grading'
 import { isPassing } from '@/lib/rubric'
 import type { LessonContent } from '@/types/lesson'
 
@@ -214,16 +214,26 @@ export async function POST(request: Request) {
       // Última actividad: calcular grade y cerrar sesión
       const allActivities = await prisma.activityProgress.findMany({
         where: { lessonSessionId: lessonSession.id, status: 'COMPLETED' },
-        select: { attempts: true, tangentCount: true, evidenceData: true },
+        select: {
+          activityId: true,
+          attempts: true,
+          tangentCount: true,
+          evidenceData: true,
+          passedCriteria: true,
+        },
       })
-      const grade = lessonSession.lesson.course?.methodology === 'CODE'
-        ? calculateCompletionGrade(completedCount, totalActivities)
-        : calculateGrade(allActivities)
+      // Punto único de cálculo. Este camino ni siquiera pedía activityId, así
+      // que no podía saber qué actividades eran evaluativas: las contaba todas.
+      const grade = notaDeLaSesion(
+        contentJson.activities,
+        allActivities,
+        lessonSession.lesson.course?.methodology
+      )
       await prisma.lessonSession.update({
         where: { id: lessonSession.id },
         data: {
           completedAt: new Date(),
-          passed: isPassing(grade),
+          passed: grade !== null && isPassing(grade),
           progress: 100,
           grade,
         },
