@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#f5f5f5; color:#101828; }
+    a { color:#4f46e5; text-decoration:none; } a:hover { color:#432dd7; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+  </style>
+</helmet>
+
+<div style="width:1000px; height:660px; background:#f5f5f5; padding:28px; box-sizing:border-box; display:flex; flex-direction:column; gap:18px">
+
+  <div style="display:flex; flex-direction:column; gap:3px">
+    <h2 style="margin:0; font-size:17px; font-weight:600; letter-spacing:-0.01em">La fila de una sesión, antes y después</h2>
+    <p style="margin:0; font-size:13px; color:#6a7282">Es el elemento que más se repite en la pantalla: 5 sesiones × 4 secciones = 20 copias.</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:20px; flex-grow:1">
+
+    <div style="display:flex; flex-direction:column; gap:11px">
+      <div style="display:flex; align-items:center; gap:8px">
+        <span style="height:22px; padding:0 9px; border-radius:999px; background:#f5f5f5; color:#6a7282; font-size:12px; font-weight:600; display:inline-flex; align-items:center">Hoy</span>
+      </div>
+
+      <div style="background:#ffffff; border:1px solid #e5e5e5; border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:6px">
+        <div style="display:flex; align-items:center; gap:8px; padding:8px; border-radius:6px; background:#ffffff; border:1px solid #f0f0f0">
+          <span class="mono" style="font-size:10px; color:#99a1af; width:14px">3</span>
+          <div style="flex-grow:1; min-width:0">
+            <p style="margin:0; font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">S3 — Tu tiempo en el internado: un plan que…</p>
+          </div>
+          <div style="height:28px; padding:0 8px; border-radius:6px; border:1px solid #e5e5e5; display:flex; align-items:center; gap:4px; font-size:11px; color:#008236">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#008236" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            Abrir
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px; padding:8px; border-radius:6px; background:rgba(240,253,244,.6); border:1px solid #dcfce7">
+          <span class="mono" style="font-size:10px; color:#99a1af; width:14px">4</span>
+          <div style="flex-grow:1; min-width:0">
+            <p style="margin:0; font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">Técnicas de lectura técnica</p>
+            <p style="margin:0; font-size:10px; color:#008236">11 ago. 2026 · 20:30–22:30</p>
+          </div>
+          <div style="display:flex; gap:4px">
+            <div style="height:28px; padding:0 8px; border-radius:6px; border:1px solid #e5e5e5; display:flex; align-items:center; gap:4px; font-size:11px; color:#432dd7">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#432dd7" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              Editar
+            </div>
+            <div style="height:28px; padding:0 8px; border-radius:6px; border:1px solid #e5e5e5; display:flex; align-items:center; gap:4px; font-size:11px; color:#bb4d00">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bb4d00" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Cerrar
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:6px; padding:8px; border-radius:6px; border:1px solid #f0f0f0; flex-wrap:wrap; justify-content:flex-end">
+          <span class="mono" style="font-size:10px; color:#99a1af; width:14px; margin-right:auto">5</span>
+          <div style="height:28px; width:120px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; padding:0 8px; font-size:11px; color:#4a5565">12/08/2026</div>
+          <div style="height:28px; width:82px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; padding:0 8px; font-size:11px; color:#4a5565">20:30</div>
+          <span style="font-size:10px; color:#99a1af">a</span>
+          <div style="height:28px; width:82px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; padding:0 8px; font-size:11px; color:#4a5565">22:30</div>
+          <div style="height:28px; padding:0 12px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; font-size:11px; font-weight:500">OK</div>
+          <div style="height:28px; padding:0 10px; border-radius:8px; border:1px solid #e5e5e5; display:flex; align-items:center; font-size:11px; color:#4a5565">✕</div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:7px; padding:0 2px">
+        <div style="display:flex; gap:8px; align-items:flex-start"><span style="color:#e7000b; font-size:13px; line-height:1.4">–</span><span style="font-size:13px; color:#4a5565; line-height:1.45">Títulos truncados: no se distingue una sesión de otra</span></div>
+        <div style="display:flex; gap:8px; align-items:flex-start"><span style="color:#e7000b; font-size:13px; line-height:1.4">–</span><span style="font-size:13px; color:#4a5565; line-height:1.45">Tipografía de 10–11 px; la fecha pesa menos que el botón</span></div>
+        <div style="display:flex; gap:8px; align-items:flex-start"><span style="color:#e7000b; font-size:13px; line-height:1.4">–</span><span style="font-size:13px; color:#4a5565; line-height:1.45">Tres campos por sesión, uno por uno, sin validación</span></div>
+        <div style="display:flex; gap:8px; align-items:flex-start"><span style="color:#e7000b; font-size:13px; line-height:1.4">–</span><span style="font-size:13px; color:#4a5565; line-height:1.45">Nada dice si alguien entró, ni si la fecha ya pasó</span></div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:11px">
+      <div style="display:flex; align-items:center; gap:8px">
+        <span style="height:22px; padding:0 9px; border-radius:999px; background:#eef2ff; color:#4f46e5; font-size:12px; font-weight:600; display:inline-flex; align-items:center">Propuesta</span>
+      </div>
+
+      <div style="background:#ffffff; border:1px solid #e5e5e5; border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:8px">
+        <div style="display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:10px; border:1px dashed #d4d4d4">
+          <span class="mono" style="font-size:12px; color:#99a1af; width:14px">3</span>
+          <span style="flex-grow:1; font-size:14px; font-weight:500; color:#6a7282">S3 — Tu tiempo en el internado</span>
+          <span style="font-size:12px; color:#99a1af">Sin programar</span>
+          <div style="height:30px; padding:0 11px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; font-size:13px; font-weight:500">Programar</div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:10px; border:1px solid #a4f4cf; background:#f0fdf4">
+          <span class="mono" style="font-size:12px; color:#008236; width:14px">4</span>
+          <div style="flex-grow:1; display:flex; flex-direction:column; gap:2px">
+            <span style="font-size:14px; font-weight:600">Técnicas de lectura técnica</span>
+            <span class="mono" style="font-size:12px; color:#008236; font-weight:500">11 ago · 20:30 – 22:30 · cierra en 1 h 40</span>
+          </div>
+          <span style="display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 10px; border-radius:999px; background:#ffffff; border:1px solid #a4f4cf; color:#008236; font-size:12px; font-weight:600">
+            <span style="width:6px; height:6px; border-radius:99px; background:#00bc7d"></span>3 dentro
+          </span>
+          <div style="height:30px; padding:0 11px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; font-size:13px; font-weight:500; color:#364153">Editar</div>
+        </div>
+
+        <div style="border-radius:10px; border:1.5px solid #4f46e5; background:#ffffff; padding:12px; display:flex; flex-direction:column; gap:10px">
+          <div style="display:flex; align-items:center; gap:12px">
+            <span class="mono" style="font-size:12px; color:#99a1af; width:14px">5</span>
+            <span style="flex-grow:1; font-size:14px; font-weight:600">S2 — Tu equipo trabaja contigo</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; padding-left:26px; flex-wrap:wrap">
+            <div style="height:34px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; padding:0 11px; font-size:13px; font-weight:500">mar 11 ago</div>
+            <div style="height:34px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; padding:0 11px; font-size:13px" class="mono">20:00</div>
+            <span style="font-size:13px; color:#6a7282">a</span>
+            <div style="height:34px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; padding:0 11px; font-size:13px" class="mono">23:00</div>
+            <div style="height:34px; padding:0 14px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; font-size:13px; font-weight:500">Guardar</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:7px; padding-left:26px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#007a55" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+            <span style="font-size:12px; color:#007a55; font-weight:500">3 h para 4 actividades · sin choques ese día</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:7px; padding:0 2px">
+        <div style="display:flex; gap:8px; align-items:flex-start"><span style="color:#007a55; font-size:13px; line-height:1.4">+</span><span style="font-size:13px; color:#4a5565; line-height:1.45">Título completo en 14 px; la fecha es dato, no adorno</span></div>
+        <div style="display:flex; gap:8px; align-items:flex-start"><span style="color:#007a55; font-size:13px; line-height:1.4">+</span><span style="font-size:13px; color:#4a5565; line-height:1.45">Tres estados distinguibles: sin programar, abierta, editando</span></div>
+        <div style="display:flex; gap:8px; align-items:flex-start"><span style="color:#007a55; font-size:13px; line-height:1.4">+</span><span style="font-size:13px; color:#4a5565; line-height:1.45">Valida mientras escribes: duración vs. actividades y choques</span></div>
+        <div style="display:flex; gap:8px; align-items:flex-start"><span style="color:#007a55; font-size:13px; line-height:1.4">+</span><span style="font-size:13px; color:#4a5565; line-height:1.45">Cuánto falta para cerrar y cuántos están dentro ahora</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

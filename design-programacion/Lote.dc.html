@@ -1,0 +1,163 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#f5f5f5; color:#101828; }
+    a { color:#4f46e5; text-decoration:none; } a:hover { color:#432dd7; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+  </style>
+</helmet>
+
+<div style="width:1040px; height:840px; background:#f5f5f5; padding:32px; box-sizing:border-box; display:flex; align-items:center; justify-content:center">
+
+  <div style="width:976px; background:#ffffff; border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.10); display:flex; flex-direction:column; overflow:hidden">
+
+    <div style="padding:20px 24px; border-bottom:1px solid #e5e5e5; display:flex; flex-direction:column; gap:4px">
+      <h2 style="margin:0; font-size:18px; font-weight:600; letter-spacing:-0.01em">Programar plan</h2>
+      <p style="margin:0; font-size:13px; color:#6a7282">Define el patrón una vez y aplícalo a todas las secciones que lo dictan.</p>
+    </div>
+
+    <div style="display:grid; grid-template-columns:minmax(0,1fr) 320px">
+
+      <div style="padding:20px 24px; display:flex; flex-direction:column; gap:18px; border-right:1px solid #e5e5e5">
+
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <label style="font-size:12px; font-weight:600; color:#364153">Curso</label>
+          <div style="height:36px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; justify-content:space-between; padding:0 12px; font-size:14px">
+            Plan de Tutoría de Inducción Académica
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#99a1af" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px">
+          <label style="font-size:12px; font-weight:600; color:#364153">Patrón</label>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+            <span style="font-size:14px; color:#4a5565">Empezar el</span>
+            <div style="height:36px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; padding:0 12px; font-size:14px; font-weight:500">11 ago 2026</div>
+            <span style="font-size:14px; color:#4a5565">y repetir</span>
+            <div style="display:flex; gap:4px">
+              <div style="width:34px; height:34px; border-radius:8px; border:1px solid #e5e5e5; display:flex; align-items:center; justify-content:center; font-size:12px; color:#99a1af">L</div>
+              <div style="width:34px; height:34px; border-radius:8px; border:1px solid #4f46e5; background:#eef2ff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:#4f46e5">M</div>
+              <div style="width:34px; height:34px; border-radius:8px; border:1px solid #e5e5e5; display:flex; align-items:center; justify-content:center; font-size:12px; color:#99a1af">M</div>
+              <div style="width:34px; height:34px; border-radius:8px; border:1px solid #4f46e5; background:#eef2ff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:#4f46e5">J</div>
+              <div style="width:34px; height:34px; border-radius:8px; border:1px solid #e5e5e5; display:flex; align-items:center; justify-content:center; font-size:12px; color:#99a1af">V</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px">
+            <span style="font-size:14px; color:#4a5565">Ventana</span>
+            <div style="height:36px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; padding:0 12px; font-size:14px" class="mono">20:00</div>
+            <span style="font-size:14px; color:#6a7282">a</span>
+            <div style="height:36px; border:1px solid #e5e5e5; border-radius:8px; display:flex; align-items:center; padding:0 12px; font-size:14px" class="mono">23:00</div>
+            <span style="display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 10px; border-radius:999px; background:#ecfdf5; color:#007a55; font-size:12px; font-weight:500">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#007a55" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+              3 h alcanza para 5 actividades
+            </span>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <label style="font-size:12px; font-weight:600; color:#364153">Sesiones a programar</label>
+          <div style="border:1px solid #e5e5e5; border-radius:10px; overflow:hidden">
+            <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid #f0f0f0">
+              <div style="width:16px; height:16px; border-radius:4px; background:#101828; display:flex; align-items:center; justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <span class="mono" style="font-size:11px; color:#99a1af; width:16px">0</span>
+              <span style="flex-grow:1; font-size:13px; font-weight:500">S0 — Construye tu plan</span>
+              <span class="mono" style="font-size:12px; color:#4a5565">mar 11 · 20:00</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid #f0f0f0">
+              <div style="width:16px; height:16px; border-radius:4px; background:#101828; display:flex; align-items:center; justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <span class="mono" style="font-size:11px; color:#99a1af; width:16px">1</span>
+              <span style="flex-grow:1; font-size:13px; font-weight:500">S1 — Gana el TC</span>
+              <span class="mono" style="font-size:12px; color:#4a5565">jue 13 · 20:00</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid #f0f0f0">
+              <div style="width:16px; height:16px; border-radius:4px; background:#101828; display:flex; align-items:center; justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <span class="mono" style="font-size:11px; color:#99a1af; width:16px">2</span>
+              <span style="flex-grow:1; font-size:13px; font-weight:500">S2 — Tu equipo trabaja contigo</span>
+              <span class="mono" style="font-size:12px; color:#4a5565">mar 18 · 20:00</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid #f0f0f0">
+              <div style="width:16px; height:16px; border-radius:4px; background:#101828; display:flex; align-items:center; justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <span class="mono" style="font-size:11px; color:#99a1af; width:16px">3</span>
+              <span style="flex-grow:1; font-size:13px; font-weight:500">S3 — Tu tiempo en el internado</span>
+              <span class="mono" style="font-size:12px; color:#4a5565">jue 20 · 20:00</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:#fafafa">
+              <div style="width:16px; height:16px; border-radius:4px; border:1.5px solid #d4d4d4"></div>
+              <span class="mono" style="font-size:11px; color:#99a1af; width:16px">4</span>
+              <span style="flex-grow:1; font-size:13px; color:#99a1af">Técnicas de lectura técnica</span>
+              <span style="font-size:12px; color:#99a1af">sin programar</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:20px; display:flex; flex-direction:column; gap:10px; background:#fafafa">
+        <label style="font-size:12px; font-weight:600; color:#364153">Aplicar a</label>
+
+        <div style="border:1.5px solid #4f46e5; background:#ffffff; border-radius:10px; padding:11px 12px; display:flex; align-items:flex-start; gap:10px">
+          <div style="width:16px; height:16px; border-radius:4px; background:#4f46e5; display:flex; align-items:center; justify-content:center; margin-top:1px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+          <div style="flex-grow:1; display:flex; flex-direction:column; gap:3px">
+            <div style="display:flex; align-items:center; gap:6px">
+              <span class="mono" style="font-size:10px; background:#ecfdf5; color:#007a55; padding:2px 5px; border-radius:4px">ABQ</span>
+              <span style="font-size:13px; font-weight:600">Junio</span>
+            </div>
+            <span style="font-size:12px; color:#6a7282">9 estudiantes</span>
+          </div>
+        </div>
+
+        <div style="border:1.5px solid #4f46e5; background:#ffffff; border-radius:10px; padding:11px 12px; display:flex; align-items:flex-start; gap:10px">
+          <div style="width:16px; height:16px; border-radius:4px; background:#4f46e5; display:flex; align-items:center; justify-content:center; margin-top:1px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+          <div style="flex-grow:1; display:flex; flex-direction:column; gap:3px">
+            <div style="display:flex; align-items:center; gap:6px">
+              <span class="mono" style="font-size:10px; background:#ecfdf5; color:#007a55; padding:2px 5px; border-radius:4px">IRQ</span>
+              <span style="font-size:13px; font-weight:600">Junio</span>
+            </div>
+            <span style="font-size:12px; color:#6a7282">37 estudiantes</span>
+          </div>
+        </div>
+
+        <div style="border:1.5px solid #4f46e5; background:#ffffff; border-radius:10px; padding:11px 12px; display:flex; align-items:flex-start; gap:10px">
+          <div style="width:16px; height:16px; border-radius:4px; background:#4f46e5; display:flex; align-items:center; justify-content:center; margin-top:1px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+          <div style="flex-grow:1; display:flex; flex-direction:column; gap:3px">
+            <div style="display:flex; align-items:center; gap:6px">
+              <span class="mono" style="font-size:10px; background:#ecfdf5; color:#007a55; padding:2px 5px; border-radius:4px">FCHB</span>
+              <span style="font-size:13px; font-weight:600">Junio</span>
+            </div>
+            <span style="font-size:12px; color:#6a7282">24 estudiantes</span>
+          </div>
+        </div>
+
+        <div style="border:1px solid #e5e5e5; background:#ffffff; border-radius:10px; padding:11px 12px; display:flex; align-items:flex-start; gap:10px; opacity:.65">
+          <div style="width:16px; height:16px; border-radius:4px; border:1.5px solid #d4d4d4; margin-top:1px"></div>
+          <div style="flex-grow:1; display:flex; flex-direction:column; gap:3px">
+            <div style="display:flex; align-items:center; gap:6px">
+              <span style="font-size:13px; font-weight:600">Tutoría</span>
+              <span style="font-size:11px; background:#f5f5f5; color:#6a7282; padding:2px 6px; border-radius:999px">archivada</span>
+            </div>
+            <span style="font-size:12px; color:#6a7282">51 estudiantes</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid #e5e5e5; padding:14px 24px; display:flex; align-items:center; gap:16px; background:#ffffff">
+      <div style="flex-grow:1; display:flex; align-items:center; gap:10px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#007a55" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M20 6 9 17l-5-5"/></svg>
+        <span style="font-size:13px; color:#364153"><strong style="color:#101828">12 programaciones</strong> — 4 sesiones × 3 secciones · sin choques detectados</span>
+      </div>
+      <div style="height:36px; padding:0 16px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; display:flex; align-items:center; font-size:14px; font-weight:500; color:#364153">Cancelar</div>
+      <div style="height:36px; padding:0 16px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; font-size:14px; font-weight:500">Aplicar a 3 secciones</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

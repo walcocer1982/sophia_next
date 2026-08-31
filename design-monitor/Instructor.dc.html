@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#ffffff; color:#101828; }
+    a { color:#4f46e5; text-decoration:none; } a:hover { color:#432dd7; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+  </style>
+</helmet>
+
+<div style="width:1200px; height:900px; background:#ffffff; padding:32px; box-sizing:border-box; display:flex; flex-direction:column; gap:20px; overflow:hidden">
+
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:24px">
+    <div style="display:flex; flex-direction:column; gap:5px">
+      <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-0.02em">Mis grupos</h1>
+      <p style="margin:0; font-size:14px; color:#6a7282">Ana Capcha · 2 secciones asignadas</p>
+    </div>
+  </div>
+
+  <!-- Cuando hay una sesión abierta, eso manda sobre todo lo demás -->
+  <div style="border:1.5px solid #a4f4cf; background:#f0fdf4; border-radius:12px; padding:16px 20px; display:flex; align-items:center; gap:18px">
+    <span style="display:inline-flex; align-items:center; gap:7px; height:26px; padding:0 11px; border-radius:999px; background:#ffffff; border:1px solid #a4f4cf; color:#008236; font-size:12px; font-weight:600; flex-shrink:0">
+      <span style="width:7px; height:7px; border-radius:99px; background:#00bc7d"></span>
+      En vivo
+    </span>
+    <div style="flex-grow:1">
+      <p style="margin:0; font-size:15px; font-weight:500">S0 — Construye tu plan · PM sección 1</p>
+      <p style="margin:3px 0 0; font-size:13px; color:#4a5565">
+        6 de 10 dentro · <strong style="color:#e7000b">4 no han entrado</strong> · cierra en 1 h 12 min
+      </p>
+    </div>
+    <div style="height:38px; padding:0 16px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; font-size:14px; font-weight:500; flex-shrink:0">
+      Ver el tablero
+    </div>
+  </div>
+
+  <!-- Sus secciones. Sin árbol: con dos grupos, tres niveles de navegación sobran. -->
+  <div style="display:flex; flex-direction:column; gap:14px; flex-grow:1; overflow-y:auto">
+
+    <div style="border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); overflow:hidden">
+      <div style="padding:18px 20px; display:flex; align-items:center; gap:20px; border-bottom:1px solid #f0f0f0">
+        <div style="flex-grow:1; display:flex; flex-direction:column; gap:6px">
+          <div style="display:flex; align-items:center; gap:9px">
+            <h2 style="margin:0; font-size:16px; font-weight:600">Plan de Tutoría de Inducción Académica</h2>
+            <span style="display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:999px; background:#faf5ff; color:#8200db; font-size:12px; font-weight:500">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8200db" stroke-width="2" stroke-linecap="round"><path d="m12 3 1.9 5.8L20 10l-5.2 3.6L16 20l-4-3-4 3 1.2-6.4L4 10l6.1-1.2Z"/></svg>
+              Transversal
+            </span>
+          </div>
+          <p style="margin:0; font-size:13px; color:#6a7282">PM sección 1 · ABQ · 2026-1 · 10 estudiantes · 4 de 5 sesiones cerradas</p>
+        </div>
+        <span style="display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 12px; border-radius:999px; background:#fef2f2; color:#e7000b; font-size:13px; font-weight:600; flex-shrink:0">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2.5" stroke-linecap="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+          4 necesitan atención
+        </span>
+      </div>
+
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) 106px minmax(0,1.1fr) 122px; align-items:center; gap:16px; padding:13px 20px; background:#fef2f2">
+        <div style="display:flex; flex-direction:column; gap:2px">
+          <span style="font-size:14px; font-weight:600">Karolay Cahuina Rojas</span>
+          <span class="mono" style="font-size:11px; color:#99a1af">73456789</span>
+        </div>
+        <span class="mono" style="font-size:13px; color:#e7000b; font-weight:500">1 de 4</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#e7000b; font-weight:500">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          faltó a S1, S2 y S3
+        </span>
+        <div style="justify-self:end; height:30px; padding:0 12px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+          WhatsApp
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) 106px minmax(0,1.1fr) 122px; align-items:center; gap:16px; padding:13px 20px; border-top:1px solid #f0f0f0; background:#fffbeb">
+        <div style="display:flex; flex-direction:column; gap:2px">
+          <span style="font-size:14px; font-weight:600">Jhoan Dionisio Ramos</span>
+          <span class="mono" style="font-size:11px; color:#99a1af">71642833</span>
+        </div>
+        <span class="mono" style="font-size:13px; color:#4a5565">3 de 4</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#bb4d00; font-weight:500">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#bb4d00" stroke-width="2.5" stroke-linecap="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+          se esfuerza y no le sale
+        </span>
+        <div style="justify-self:end; height:30px; padding:0 12px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+          WhatsApp
+        </div>
+      </div>
+
+      <div style="padding:12px 20px; border-top:1px solid #f0f0f0; text-align:center">
+        <span style="font-size:13px; color:#99a1af">2 más necesitan atención · 6 sin señales</span>
+      </div>
+    </div>
+
+    <div style="border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); padding:18px 20px; display:flex; align-items:center; gap:20px">
+      <div style="flex-grow:1; display:flex; flex-direction:column; gap:6px">
+        <h2 style="margin:0; font-size:16px; font-weight:600">Química aplicada a Procesos Metalúrgicos</h2>
+        <p style="margin:0; font-size:13px; color:#6a7282">sección 2 · ABQ · 2026-1 · 27 estudiantes · 4 de 7 sesiones cerradas</p>
+      </div>
+      <span style="display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 12px; border-radius:999px; background:#f0fdf4; color:#008236; font-size:13px; font-weight:600; flex-shrink:0">
+        sin señales
+      </span>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#99a1af" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><path d="M9 18l6-6-6-6"/></svg>
+    </div>
+  </div>
+
+  <p style="margin:0; font-size:12px; color:#99a1af; line-height:1.5">
+    Sin árbol de admisiones, sedes y carreras: con dos grupos, tres niveles de navegación sobran. El líder los necesita porque ve 36 secciones; el instructor, no.
+  </p>
+</div>
+</x-dc>
+</body>
+</html>

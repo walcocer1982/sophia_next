@@ -1,0 +1,116 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><script src="./support.js"></script></head><body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body{margin:0;font-family:Geist,system-ui,sans-serif;background:#ffffff;color:#101828}
+    .mono{font-family:"Geist Mono",ui-monospace,monospace}
+    .rama{display:flex;align-items:center;gap:8px;height:31px;padding:0 10px;border-radius:8px;font-size:14px;color:#364153}
+    .hoja{display:flex;align-items:center;height:29px;padding:0 10px 0 30px;border-radius:8px;font-size:13.5px;color:#4a5565}
+  </style>
+</helmet>
+
+<div style="width:1440px;height:900px;background:#ffffff;box-sizing:border-box;padding:32px;display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <h1 style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.02em">Monitor</h1>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:13px;color:#6a7282">Erick Salazar</span>
+      <span style="height:22px;padding:0 9px;border-radius:999px;background:#09222d;color:#fbc50b;font-size:12px;font-weight:600;display:inline-flex;align-items:center">Superadmin</span>
+    </div>
+  </div>
+
+  <div style="flex-grow:1;display:flex;border:1px solid #e5e5e5;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);overflow:hidden;min-height:0">
+
+    <aside style="width:240px;flex-shrink:0;background:#f5f5f5;border-right:1px solid #e5e5e5;padding:14px 10px;display:flex;flex-direction:column;gap:1px;overflow-y:auto">
+      <div class="rama" style="font-weight:600;color:#101828">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a7282" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+        2026-1
+      </div>
+      <div class="rama" style="padding-left:24px;font-weight:600;color:#101828">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a7282" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+        ABQ
+      </div>
+      <div class="hoja" style="margin-left:24px">Exploración y Op. Minera</div>
+      <div class="hoja" style="margin-left:24px">Seguridad Industrial</div>
+      <div class="hoja" style="margin-left:24px">Procesos Metalúrgicos</div>
+      <div class="rama" style="padding-left:24px;font-weight:600;color:#101828">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a7282" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+        FCHB
+      </div>
+      <div class="hoja" style="margin-left:24px">Exploración y Op. Minera</div>
+      <div class="hoja" style="margin-left:24px">Seguridad Industrial</div>
+      <div class="hoja" style="margin-left:24px">Mant. de Maq. Pesada</div>
+      <div class="hoja" style="margin-left:24px">Mant. Sist. Eléctricos</div>
+      <div class="rama" style="padding-left:24px;font-weight:600;color:#101828">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a7282" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+        IRQ
+      </div>
+      <div class="hoja" style="margin-left:24px">Mant. de Maq. Pesada</div>
+      <div class="hoja" style="margin-left:24px">Mant. Sist. Eléctricos</div>
+      <div class="hoja" style="margin-left:24px">Gestión de Mant. Industrial</div>
+
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e5e5">
+        <div class="rama" style="background:#ffffff;box-shadow:0 1px 2px rgba(0,0,0,.05);font-weight:600;color:#101828">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8200db" stroke-width="2" stroke-linecap="round"><path d="m12 3 1.9 5.8L20 10l-5.2 3.6L16 20l-4-3-4 3 1.2-6.4L4 10l6.1-1.2Z"/></svg>
+          Transversales
+        </div>
+        <div class="hoja" style="margin-left:0;padding-left:30px;font-weight:600;color:#101828">Plan de Tutoría</div>
+      </div>
+    </aside>
+
+    <main style="flex-grow:1;padding:24px;display:flex;flex-direction:column;gap:18px;min-width:0">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <span style="font-size:13px;color:#99a1af">2026-1 / Transversal</span>
+        <h2 style="margin:0;font-size:19px;font-weight:600">Plan de Tutoría de Inducción Académica</h2>
+        <p style="margin:0;font-size:14px;color:#6a7282">96 estudiantes en 3 sedes · 5 sesiones</p>
+      </div>
+
+      <!-- Lo que solo el superadmin puede ver: las sedes comparadas -->
+      <div style="border:1px solid #e5e5e5;border-radius:12px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:120px 100px minmax(0,1fr) 140px 150px;gap:16px;padding:11px 18px;background:#fafafa;border-bottom:1px solid #e5e5e5;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#6a7282">
+          <span>Sede</span><span>Alumnos</span><span>Avance</span><span>Responsable</span><span>Atención</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:120px 100px minmax(0,1fr) 140px 150px;gap:16px;align-items:center;padding:15px 18px;border-bottom:1px solid #f0f0f0">
+          <span style="font-size:15px;font-weight:600">FCHB</span>
+          <span class="mono" style="font-size:14px;color:#4a5565">49</span>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div style="height:5px;border-radius:99px;background:#e5e5e5;overflow:hidden"><span style="display:block;width:82%;height:100%;background:#00bc7d"></span></div>
+            <span style="font-size:12px;color:#6a7282">4 de 5 cerradas</span>
+          </div>
+          <span style="font-size:13px;color:#4a5565">Ángel del Carpio</span>
+          <span style="height:26px;padding:0 11px;border-radius:999px;background:#fffbeb;color:#bb4d00;font-size:13px;font-weight:600;display:inline-flex;align-items:center;justify-self:start">7 alumnos</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:120px 100px minmax(0,1fr) 140px 150px;gap:16px;align-items:center;padding:15px 18px;border-bottom:1px solid #f0f0f0">
+          <span style="font-size:15px;font-weight:600">IRQ</span>
+          <span class="mono" style="font-size:14px;color:#4a5565">35</span>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div style="height:5px;border-radius:99px;background:#e5e5e5;overflow:hidden"><span style="display:block;width:80%;height:100%;background:#00bc7d"></span></div>
+            <span style="font-size:12px;color:#6a7282">4 de 5 cerradas</span>
+          </div>
+          <span style="font-size:13px;color:#4a5565">Ana Capcha</span>
+          <span style="height:26px;padding:0 11px;border-radius:999px;background:#fef2f2;color:#e7000b;font-size:13px;font-weight:600;display:inline-flex;align-items:center;justify-self:start">9 alumnos</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:120px 100px minmax(0,1fr) 140px 150px;gap:16px;align-items:center;padding:15px 18px;background:#fef2f2">
+          <span style="font-size:15px;font-weight:600">ABQ</span>
+          <span class="mono" style="font-size:14px;color:#4a5565">12</span>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div style="height:5px;border-radius:99px;background:#e5e5e5;overflow:hidden"><span style="display:block;width:33%;height:100%;background:#e7000b"></span></div>
+            <span style="font-size:12px;color:#c10007;font-weight:500">S0 abierta hace 3 semanas · 8 no entraron</span>
+          </div>
+          <span style="font-size:13px;color:#4a5565">Edwin —</span>
+          <span style="height:26px;padding:0 11px;border-radius:999px;background:#ffffff;border:1px solid #ffc9c9;color:#e7000b;font-size:13px;font-weight:600;display:inline-flex;align-items:center;justify-self:start">10 alumnos</span>
+        </div>
+      </div>
+
+      <p style="margin:auto 0 0;font-size:12px;color:#99a1af;line-height:1.5;text-wrap:pretty">
+        Esta comparación entre sedes es lo único que el superadmin ve y nadie más: cada coordinador ve su fila, no la tabla. Y aquí se lee sola la pregunta de gestión — ABQ va tres semanas atrás con la mitad del grupo sin entrar.
+      </p>
+    </main>
+  </div>
+</div>
+</x-dc>
+</body></html>

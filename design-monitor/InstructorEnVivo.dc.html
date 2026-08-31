@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#ffffff; color:#101828; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+    .dot { width:9px; height:9px; border-radius:99px; flex-shrink:0; }
+  </style>
+</helmet>
+
+<div style="width:1200px; height:940px; background:#ffffff; padding:32px; box-sizing:border-box; display:flex; flex-direction:column; gap:18px; overflow:hidden">
+
+  <!-- Cabecera: qué sesión, de qué grupo, y cuánto queda -->
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:24px">
+    <div style="display:flex; flex-direction:column; gap:6px">
+      <div style="display:flex; align-items:center; gap:10px">
+        <span style="display:inline-flex; align-items:center; gap:7px; height:24px; padding:0 10px; border-radius:999px; background:#f0fdf4; border:1px solid #a4f4cf; color:#008236; font-size:12px; font-weight:600">
+          <span class="dot" style="background:#00bc7d"></span> En vivo
+        </span>
+        <span style="font-size:13px; color:#99a1af">2026-1 / ABQ / Procesos Metalúrgicos</span>
+      </div>
+      <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-0.02em">S0 — Construye tu plan</h1>
+      <p style="margin:0; font-size:14px; color:#6a7282">PM sección 1 · 10 estudiantes · abrió 8:00 p. m.</p>
+    </div>
+    <div style="text-align:right; display:flex; flex-direction:column; gap:3px; flex-shrink:0">
+      <span class="mono" style="font-size:26px; font-weight:600; letter-spacing:-0.02em">1:12:04</span>
+      <span style="font-size:13px; color:#6a7282">para el cierre</span>
+    </div>
+  </div>
+
+  <!-- Los tres números. El que importa es el rojo. -->
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px">
+    <div style="border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); padding:16px 18px; display:flex; flex-direction:column; gap:3px">
+      <span class="mono" style="font-size:28px; font-weight:600; letter-spacing:-0.02em">6</span>
+      <span style="font-size:13px; color:#6a7282">avanzando</span>
+    </div>
+    <div style="border:1px solid #fee685; background:#fffbeb; border-radius:12px; padding:16px 18px; display:flex; flex-direction:column; gap:3px">
+      <span class="mono" style="font-size:28px; font-weight:600; letter-spacing:-0.02em; color:#bb4d00">2</span>
+      <span style="font-size:13px; color:#7b3306">llevan rato en la misma actividad</span>
+    </div>
+    <div style="border:1.5px solid #ffc9c9; background:#fef2f2; border-radius:12px; padding:16px 18px; display:flex; flex-direction:column; gap:3px">
+      <span class="mono" style="font-size:28px; font-weight:600; letter-spacing:-0.02em; color:#e7000b">2</span>
+      <span style="font-size:13px; color:#9f0712; font-weight:500">no han entrado</span>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:16px; flex-grow:1; min-height:0">
+
+    <!-- Quién está dentro y en qué actividad va -->
+    <div style="flex-grow:1; border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); display:flex; flex-direction:column; overflow:hidden">
+      <div style="padding:13px 18px; border-bottom:1px solid #f0f0f0; display:flex; align-items:center; justify-content:space-between">
+        <span style="font-size:14px; font-weight:600">Dentro ahora</span>
+        <span style="font-size:12px; color:#99a1af">5 actividades · se actualiza solo</span>
+      </div>
+
+      <div style="flex-grow:1; overflow-y:auto">
+
+        <div style="display:grid; grid-template-columns:minmax(0,1fr) 96px minmax(0,1fr) 108px; align-items:center; gap:14px; padding:12px 18px; background:#fffbeb; border-bottom:1px solid #f0f0f0">
+          <span style="font-size:14px; font-weight:600">Jhoan Dionisio Ramos</span>
+          <div style="display:flex; gap:4px">
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#00bc7d"></span>
+            <span class="dot" style="background:#fdc700"></span><span class="dot" style="background:#e5e5e5"></span><span class="dot" style="background:#e5e5e5"></span>
+          </div>
+          <span style="font-size:13px; color:#bb4d00; font-weight:500">A3 · 22 min · 5 intentos</span>
+          <div style="justify-self:end; height:30px; padding:0 12px; border-radius:8px; border:1px solid #d1d5dc; display:flex; align-items:center; font-size:13px; font-weight:500; color:#364153">Escribirle</div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:minmax(0,1fr) 96px minmax(0,1fr) 108px; align-items:center; gap:14px; padding:12px 18px; background:#fffbeb; border-bottom:1px solid #f0f0f0">
+          <span style="font-size:14px; font-weight:600">Milagros Quispe Ayala</span>
+          <div style="display:flex; gap:4px">
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#fdc700"></span>
+            <span class="dot" style="background:#e5e5e5"></span><span class="dot" style="background:#e5e5e5"></span><span class="dot" style="background:#e5e5e5"></span>
+          </div>
+          <span style="font-size:13px; color:#bb4d00; font-weight:500">A2 · 19 min · 6 intentos</span>
+          <div style="justify-self:end; height:30px; padding:0 12px; border-radius:8px; border:1px solid #d1d5dc; display:flex; align-items:center; font-size:13px; font-weight:500; color:#364153">Escribirle</div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:minmax(0,1fr) 96px minmax(0,1fr) 108px; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid #f0f0f0">
+          <span style="font-size:14px; color:#364153">Karolay Cahuina Rojas</span>
+          <div style="display:flex; gap:4px">
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#00bc7d"></span>
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#fdc700"></span>
+          </div>
+          <span style="font-size:13px; color:#6a7282">A5 · 4 min</span>
+          <span></span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:minmax(0,1fr) 96px minmax(0,1fr) 108px; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid #f0f0f0">
+          <span style="font-size:14px; color:#364153">Diego Ramírez Soto</span>
+          <div style="display:flex; gap:4px">
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#00bc7d"></span>
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#fdc700"></span><span class="dot" style="background:#e5e5e5"></span>
+          </div>
+          <span style="font-size:13px; color:#6a7282">A4 · 7 min</span>
+          <span></span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:minmax(0,1fr) 96px minmax(0,1fr) 108px; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid #f0f0f0">
+          <span style="font-size:14px; color:#364153">Sheyla Ttito Mamani</span>
+          <div style="display:flex; gap:4px">
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#00bc7d"></span>
+            <span class="dot" style="background:#fdc700"></span><span class="dot" style="background:#e5e5e5"></span><span class="dot" style="background:#e5e5e5"></span>
+          </div>
+          <span style="font-size:13px; color:#6a7282">A3 · 6 min</span>
+          <span></span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:minmax(0,1fr) 96px minmax(0,1fr) 108px; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid #f0f0f0">
+          <span style="font-size:14px; color:#364153">Anthony Huamán Vega</span>
+          <div style="display:flex; gap:4px">
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#00bc7d"></span>
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#00bc7d"></span>
+          </div>
+          <span style="font-size:13px; color:#008236; font-weight:500">terminó · 34 min</span>
+          <span></span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:minmax(0,1fr) 96px minmax(0,1fr) 108px; align-items:center; gap:14px; padding:12px 18px">
+          <span style="font-size:14px; color:#364153">Brayan Mendoza Pillco</span>
+          <div style="display:flex; gap:4px">
+            <span class="dot" style="background:#00bc7d"></span><span class="dot" style="background:#00bc7d"></span>
+            <span class="dot" style="background:#e5e5e5"></span><span class="dot" style="background:#e5e5e5"></span><span class="dot" style="background:#e5e5e5"></span>
+          </div>
+          <span style="font-size:13px; color:#99a1af">A2 · sin escribir hace 9 min</span>
+          <span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lo más accionable de toda la pantalla -->
+    <div style="width:326px; flex-shrink:0; border:1.5px solid #ffc9c9; background:#fef2f2; border-radius:12px; display:flex; flex-direction:column; overflow:hidden">
+      <div style="padding:14px 18px; border-bottom:1px solid #ffc9c9">
+        <p style="margin:0; font-size:14px; font-weight:600; color:#9f0712">No han entrado</p>
+        <p style="margin:3px 0 0; font-size:12px; color:#c10007">Si no entran antes de las 10:00 p. m., la sesión se les cierra.</p>
+      </div>
+
+      <div style="padding:12px 18px; display:flex; flex-direction:column; gap:10px">
+        <div style="background:#ffffff; border:1px solid #ffc9c9; border-radius:10px; padding:12px 13px; display:flex; align-items:center; gap:11px">
+          <div style="flex-grow:1; display:flex; flex-direction:column; gap:2px">
+            <span style="font-size:14px; font-weight:600">Yuliana Ccapa Huanca</span>
+            <span class="mono" style="font-size:11px; color:#99a1af">72918340</span>
+          </div>
+          <div style="height:30px; padding:0 11px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500; flex-shrink:0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+            Avisar
+          </div>
+        </div>
+
+        <div style="background:#ffffff; border:1px solid #ffc9c9; border-radius:10px; padding:12px 13px; display:flex; align-items:center; gap:11px">
+          <div style="flex-grow:1; display:flex; flex-direction:column; gap:2px">
+            <span style="font-size:14px; font-weight:600">Kevin Apaza Roque</span>
+            <span class="mono" style="font-size:11px; color:#99a1af">75103882</span>
+          </div>
+          <div style="height:30px; padding:0 11px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500; flex-shrink:0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+            Avisar
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:0 18px 16px; margin-top:auto">
+        <div style="height:38px; border-radius:8px; background:#ffffff; border:1px solid #ffc9c9; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500; color:#c10007">
+          Avisar a los 2
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p style="margin:0; font-size:12px; color:#99a1af; line-height:1.5; text-wrap:pretty">
+    «Llevan rato» son 15 min o más en la misma actividad. No usé un umbral de intentos: en el corpus las actividades de cierre promedian 5–7 intentos en tutoría y en Química, así que 5 intentos es lo normal, no una alarma.
+  </p>
+</div>
+</x-dc>
+</body>
+</html>

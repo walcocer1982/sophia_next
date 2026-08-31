@@ -1,0 +1,284 @@
+{
+  "pages": [
+    {
+      "id": "page-0",
+      "name": "Alcance"
+    },
+    {
+      "id": "page-1",
+      "name": "En vivo"
+    },
+    {
+      "id": "page-2",
+      "name": "Historial"
+    },
+    {
+      "id": "page-3",
+      "name": "Estudiante"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "InstructorEnVivo.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1200,
+      "h": 940,
+      "page": "page-1"
+    },
+    {
+      "file": "EnLinea.dc.html",
+      "x": 1320,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "page": "page-1"
+    },
+    {
+      "file": "Instructor.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1200,
+      "h": 900,
+      "page": "page-2"
+    },
+    {
+      "file": "InstructorVacio.dc.html",
+      "x": 1320,
+      "y": 0,
+      "w": 900,
+      "h": 620,
+      "page": "page-2"
+    },
+    {
+      "file": "Cursos.dc.html",
+      "x": 0,
+      "y": 1120,
+      "w": 1440,
+      "h": 820,
+      "page": "page-2"
+    },
+    {
+      "file": "Lista.dc.html",
+      "x": 1560,
+      "y": 1120,
+      "w": 1440,
+      "h": 900,
+      "page": "page-2"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 3120,
+      "y": 1120,
+      "w": 1440,
+      "h": 900,
+      "page": "page-2"
+    },
+    {
+      "file": "Sesion.dc.html",
+      "x": 4680,
+      "y": 1120,
+      "w": 1040,
+      "h": 800,
+      "page": "page-2"
+    },
+    {
+      "file": "Reporte.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 900,
+      "page": "page-3"
+    },
+    {
+      "file": "ReporteNota.dc.html",
+      "x": 480,
+      "y": 0,
+      "w": 390,
+      "h": 900,
+      "page": "page-3"
+    },
+    {
+      "file": "MisResultados.dc.html",
+      "x": 960,
+      "y": 0,
+      "w": 390,
+      "h": 900,
+      "page": "page-3"
+    },
+    {
+      "file": "AlcanceCoordinadora.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "page": "page-0"
+    },
+    {
+      "file": "AlcanceInstructor.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1200,
+      "h": 820,
+      "page": "page-0"
+    },
+    {
+      "file": "AlcanceSuperadmin.dc.html",
+      "x": 2880,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "page": "page-0"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "n-vivo",
+      "x": 0,
+      "y": -210,
+      "w": 1000,
+      "page": "page-1",
+      "text": "EN VIVO — solo existe mientras la ventana está abierta\nDos horas, cinco veces por curso. Es el único momento en que todavía se puede hacer algo: avisar al que no entró antes de que se le cierre. No es una pestaña que el docente elige — aparece sola cuando hay sesión abierta y desaparece cuando cierra. Si fuera pestaña fija, estaría vacía el 99% del tiempo y nadie volvería a entrar."
+    },
+    {
+      "id": "n-vivo-i",
+      "x": 0,
+      "y": -90,
+      "w": 560,
+      "page": "page-1",
+      "text": "Instructor · una sección\nCon 10 nombres caben los puntos por actividad y el minuto de cada uno."
+    },
+    {
+      "id": "n-vivo-l",
+      "x": 1320,
+      "y": -90,
+      "w": 560,
+      "page": "page-1",
+      "text": "Líder · varias secciones a la vez\nYa no caben los nombres: cuenta cuántos y en qué sección hay problema."
+    },
+    {
+      "id": "n-hist",
+      "x": 0,
+      "y": -210,
+      "w": 1000,
+      "page": "page-2",
+      "text": "HISTORIAL — el otro 99% del tiempo\nNo depende de que nadie esté conectado: se calcula con lo que ya pasó. Responde otra pregunta — no «quién está atascado ahora» sino «a quién llamo esta semana». Es la pantalla que el docente abre un martes cualquiera."
+    },
+    {
+      "id": "n-hist-i",
+      "x": 0,
+      "y": -90,
+      "w": 560,
+      "page": "page-2",
+      "text": "1 · Instructor: mis grupos\nEntra directo a sus dos secciones, sin árbol. Y si hay sesión abierta, el aviso verde lo lleva a En vivo."
+    },
+    {
+      "id": "n-hist-v",
+      "x": 1320,
+      "y": -90,
+      "w": 560,
+      "page": "page-2",
+      "text": "2 · Sin grupos asignados\nEs lo que pasa hoy con los 4 instructores, y la pantalla no lo dice."
+    },
+    {
+      "id": "n-hist-c",
+      "x": 0,
+      "y": 1030,
+      "w": 600,
+      "page": "page-2",
+      "text": "3 · Líder: los cursos de una carrera\nEl mismo alumno puede ir bien en Química y mal en tutoría: se mira por curso, no en general."
+    },
+    {
+      "id": "n-hist-l",
+      "x": 1560,
+      "y": 1030,
+      "w": 600,
+      "page": "page-2",
+      "text": "4 · La lista del curso\n«¿A quién llamo esta semana?» Ordenada por quién necesita atención, con el motivo en palabras y el WhatsApp al lado."
+    },
+    {
+      "id": "n-hist-m",
+      "x": 3120,
+      "y": 1030,
+      "w": 600,
+      "page": "page-2",
+      "text": "5 · Un estudiante\nUna línea por sesión PROGRAMADA, no por sesión hecha. «No entró» es la fila más importante y hoy no existe."
+    },
+    {
+      "id": "n-hist-s",
+      "x": 4680,
+      "y": 1030,
+      "w": 600,
+      "page": "page-2",
+      "text": "6 · Una sesión\nNo mide alcance, mide fricción: intentos y criterios por actividad. Con eso, una actividad rota se ve sola."
+    },
+    {
+      "id": "n-est",
+      "x": 0,
+      "y": -190,
+      "w": 900,
+      "page": "page-3",
+      "text": "ESTUDIANTE — a ancho de teléfono\nEn la S0 escribieron a 23–58 caracteres por minuto: es alguien en el celular, no en un teclado. Hoy, al terminar, solo ve la encuesta de satisfacción."
+    },
+    {
+      "id": "n-est-1",
+      "x": 0,
+      "y": -80,
+      "w": 380,
+      "page": "page-3",
+      "text": "Cierre sin nota\nLo que se lleva, en sus palabras. Y la fecha de la siguiente."
+    },
+    {
+      "id": "n-est-2",
+      "x": 480,
+      "y": -80,
+      "w": 380,
+      "page": "page-3",
+      "text": "Cierre con nota\nNivel de logro por actividad: «62» no dice dónde volver; «en proceso» sí."
+    },
+    {
+      "id": "n-est-3",
+      "x": 960,
+      "y": -80,
+      "w": 380,
+      "page": "page-3",
+      "text": "Sus resultados del curso\nIncluida la sesión que se perdió, con la opción de pedir que se la reabran."
+    },
+    {
+      "id": "n-alc",
+      "x": 0,
+      "y": -230,
+      "w": 1100,
+      "page": "page-0",
+      "text": "EL ÁRBOL ES EL ALCANCE\nMisma pantalla, tres personas. Nadie elige un filtro ni marca una casilla: el árbol nace de lo que cada uno tiene asignado, y lo que no está en el árbol no existe. El alcance es el par sede × carrera — nunca la carrera sola, porque cuatro de las seis carreras se dictan en dos sedes."
+    },
+    {
+      "id": "n-alc-1",
+      "x": 0,
+      "y": -100,
+      "w": 560,
+      "page": "page-0",
+      "text": "Coordinadora · Ana, IRQ\nSu árbol empieza en su sede: MMP, MSEII y GMI. La MMP de FCHB es de Ángel y no aparece."
+    },
+    {
+      "id": "n-alc-2",
+      "x": 1560,
+      "y": -100,
+      "w": 560,
+      "page": "page-0",
+      "text": "Instructor · Harley, ABQ · PM\nUna sola carrera: sin árbol, la ruta es una miga. Y la tutoría le llega recortada a sus 12, no a los 96."
+    },
+    {
+      "id": "n-alc-3",
+      "x": 2880,
+      "y": -100,
+      "w": 560,
+      "page": "page-0",
+      "text": "Superadmin · Erick\nLas tres sedes comparadas. Es lo único que ve él y nadie más: cada coordinador ve su fila, no la tabla."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-0"
+  }
+}

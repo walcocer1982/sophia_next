@@ -1,0 +1,222 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin:0; font-family:Geist,system-ui,sans-serif; background:#ffffff; color:#101828; }
+    a { color:#4f46e5; text-decoration:none; } a:hover { color:#432dd7; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+  </style>
+</helmet>
+
+<div style="width:1440px; height:900px; display:flex; background:#ffffff; overflow:hidden">
+
+  <!-- ÁRBOL — tres niveles: admisión ▸ sede ▸ carrera -->
+  <aside style="width:240px; flex-shrink:0; border-right:1px solid #e5e5e5; background:#f5f5f5; display:flex; flex-direction:column">
+    <div style="height:48px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid #e5e5e5">
+      <span style="font-size:11px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:#6a7282">Admisiones</span>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#99a1af" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+
+    <div style="flex-grow:1; padding:12px 0; font-size:13px; display:flex; flex-direction:column">
+
+      <div style="display:flex; align-items:center; gap:6px; padding:10px 16px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a7282" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+        <span style="font-weight:600; color:#101828">2026-1</span>
+        <span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">7/16</span>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:6px; padding:10px 16px 10px 32px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a7282" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#009966" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 9h1M9 13h1M14 9h1M14 13h1"/></svg>
+        <span style="font-weight:500; color:#364153">ABQ</span>
+        <span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">4/5</span>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 10px 52px; background:#e0e7ff">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1 3 2 6 2s6-1 6-2v-5"/></svg>
+        <span style="font-weight:600; color:#312c85">EOM</span>
+        <span class="mono" style="margin-left:auto; font-size:11px; color:#4f46e5">4/5</span>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 10px 52px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#99a1af" stroke-width="2" stroke-linecap="round"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1 3 2 6 2s6-1 6-2v-5"/></svg>
+        <span style="color:#364153">PM</span>
+        <span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">4/5</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 10px 52px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#99a1af" stroke-width="2" stroke-linecap="round"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1 3 2 6 2s6-1 6-2v-5"/></svg>
+        <span style="color:#364153">SI</span>
+        <span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">4/5</span>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:6px; padding:10px 16px 10px 32px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a7282" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#009966" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 9h1M9 13h1M14 9h1M14 13h1"/></svg>
+        <span style="font-weight:500; color:#364153">FCHB</span>
+        <span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">2/5</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 10px 52px"><span style="color:#364153">EOM</span><span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">2/5</span></div>
+      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 10px 52px"><span style="color:#364153">MMP</span><span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">2/5</span></div>
+      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 10px 52px"><span style="color:#364153">MSEII</span><span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">2/5</span></div>
+      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 10px 52px"><span style="color:#364153">SI</span><span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">2/5</span></div>
+
+      <div style="display:flex; align-items:center; gap:6px; padding:10px 16px 10px 32px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#99a1af" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#009966" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 9h1M9 13h1M14 9h1M14 13h1"/></svg>
+        <span style="font-weight:500; color:#364153">IRQ</span>
+        <span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">1/5</span>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:6px; padding:10px 16px; margin-top:4px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#99a1af" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+        <span style="font-weight:600; color:#364153">2026-2</span>
+        <span class="mono" style="margin-left:auto; font-size:11px; color:#6a7282">3/5</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px; padding:10px 16px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#99a1af" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+        <span style="font-weight:600; color:#364153">2026-3</span>
+        <span style="margin-left:auto; font-size:11px; color:#99a1af">sin secciones</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- PANEL — sesiones del curso -->
+  <main style="flex-grow:1; padding:28px 32px; display:flex; flex-direction:column; gap:20px; overflow:hidden">
+
+    <div style="display:flex; align-items:center; gap:7px; font-size:13px; color:#6a7282">
+      <span>2026-1</span><span style="color:#d4d4d4">/</span>
+      <span>ABQ</span><span style="color:#d4d4d4">/</span>
+      <span>EOM</span><span style="color:#d4d4d4">/</span>
+      <span style="color:#101828; font-weight:500">Plan de Tutoría</span>
+    </div>
+
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:28px">
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <h1 style="margin:0; font-size:26px; font-weight:700; letter-spacing:-0.02em">Plan de Tutoría de Inducción Académica</h1>
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 10px; border-radius:999px; background:#faf5ff; color:#8200db; font-size:12px; font-weight:500">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8200db" stroke-width="2" stroke-linecap="round"><path d="m12 3 1.9 5.8L20 10l-5.2 3.6L16 20l-4-3-4 3 1.2-6.4L4 10l6.1-1.2Z"/></svg>
+            Transversal
+          </span>
+          <span style="font-size:14px; color:#4a5565">Sección A</span>
+          <span style="color:#d4d4d4">·</span>
+          <span style="display:inline-flex; align-items:center; gap:5px; font-size:14px; color:#4a5565">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#99a1af" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            12 estudiantes
+          </span>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:10px">
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="font-size:13px; color:#4a5565"><strong style="color:#101828">4</strong> de 5 programadas</span>
+          <div style="width:88px; height:6px; border-radius:99px; background:#f0f0f0; overflow:hidden">
+            <div style="width:80%; height:100%; background:#00bc7d"></div>
+          </div>
+        </div>
+        <div style="height:32px; padding:0 14px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; gap:7px; font-size:14px; font-weight:500">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Programar todo el plan
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; padding:11px 14px; border:1px solid #e9d4ff; background:#faf5ff; border-radius:10px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8200db" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      <p style="margin:0; font-size:13px; color:#59168b">La fecha que pongas acá aplica también a <strong>PM</strong> y <strong>SI</strong> — es la misma sección, con los mismos estudiantes.</p>
+    </div>
+
+    <!-- TABLA — la fecha es la protagonista -->
+    <div style="border:1px solid #e5e5e5; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); overflow:hidden">
+
+      <div style="display:grid; grid-template-columns:36px 148px minmax(0,1fr) 132px 104px; align-items:center; gap:18px; padding:18px 22px; background:#ffffff">
+        <span class="mono" style="font-size:12px; color:#99a1af">0</span>
+        <div style="display:flex; flex-direction:column; gap:3px">
+          <span style="font-size:15px; font-weight:600; color:#99a1af">Sin fecha</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:4px">
+          <span style="font-size:15px; color:#4a5565">S0 — Construye tu plan</span>
+          <span style="font-size:12px; color:#99a1af">5 actividades</span>
+        </div>
+        <span style="height:24px; padding:0 10px; border-radius:999px; background:#f5f5f5; color:#6a7282; font-size:12px; font-weight:500; display:inline-flex; align-items:center; justify-self:start">Sin programar</span>
+        <div style="height:32px; border-radius:8px; background:#101828; color:#ffffff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500">Programar</div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:36px 148px minmax(0,1fr) 132px 104px; align-items:center; gap:18px; padding:18px 22px; border-top:1px solid #f0f0f0; background:#fef2f2">
+        <span class="mono" style="font-size:12px; color:#99a1af">1</span>
+        <div style="display:flex; flex-direction:column; gap:3px">
+          <span style="font-size:15px; font-weight:600; color:#101828">20 ago</span>
+          <span class="mono" style="font-size:12px; color:#6a7282">20:00 – 23:00</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:5px">
+          <span style="font-size:15px; font-weight:500; color:#101828">S1 — Gana el TC: entiende la rúbrica antes de empezar</span>
+          <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; color:#e7000b">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2.5" stroke-linecap="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+            Se cruza con S2 — Tu equipo trabaja contigo
+          </span>
+          <span style="font-size:12px; color:#6a7282">Quedó atrás del plan</span>
+        </div>
+        <span style="height:24px; padding:0 10px; border-radius:999px; background:#ffffff; border:1px solid #ffc9c9; color:#e7000b; font-size:12px; font-weight:600; display:inline-flex; align-items:center; justify-self:start">Cerrada</span>
+        <div style="height:32px; border-radius:8px; border:1px solid #ffc9c9; background:#ffffff; color:#e7000b; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500">Resolver</div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:36px 148px minmax(0,1fr) 132px 104px; align-items:center; gap:18px; padding:18px 22px; border-top:1px solid #f0f0f0; background:#fef2f2">
+        <span class="mono" style="font-size:12px; color:#99a1af">2</span>
+        <div style="display:flex; flex-direction:column; gap:3px">
+          <span style="font-size:15px; font-weight:600; color:#101828">20 ago</span>
+          <span class="mono" style="font-size:12px; color:#6a7282">20:00 – 23:00</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:5px">
+          <span style="font-size:15px; font-weight:500; color:#101828">S2 — Tu equipo trabaja contigo, no contra ti</span>
+          <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; color:#e7000b">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2.5" stroke-linecap="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+            Se cruza con S1 — Gana el TC
+          </span>
+        </div>
+        <span style="height:24px; padding:0 10px; border-radius:999px; background:#ffffff; border:1px solid #ffc9c9; color:#e7000b; font-size:12px; font-weight:600; display:inline-flex; align-items:center; justify-self:start">Cerrada</span>
+        <div style="height:32px; border-radius:8px; border:1px solid #ffc9c9; background:#ffffff; color:#e7000b; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500">Resolver</div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:36px 148px minmax(0,1fr) 132px 104px; align-items:center; gap:18px; padding:18px 22px; border-top:1px solid #f0f0f0">
+        <span class="mono" style="font-size:12px; color:#99a1af">3</span>
+        <div style="display:flex; flex-direction:column; gap:3px">
+          <span style="font-size:15px; font-weight:600; color:#4a5565">19 ago</span>
+          <span class="mono" style="font-size:12px; color:#99a1af">20:00 – 21:00</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:4px">
+          <span style="font-size:15px; color:#4a5565">S3 — Tu tiempo en el internado: un plan que sí funciona</span>
+          <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; color:#bb4d00">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#bb4d00" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 7v5l3 2"/></svg>
+            1 h para 4 actividades — sugerido 3 h
+          </span>
+        </div>
+        <span style="height:24px; padding:0 10px; border-radius:999px; background:#f5f5f5; color:#6a7282; font-size:12px; font-weight:500; display:inline-flex; align-items:center; justify-self:start">Cerrada</span>
+        <div style="height:32px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; color:#364153; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500">Cambiar</div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:36px 148px minmax(0,1fr) 132px 104px; align-items:center; gap:18px; padding:18px 22px; border-top:1px solid #f0f0f0">
+        <span class="mono" style="font-size:12px; color:#99a1af">4</span>
+        <div style="display:flex; flex-direction:column; gap:3px">
+          <span style="font-size:15px; font-weight:600; color:#101828">25 ago</span>
+          <span class="mono" style="font-size:12px; color:#6a7282">20:00 – 21:00</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:4px">
+          <span style="font-size:15px; font-weight:500; color:#101828">Técnicas de lectura técnica</span>
+          <span style="font-size:12px; color:#99a1af">hoy · en 3 h 20 min</span>
+        </div>
+        <span style="height:24px; padding:0 10px; border-radius:999px; background:#eef2ff; color:#4f46e5; font-size:12px; font-weight:500; display:inline-flex; align-items:center; justify-self:start">Programada</span>
+        <div style="height:32px; border-radius:8px; border:1px solid #e5e5e5; background:#ffffff; color:#364153; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500">Cambiar</div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>
