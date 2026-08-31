@@ -161,23 +161,59 @@ export async function POST(request: Request) {
     where: { lessonSessionId: session.id, status: 'COMPLETED' },
   })
 
-  // Calculate grade based only on EVALUATIVE activities completed
-  const activityEvaluativeMap = new Map<string, boolean>()
+  // Calculate grade based only on EVALUATIVE activities completed.
+  // Para el promedio ponderado: cada actividad lleva su `type` y `weight`
+  // declarados en el contentJson de la lesson. Si una actividad no tiene
+  // `weight` explícito, getActivityWeight() asigna el default por tipo
+  // (explanation=1, reflection=2, practice=3, closing=4).
+  const activityMetaMap = new Map<string, {
+    isEvaluative: boolean
+    activityType?: 'explanation' | 'practice' | 'reflection' | 'closing'
+    weight?: number
+  }>()
   for (const a of contentJson.activities) {
-    activityEvaluativeMap.set(a.id, a.verification?.is_evaluative !== false)
+    activityMetaMap.set(a.id, {
+      isEvaluative: a.verification?.is_evaluative !== false,
+      activityType: a.type,
+      weight: typeof a.weight === 'number' ? a.weight : undefined,
+    })
   }
 
-  const evaluativeActivities = updatedActivities.filter(ap =>
-    activityEvaluativeMap.get(ap.activityId) !== false
-  )
+  // Enriquecer cada ActivityProgress con su type/weight del contentJson para
+  // que calculateGrade pueda hacer el promedio ponderado.
+  const evaluativeActivities = updatedActivities
+    .filter((ap) => activityMetaMap.get(ap.activityId)?.isEvaluative !== false)
+    .map((ap) => {
+      const meta = activityMetaMap.get(ap.activityId)
+      return {
+        ...ap,
+        activityType: meta?.activityType,
+        weight: meta?.weight,
+      }
+    })
 
-  // Average over total expected evaluative activities (not just completed),
-  // so an incomplete session is penalized. Shared formula — see lib/grading.ts
-  // CODE methodology grades on binary step completion instead of the rubric.
-  const totalEvaluative = Array.from(activityEvaluativeMap.values()).filter(Boolean).length
+  // Denominator = suma de pesos ESPERADOS de todas las actividades evaluativas
+  // de la lesson (no solo las completadas). Penaliza sesiones incompletas.
+  const totalWeightExpected = contentJson.activities
+    .filter((a) => a.verification?.is_evaluative !== false)
+    .reduce((sum, a) => {
+      const explicit = typeof a.weight === 'number' ? a.weight : null
+      if (explicit !== null) return sum + explicit
+      // Default por tipo
+      const w = a.type === 'closing' ? 4
+        : a.type === 'practice' ? 3
+        : a.type === 'reflection' ? 2
+        : 1
+      return sum + w
+    }, 0)
+
+  // Para CODE (binario) seguimos usando cuenta simple; para REFLECTIVE el
+  // grade es ponderado. Shared formula — ver lib/grading.ts.
+  const totalEvaluativeCount = Array.from(activityMetaMap.values())
+    .filter((m) => m.isEvaluative).length
   const grade = session.lesson.course?.methodology === 'CODE'
-    ? calculateCompletionGrade(evaluativeActivities.length, totalEvaluative)
-    : calculateGrade(evaluativeActivities, totalEvaluative)
+    ? calculateCompletionGrade(evaluativeActivities.length, totalEvaluativeCount)
+    : calculateGrade(evaluativeActivities, totalWeightExpected)
   const gradeOver20 = gradeTo20(grade)
   const passed = isPassing(grade)
 

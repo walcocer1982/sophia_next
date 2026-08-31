@@ -299,31 +299,106 @@ export function AssessmentSession({
   // Imagen ANCLADA POR MENSAJE: cada imagen se queda en el mensaje de Sophia
   // donde apareció — los mensajes nuevos fluyen debajo SIN moverla (antes la
   // imagen se pegaba al último mensaje y "saltaba" a cada respuesta nueva).
-  // Se resuelve contra la lista GLOBAL por mejor descripción (señal confiable;
-  // el número "imagen N" del prompt es ambiguo entre actividades). Fail-safe:
-  // sin match confiable no se ancla nada (no mostrar una imagen equivocada).
+  // Se resuelve contra la lista de imágenes de la ACTIVIDAD ACTUAL por mejor
+  // descripción. Antes era GLOBAL pero eso causaba que Sophia mencionara
+  // "este trabajador" en la activación y el sistema mostrara la imagen del
+  // arnés de la actividad de aplicación (descripciones con keywords genéricas
+  // como "trabajador" matchean varias imágenes). Fail-safe: sin match
+  // confiable no se ancla nada.
   const [imageByMsg, setImageByMsg] = useState<Record<string, ClassImage>>({})
   const lastAnchoredUrlRef = useRef<string | null>(null)
   useEffect(() => {
+    // 🔍 DEBUG TEMPORAL: logs en cada disparo para diagnosticar por qué no
+    // aparece la imagen en algunos turnos. Filtrá la consola por "[img-anchor]".
+    // Además del console.log, se envía a /api/dev/img-anchor-log (dev-only)
+    // para que el archivo logs/img-anchor.log capture el flujo completo y el
+    // dev pueda hacer tail -f sin pedir capturas al usuario.
+    const D = (...args: unknown[]) => {
+      const line = args
+        .map((a) => (typeof a === 'string' ? a : JSON.stringify(a)))
+        .join(' ')
+      console.log('[img-anchor]', ...args)
+      // Fire-and-forget: no esperamos respuesta ni bloqueamos el effect.
+      fetch('/api/dev/img-anchor-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry: line }),
+        keepalive: true,
+      }).catch(() => {
+        /* silencioso */
+      })
+    }
+
     const msg = lastAssistantMessage
     const content = msg?.content
-    // Nunca durante el saludo (el welcome presenta el tema y matchearía por
-    // afinidad). Requiere al menos un mensaje del estudiante.
-    if (!msg || !content || !hasUserMessage || galleryList.length === 0) return
-    const scored = galleryList
-      .filter((img) => img.showWhen !== 'on_demand') // on_demand: solo por galería
+    if (!msg || !content) {
+      D('SKIP · no hay mensaje del asistente todavía')
+      return
+    }
+    if (!hasUserMessage) {
+      D(`SKIP · welcome (hasUserMessage=false) msg.id=${msg.id.slice(0, 8)}`)
+      return
+    }
+    if (galleryList.length === 0) {
+      D('SKIP · galleryList vacía (lección sin imágenes)')
+      return
+    }
+
+    const currentActivityId = progressData?.currentActivityId
+    const candidates = currentActivityId
+      ? galleryList.filter((img) => img.activityId === currentActivityId)
+      : galleryList
+
+    D(
+      `disparo · msg=${msg.id.slice(0, 8)} · currActId=${currentActivityId ?? 'null(fallback-global)'} ·`,
+      `gallery=${galleryList.length} → candidates=${candidates.length}`,
+    )
+    D(`msg.content[0..120]="${content.slice(0, 120).replace(/\n/g, ' ')}…"`)
+
+    if (candidates.length === 0) {
+      D('SKIP · candidates.length=0 (actividad sin imágenes asignadas)')
+      return
+    }
+
+    const scored = candidates
+      .filter((img) => img.showWhen !== 'on_demand')
       .map((img) => ({ img, s: scoreMatch(content, img.description) }))
       .sort((a, b) => b.s - a.s)
+
+    D(
+      'scores:',
+      scored
+        .map((x) => `${x.img.url.split('/').pop()}=${x.s}`)
+        .join(' · '),
+    )
+
     const best = scored[0]
     const second = scored[1]
-    // Confianza: ≥2 keywords distintivas y claramente mejor que la segunda.
-    if (!best || best.s < 2 || (second && best.s <= second.s)) return
-    // No repetir la misma imagen que ya estaba anclada en el mensaje anterior:
-    // se queda en su sitio en vez de duplicarse en cada respuesta.
-    if (lastAnchoredUrlRef.current === best.img.url) return
+    if (!best) {
+      D('SKIP · scored vacío (todas las imágenes eran on_demand)')
+      return
+    }
+    if (scored.length === 1) {
+      if (best.s < 1) {
+        D(`SKIP · única candidata "${best.img.url.split('/').pop()}" con score=${best.s} < 1 (ninguna keyword matcheó)`)
+        return
+      }
+    } else if (best.s < 2 || best.s <= second!.s) {
+      D(
+        `SKIP · score insuficiente o empate: best=${best.s}, second=${second?.s}`,
+        `(necesita best≥2 y best > second)`,
+      )
+      return
+    }
+    if (lastAnchoredUrlRef.current === best.img.url) {
+      D(`SKIP · ya anclada en el mensaje anterior (lastAnchored=${best.img.url.split('/').pop()})`)
+      return
+    }
+
+    D(`✅ ANCLADO · img="${best.img.url.split('/').pop()}" score=${best.s} msg=${msg.id.slice(0, 8)}`)
     lastAnchoredUrlRef.current = best.img.url
     setImageByMsg((prev) => (prev[msg.id]?.url === best.img.url ? prev : { ...prev, [msg.id]: best.img }))
-  }, [lastAssistantMessage?.id, lastAssistantMessage?.content, hasUserMessage, galleryList, scoreMatch])
+  }, [lastAssistantMessage?.id, lastAssistantMessage?.content, hasUserMessage, galleryList, scoreMatch, progressData?.currentActivityId])
 
   // TTS de la respuesta cuando el estudiante escribe (no habla). Antes solo
   // se reproducía audio en el flujo de voz; si el usuario abría Escribir y

@@ -55,6 +55,32 @@ export type ScorableActivity = {
   attempts: number
   tangentCount?: number | null
   evidenceData: unknown
+  /** Tipo de actividad — usado para asignar peso default si no hay override. */
+  activityType?: 'explanation' | 'practice' | 'reflection' | 'closing'
+  /** Override manual del peso (0-10). Si no se setea, se usa el default por tipo. */
+  weight?: number | null
+}
+
+/** Peso default por tipo de actividad en el promedio ponderado de la lección.
+ *
+ * Las primeras actividades suelen ser de activación/exposición (peso bajo);
+ * las últimas son de aplicación + síntesis (peso alto). El diseñador puede
+ * override con el campo `weight` por actividad. 0 = no aporta a la nota.
+ */
+const DEFAULT_WEIGHT_BY_TYPE: Record<NonNullable<ScorableActivity['activityType']>, number> = {
+  explanation: 1, // activación / exposición — pesa menos
+  reflection: 2,  // categorización / pensar sin aplicar
+  practice: 3,    // aplicación concreta — donde se ve si entendió
+  closing: 4,     // síntesis final — integra todo
+}
+
+/** Devuelve el peso efectivo de una actividad para el promedio ponderado. */
+export function getActivityWeight(ap: ScorableActivity): number {
+  if (typeof ap.weight === 'number' && ap.weight >= 0) return ap.weight
+  if (ap.activityType && DEFAULT_WEIGHT_BY_TYPE[ap.activityType]) {
+    return DEFAULT_WEIGHT_BY_TYPE[ap.activityType]
+  }
+  return 1 // fallback si no hay tipo conocido
 }
 
 /**
@@ -104,21 +130,36 @@ export function activityScore(ap: ScorableActivity): number {
 }
 
 /**
- * Average activity score, rounded to an integer 0-100.
+ * Weighted grade across activities, rounded to an integer 0-100.
  *
- * @param activities Activities that contribute to the numerator (sum of scores).
- * @param denominator Number to divide by. Defaults to `activities.length`.
- *        Pass the total expected evaluative count to penalize incomplete
- *        sessions (used by the final evaluation).
+ * Promedio ponderado: cada actividad aporta `score × weight`, dividido por la
+ * suma de pesos. Si ninguna actividad tiene weight/activityType, el resultado
+ * es idéntico al promedio simple anterior (todas pesan 1).
+ *
+ * @param activities  Activities to evaluate. Cada una contribuye con su peso.
+ * @param denominator Override del denominador (suma de pesos). Útil para
+ *        penalizar sesiones incompletas: pasás la suma de pesos ESPERADA
+ *        aunque algunas actividades no se hayan completado todavía.
  */
 export function calculateGrade(
   activities: ScorableActivity[],
   denominator?: number,
 ): number {
-  const div = denominator ?? activities.length
-  if (div <= 0) return 0
-  const total = activities.reduce((sum, ap) => sum + activityScore(ap), 0)
-  return Math.round(total / div)
+  if (activities.length === 0 && (denominator ?? 0) <= 0) return 0
+
+  // Numerador: suma de (score × peso)
+  const weightedSum = activities.reduce(
+    (sum, ap) => sum + activityScore(ap) * getActivityWeight(ap),
+    0,
+  )
+
+  // Denominador: override o suma de pesos de las actividades
+  const totalWeight =
+    denominator ??
+    activities.reduce((sum, ap) => sum + getActivityWeight(ap), 0)
+
+  if (totalWeight <= 0) return 0
+  return Math.round(weightedSum / totalWeight)
 }
 
 /**

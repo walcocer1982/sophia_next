@@ -120,6 +120,13 @@ export interface Activity {
   type: ActivityType                   // Tipo de actividad (define template del prompt)
   complexity?: ActivityComplexity      // Controla maxTokens: simple=600, moderate=850, complex=1100
   keyPointIndex: number | null          // Índice del keyPoint en lesson.keyPoints[] (0-indexed, null for closing)
+  /**
+   * Peso de la actividad en el promedio ponderado de la nota final (0-10).
+   * Si no se setea, se aplica el default por tipo:
+   *   explanation=1, reflection=2, practice=3, closing=4
+   * Ver lib/grading.ts → getActivityWeight().
+   */
+  weight?: number
   teaching: Teaching                   // Instrucciones de enseñanza (NUEVO: objeto separado)
   verification: Verification           // Verificación con success_criteria
   commonMistakes?: string[]            // Errores típicos a detectar (no corregir directamente)

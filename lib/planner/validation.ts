@@ -74,6 +74,10 @@ const ActivitySchema = z.object({
   type: z.enum(['explanation', 'practice', 'reflection', 'closing']),
   complexity: z.enum(['simple', 'moderate', 'complex']).optional(),
   keyPointIndex: z.number().min(0).nullable(),
+  // Peso relativo en el cálculo de la nota final. Default por tipo
+  // (explanation=1, reflection=2, practice=3, closing=4) si no se setea.
+  // 0 = no aporta a la nota (actividad opcional).
+  weight: z.number().min(0).max(10).optional(),
   teaching: TeachingSchema,
   verification: VerificationSchema,
   commonMistakes: z.array(z.string()).optional(),
