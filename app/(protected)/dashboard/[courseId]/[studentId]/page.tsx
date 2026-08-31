@@ -1,507 +1,320 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
-import { useRouter, useParams } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import {
-  ArrowLeft, BookOpen, Award, MessageSquare, CheckCircle,
-  XCircle, Clock, AlertTriangle, ChevronDown, ChevronRight,
-} from 'lucide-react'
+import { auth } from '@/auth'
+import { prisma } from '@/lib/prisma'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart'
-import { Bar, BarChart, XAxis, YAxis, Cell, PieChart, Pie } from 'recharts'
+import { seccionesVisibles } from '@/lib/alcance'
+import { alcanceEfectivo } from '@/lib/ver-como'
+import { tituloActividad } from '@/lib/actividad-titulo'
+import { normalizeLevel } from '@/lib/levels'
+import { otrosCursosDelAlumno } from '@/lib/asistencia'
 
-// Types
-interface ActivityDetail {
-  id: string
-  index: number
-  title: string
-  status: string
-  attempts: number
-  tangentCount: number
-  understandingLevel: string | null
-  responseType: string | null
-  criteriaMatched: string[]
-  criteriaMissing: string[]
-  score: number | null
-  completedAt: string | null
+export const dynamic = 'force-dynamic'
+
+const NIVEL: Record<string, { texto: string; clase: string }> = {
+  outstanding: { texto: 'Destacado', clase: 'bg-indigo-50 text-indigo-700' },
+  achieved: { texto: 'Logrado', clase: 'bg-emerald-50 text-emerald-700' },
+  developing: { texto: 'En proceso', clase: 'bg-amber-50 text-amber-700' },
+  beginning: { texto: 'En inicio', clase: 'bg-red-50 text-red-700' },
 }
 
-interface LessonDetail {
-  lessonId: string
-  lessonTitle: string
-  sessionId: string | null
-  startedAt: string | null
-  completedAt: string | null
-  grade: number | null
-  passed: boolean
-  attempt: number
-  duration: number | null
-  totalMessages: number
-  summaryText: string | null
-  currentActivityId: string | null
-  activities: ActivityDetail[]
-}
+/**
+ * La historia de un estudiante en un curso.
+ *
+ * Una línea por sesión PROGRAMADA, no por sesión hecha — así aparece «no
+ * entró», que es la fila que más importa y la que la versión anterior no podía
+ * mostrar: decía «No iniciada» tanto para el que faltó como para la sesión que
+ * a su sección nunca le programaron.
+ */
+export default async function EstudiantePage({
+  params,
+}: {
+  params: Promise<{ courseId: string; studentId: string }>
+}) {
+  const session = await auth()
+  if (!session?.user) redirect('/login')
+  const rol = session.user.role
+  if (rol !== 'ADMIN' && rol !== 'SUPERADMIN' && rol !== 'INSTRUCTOR') redirect('/lessons')
 
-interface StudentData {
-  student: {
-    id: string
-    name: string | null
-    email: string | null
-    image: string | null
-  }
-  course: { id: string; title: string }
-  stats: {
-    completedLessons: number
-    totalLessons: number
-    avgGrade: number | null
-    totalMessages: number
-    overallRubric: string | null
-    rubricDistribution: Record<string, number>
-    gradeTrend: Array<{ lesson: string; grade: number }>
-  }
-  lessons: LessonDetail[]
-}
+  const { courseId, studentId } = await params
+  const { alcance } = await alcanceEfectivo(session)
+  const filtro = alcance.role === 'SUPERADMIN' ? {} : seccionesVisibles(alcance)
+  const ahora = new Date()
 
-const levelLabels: Record<string, string> = {
-  memorized: 'Memorizado',
-  understood: 'Comprendido',
-  applied: 'Aplicado',
-  analyzed: 'Analizado',
-}
+  const [alumno, curso] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: studentId },
+      select: { id: true, name: true, email: true, dni: true, phone: true },
+    }),
+    prisma.course.findFirst({
+      where: { id: courseId, deletedAt: null },
+      select: { id: true, title: true },
+    }),
+  ])
+  if (!alumno || !curso) notFound()
 
-const levelColors: Record<string, string> = {
-  memorized: '#f87171',
-  understood: '#60a5fa',
-  applied: '#34d399',
-  analyzed: '#a78bfa',
-}
-
-export default function StudentDetailPage() {
-  const { data: session } = useSession()
-  const router = useRouter()
-  const params = useParams()
-  const courseId = params.courseId as string
-  const studentId = params.studentId as string
-
-  const [data, setData] = useState<StudentData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [expandedLesson, setExpandedLesson] = useState<string | null>(null)
-
-  const role = session?.user?.role || 'STUDENT'
-
-  useEffect(() => {
-    if (role === 'STUDENT') {
-      router.push('/lessons')
-      return
-    }
-
-    let cancelled = false
-    let isFirstFetch = true
-
-    const fetchData = async () => {
-      try {
-        const res = await fetch(`/api/dashboard/${courseId}/${studentId}`)
-        if (!res.ok || cancelled) return
-        const result = await res.json()
-        if (cancelled) return
-        setData(result)
-        // Auto-expand first lesson SOLO en el primer fetch (no en refresh)
-        if (isFirstFetch && result.lessons.length > 0) {
-          setExpandedLesson(result.lessons[0].lessonId)
-          isFirstFetch = false
-        }
-      } catch (error) {
-        console.error('Error loading student data:', error)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    fetchData()
-    // Auto-refresh cada 10s mientras la página esté abierta. Cubre el caso de
-    // sesiones activas (instructor mirando dashboard mientras estudiante hace
-    // la lección por voz/texto) — los nuevos mensajes y actividades aparecen
-    // sin tener que refrescar manualmente. 10s es balance entre frescura y
-    // carga del servidor.
-    const interval = setInterval(fetchData, 10000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [role, router, courseId, studentId])
-
-  if (loading) {
+  // Su sección en este curso, dentro de lo que quien mira puede ver. Si no hay,
+  // el alumno no está a su alcance.
+  const matricula = await prisma.enrollment.findFirst({
+    where: { userId: studentId, section: { AND: [{ courseId }, { isArchived: false }, filtro] } },
+    select: {
+      section: {
+        select: {
+          name: true,
+          sede: { select: { code: true } },
+          period: { select: { name: true } },
+          schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true } },
+        },
+      },
+    },
+  })
+  // Fuera de alcance: existe, pero no es de tu sede/carrera. Se explica en vez
+  // de devolver un 404 pelado, que no distingue «no existe» de «no te toca».
+  if (!matricula) {
     return (
-      <div className="p-8 max-w-7xl mx-auto">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-1/3" />
-          <div className="grid grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-gray-200 rounded-lg" />)}
-          </div>
-          <div className="h-60 bg-gray-200 rounded-lg" />
+      <div className="mx-auto max-w-2xl p-8">
+        <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-900">
+          ← Monitor
+        </Link>
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white p-10 text-center shadow-sm">
+          <p className="font-medium text-gray-900">Este estudiante no está a tu alcance</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">
+            No pertenece a ninguna sección de tu sede y carrera en {curso.title}. Si deberías
+            poder verlo, pedile a tu coordinador que revise tu asignación.
+          </p>
         </div>
       </div>
     )
   }
 
-  if (!data) return null
+  const horarios = new Map(
+    matricula.section.schedules.map((h) => [
+      h.lessonId,
+      h.availableAt ? new Date(h.availableAt.getTime() + h.closesAfterHours * 3_600_000) : null,
+    ])
+  )
 
-  const { student, course, stats, lessons } = data
+  const lecciones = await prisma.lesson.findMany({
+    where: { courseId },
+    orderBy: { order: 'asc' },
+    select: {
+      id: true,
+      title: true,
+      contentJson: true,
+      sessions: {
+        where: { userId: studentId, isTest: false },
+        orderBy: { startedAt: 'desc' },
+        take: 1,
+        select: {
+          startedAt: true,
+          lastActivityAt: true,
+          completedAt: true,
+          grade: true,
+          activities: {
+            select: {
+              activityId: true,
+              status: true,
+              attempts: true,
+              passedCriteria: true,
+              evidenceData: true,
+            },
+          },
+        },
+      },
+    },
+  })
 
-  // Chart data
-  const rubricLabels: Record<string, string> = {
-    logrado_destacado: 'Destacado',
-    logrado: 'Logrado',
-    en_proceso: 'En proceso',
-    en_inicio: 'En inicio',
-  }
-  const rubricColors: Record<string, string> = {
-    logrado_destacado: '#059669',
-    logrado: '#2563eb',
-    en_proceso: '#d97706',
-    en_inicio: '#dc2626',
-  }
-  const comprehensionData = Object.entries(stats.rubricDistribution || {} as Record<string, number>)
-    .filter(([, count]) => (count as number) > 0)
-    .map(([level, count]) => ({
-      name: rubricLabels[level] || level,
-      value: count as number,
-      fill: rubricColors[level] || '#94a3b8',
-    }))
+  const filas = lecciones.map((l) => {
+    const ses = l.sessions[0] ?? null
+    const programada = horarios.has(l.id)
+    const cierre = horarios.get(l.id) ?? null
 
-  const gradeTrendData = stats.gradeTrend.map(g => ({
-    name: g.lesson.length > 20 ? g.lesson.slice(0, 20) + '...' : g.lesson,
-    grade: g.grade,
-    fill: g.grade >= 80 ? '#34d399' : g.grade >= 60 ? '#60a5fa' : g.grade >= 40 ? '#fbbf24' : '#f87171',
-  }))
+    const avanzo = ses ? ses.activities.filter((a) => a.status === 'COMPLETED').length : 0
+    const estado = ses?.completedAt
+      ? 'terminada'
+      : ses
+        ? avanzo > 0
+          ? 'a-medias'
+          : 'sin-avanzar'
+        : !programada
+          ? 'no-programada'
+          : cierre && cierre < ahora
+            ? 'no-entro'
+            : 'pendiente'
+
+    const acts = (l.contentJson as { activities?: { id: string; verification?: { question?: string } }[] } | null)?.activities ?? []
+    return { leccion: l, ses, estado, cierre, acts }
+  })
+
+  // Solo cuentan las sesiones que su sección programó: el resto no se le puede
+  // reclamar.
+  const otros = await otrosCursosDelAlumno(studentId, filtro, courseId, ahora)
+
+  const deSuPlan = filas.filter((f) => f.estado !== 'no-programada')
+  const hechas = deSuPlan.filter((f) => f.estado === 'terminada').length
+  const faltas = deSuPlan.filter((f) => f.estado === 'no-entro').length
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="flex items-center gap-4">
+    <div className="mx-auto max-w-4xl space-y-6 p-8">
+      <div className="space-y-1">
         <Link
-          href={`/dashboard/${courseId}`}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          href={`/dashboard/${courseId}/matriz`}
+          className="text-sm text-gray-500 hover:text-gray-900"
         >
-          <ArrowLeft className="h-5 w-5 text-gray-600" />
+          ← {curso.title}
         </Link>
-        <Avatar className="h-12 w-12">
-          <AvatarImage src={student.image || undefined} />
-          <AvatarFallback className="bg-blue-100 text-blue-700 text-lg">
-            {student.name?.charAt(0).toUpperCase() || 'U'}
-          </AvatarFallback>
-        </Avatar>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{student.name || 'Sin nombre'}</h1>
-          <p className="text-sm text-gray-500">{student.email} • {course.title}</p>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight">{alumno.name ?? alumno.email}</h1>
+        <p className="text-sm text-gray-500">
+          {matricula.section.name} · {matricula.section.sede?.code ?? '—'} ·{' '}
+          {matricula.section.period.name}
+          {alumno.dni ? ` · DNI ${alumno.dni}` : ' · sin DNI del padrón'}
+        </p>
+        <p className="text-sm">
+          <span className="font-medium">
+            {hechas} de {deSuPlan.length} sesiones
+          </span>
+          {faltas > 0 && (
+            <span className="text-red-700"> · faltó a {faltas}</span>
+          )}
+          {alumno.phone && (
+            <a
+              href={`https://wa.me/51${alumno.phone.replace(/\D/g, '').slice(-9)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-3 text-blue-600 hover:underline"
+            >
+              WhatsApp
+            </a>
+          )}
+        </p>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Lecciones Completadas"
-          value={`${stats.completedLessons}/${stats.totalLessons}`}
-          icon={<BookOpen className="h-5 w-5 text-blue-600" />}
-          bgColor="bg-blue-50"
-        />
-        <StatCard
-          title="Nivel General"
-          value={stats.overallRubric ? (rubricLabels[stats.overallRubric] || '—') : 'Sin evaluar'}
-          icon={<Award className="h-5 w-5 text-amber-600" />}
-          bgColor="bg-amber-50"
-        />
-        <StatCard
-          title="Total Mensajes"
-          value={stats.totalMessages}
-          icon={<MessageSquare className="h-5 w-5 text-purple-600" />}
-          bgColor="bg-purple-50"
-        />
-        <StatCard
-          title="Progreso"
-          value={stats.totalLessons > 0
-            ? `${Math.round((stats.completedLessons / stats.totalLessons) * 100)}%`
-            : '0%'}
-          icon={<CheckCircle className="h-5 w-5 text-green-600" />}
-          bgColor="bg-green-50"
-        />
-      </div>
-
-      {/* Charts Row */}
-      {(comprehensionData.length > 0 || gradeTrendData.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Comprehension Distribution */}
-          {comprehensionData.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Distribución de Comprensión</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer
-                  config={Object.fromEntries(
-                    comprehensionData.map(d => [d.name, { label: d.name, color: d.fill }])
-                  )}
-                  className="h-[200px] w-full"
-                >
-                  <PieChart>
-                    <Pie
-                      data={comprehensionData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={80}
-                      paddingAngle={2}
-                    >
-                      {comprehensionData.map((entry, i) => (
-                        <Cell key={i} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                  </PieChart>
-                </ChartContainer>
-                <div className="flex flex-wrap gap-3 mt-2 justify-center">
-                  {comprehensionData.map(d => (
-                    <div key={d.name} className="flex items-center gap-1.5 text-xs">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.fill }} />
-                      {d.name}: {d.value}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Grade Trend */}
-          {gradeTrendData.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Notas por Lección</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer
-                  config={{
-                    grade: { label: 'Nota', color: '#60a5fa' },
-                  }}
-                  className="h-[200px] w-full"
-                >
-                  <BarChart data={gradeTrendData} layout="vertical">
-                    <XAxis type="number" domain={[0, 100]} fontSize={11} />
-                    <YAxis type="category" dataKey="name" width={120} fontSize={11} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="grade" radius={4}>
-                      {gradeTrendData.map((entry, i) => (
-                        <Cell key={i} fill={entry.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* Lessons Detail */}
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-800">Detalle por Lección</h2>
+        {filas.map(({ leccion, ses, estado, cierre, acts }) => {
+          if (estado === 'no-programada') {
+            return (
+              <div
+                key={leccion.id}
+                className="rounded-xl border border-dashed border-gray-200 px-5 py-3"
+              >
+                <p className="text-sm text-gray-400">
+                  {leccion.title} — no programada para {matricula.section.name}
+                </p>
+              </div>
+            )
+          }
 
-        {lessons.map(lesson => {
-          const isExpanded = expandedLesson === lesson.lessonId
-          const completedActivities = lesson.activities.filter(a => a.status === 'COMPLETED').length
-          const totalActivities = lesson.activities.length
+          const minutos = ses
+            ? Math.round((ses.lastActivityAt.getTime() - ses.startedAt.getTime()) / 60_000)
+            : null
 
           return (
-            <Card key={lesson.lessonId}>
-              <button
-                onClick={() => setExpandedLesson(isExpanded ? null : lesson.lessonId)}
-                className="w-full text-left"
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
-                      <CardTitle className="text-sm">{lesson.lessonTitle}</CardTitle>
-                      {lesson.completedAt && (
-                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Completada</span>
-                      )}
-                      {!lesson.completedAt && lesson.startedAt && (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">En progreso</span>
-                      )}
-                      {!lesson.startedAt && (
-                        <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">No iniciada</span>
-                      )}
-                      {lesson.startedAt && lesson.totalMessages >= 5 && completedActivities === 0 && (
-                        <span
-                          className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded"
-                          title={`${lesson.totalMessages} mensajes pero 0 actividades registradas — Sophia no llegó a plantear las preguntas de verificación`}
-                        >
-                          ⚠ Sin progreso registrado
+            <div key={leccion.id} className="rounded-xl border border-gray-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-gray-900">{leccion.title}</h2>
+                  <p className="mt-0.5 text-sm text-gray-500">
+                    {estado === 'no-entro' &&
+                      `No entró · cerró el ${cierre?.toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}`}
+                    {estado === 'pendiente' && 'Aún abierta'}
+                    {ses &&
+                      `${ses.startedAt.toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · ${minutos} min`}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  {estado === 'terminada' && ses?.grade !== null && ses?.grade !== undefined ? (
+                    <span className="text-lg font-semibold tabular-nums">
+                      {Math.round(ses.grade)}
+                    </span>
+                  ) : estado === 'terminada' ? (
+                    <span className="text-xs text-amber-700">
+                      sin nota · avanzó por límite
+                    </span>
+                  ) : estado === 'no-entro' ? (
+                    <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+                      No entró
+                    </span>
+                  ) : estado === 'a-medias' ? (
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                      A medias
+                    </span>
+                  ) : estado === 'sin-avanzar' ? (
+                    <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-700">
+                      Abrió sin avanzar
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              {ses && acts.length > 0 && (
+                <div className="divide-y divide-gray-50">
+                  {acts.map((a, i) => {
+                    const p = ses.activities.find((x) => x.activityId === a.id)
+                    const ev = p?.evidenceData as
+                      | { attempts?: { analysis?: { understanding_level?: string } }[] }
+                      | null
+                    const ultimo = ev?.attempts?.at(-1)?.analysis?.understanding_level
+                    const nivel = ultimo ? NIVEL[normalizeLevel(ultimo)] : null
+
+                    return (
+                      <div key={a.id} className="flex items-center gap-3 px-5 py-2.5">
+                        <span className="w-5 shrink-0 text-xs tabular-nums text-gray-400">
+                          {i + 1}
                         </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      {lesson.grade !== null && (
-                        <span className={`font-bold ${
-                          lesson.grade >= 80 ? 'text-green-700' :
-                          lesson.grade >= 60 ? 'text-blue-700' :
-                          lesson.grade >= 40 ? 'text-amber-700' : 'text-red-700'
-                        }`}>
-                          {lesson.grade}/100
+                        <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
+                          {tituloActividad(a, i)}
                         </span>
-                      )}
-                      {lesson.duration !== null && (
-                        <span>{lesson.duration} min</span>
-                      )}
-                      <span>{completedActivities}/{totalActivities} act.</span>
-                    </div>
-                  </div>
-                  {/* Progress bar */}
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2 ml-6">
-                    <div
-                      className="h-full bg-green-500 rounded-full transition-all"
-                      style={{ width: `${totalActivities > 0 ? (completedActivities / totalActivities) * 100 : 0}%` }}
-                    />
-                  </div>
-                </CardHeader>
-              </button>
-
-              {isExpanded && (
-                <CardContent className="pt-0">
-                  {/* AI Report */}
-                  {lesson.summaryText && (
-                    <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-100">
-                      <p className="text-xs font-medium text-blue-800 mb-2 flex items-center gap-1.5">
-                        <Award className="h-3.5 w-3.5" />
-                        Reporte de IA
-                      </p>
-                      <div className="text-sm text-blue-900 whitespace-pre-line">
-                        {lesson.summaryText}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Activities Table */}
-                  <div className="space-y-2 ml-6">
-                    {lesson.activities.map(act => (
-                      <div
-                        key={act.id}
-                        className={`p-3 rounded-lg border text-sm ${
-                          act.status === 'COMPLETED'
-                            ? 'bg-green-50 border-green-100'
-                            : act.status === 'IN_PROGRESS'
-                            ? 'bg-amber-50 border-amber-100'
-                            : 'bg-gray-50 border-gray-100'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {act.status === 'COMPLETED' ? (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            ) : act.status === 'IN_PROGRESS' ? (
-                              <Clock className="h-4 w-4 text-amber-600" />
-                            ) : (
-                              <XCircle className="h-4 w-4 text-gray-300" />
-                            )}
-                            <span className="text-xs text-gray-400">#{act.index}</span>
-                            <span className="text-gray-700 truncate max-w-md">{act.title}</span>
-                          </div>
-
-                          <div className="flex items-center gap-3 text-xs">
-                            {act.score !== null && (
-                              <span className={`font-bold ${
-                                act.score >= 80 ? 'text-green-700' :
-                                act.score >= 60 ? 'text-blue-700' :
-                                act.score >= 40 ? 'text-amber-700' : 'text-red-700'
-                              }`}>
-                                {act.score}pts
-                              </span>
-                            )}
-                            {act.understandingLevel && (
-                              <span
-                                className="px-1.5 py-0.5 rounded text-white text-[10px] font-medium"
-                                style={{ backgroundColor: levelColors[act.understandingLevel] }}
-                              >
-                                {levelLabels[act.understandingLevel]}
-                              </span>
-                            )}
-                            {act.attempts > 0 && (
-                              <span className={`${act.attempts >= 3 ? 'text-amber-600' : 'text-gray-500'}`}>
-                                {act.attempts} intent{act.attempts !== 1 ? 'os' : 'o'}
-                              </span>
-                            )}
-                            {act.tangentCount > 0 && (
-                              <span className="text-gray-400 flex items-center gap-0.5">
-                                <AlertTriangle className="h-3 w-3" />
-                                {act.tangentCount}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Criteria detail for completed activities */}
-                        {act.status === 'COMPLETED' && act.criteriaMatched.length > 0 && (
-                          <div className="mt-2 ml-6 text-xs text-gray-500">
-                            {act.criteriaMatched.map((c, i) => (
-                              <span key={i} className="inline-flex items-center gap-0.5 mr-2">
-                                <CheckCircle className="h-2.5 w-2.5 text-green-500" />
-                                {c}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Missing criteria for in-progress */}
-                        {act.status === 'IN_PROGRESS' && act.criteriaMissing.length > 0 && (
-                          <div className="mt-2 ml-6 text-xs">
-                            {act.criteriaMissing.map((c, i) => (
-                              <span key={i} className="inline-flex items-center gap-0.5 mr-2 text-red-500">
-                                <XCircle className="h-2.5 w-2.5" />
-                                {c}
-                              </span>
-                            ))}
-                          </div>
+                        {p?.attempts ? (
+                          <span className="shrink-0 text-xs text-gray-400">
+                            {p.attempts} {p.attempts === 1 ? 'intento' : 'intentos'}
+                          </span>
+                        ) : null}
+                        {p?.status === 'COMPLETED' && p.passedCriteria === false ? (
+                          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            por límite
+                          </span>
+                        ) : nivel ? (
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${nivel.clase}`}
+                          >
+                            {nivel.texto}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-xs text-gray-300">sin llegar</span>
                         )}
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
+                    )
+                  })}
+                </div>
               )}
-            </Card>
+            </div>
           )
         })}
       </div>
-    </div>
-  )
-}
 
-function StatCard({
-  title, value, icon, bgColor,
-}: {
-  title: string
-  value: string | number
-  icon: React.ReactNode
-  bgColor: string
-}) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">{title}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-          </div>
-          <div className={`p-3 rounded-full ${bgColor}`}>{icon}</div>
+      {otros.length > 0 && (
+        <div className="space-y-2 border-t border-gray-100 pt-5">
+          <h2 className="text-sm font-semibold text-gray-500">Sus otros cursos</h2>
+          {otros.map((o) => (
+            <Link
+              key={o.courseId}
+              href={`/dashboard/${o.courseId}/${studentId}`}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-5 py-3 shadow-sm hover:border-gray-300"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-medium text-gray-900">{o.titulo}</p>
+                <p className="text-sm text-gray-500">
+                  {o.seccion} · {o.hechas} de {o.programadas} sesiones
+                </p>
+              </div>
+              {o.faltas > 0 && (
+                <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+                  faltó a {o.faltas}
+                </span>
+              )}
+            </Link>
+          ))}
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   )
 }
