@@ -12,11 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, Home, BookOpen, Sparkles, Shield, LayoutDashboard, CalendarDays, Megaphone } from 'lucide-react'
+import { User, LogOut, Settings, BookOpen, Sparkles, Shield, LayoutDashboard, CalendarDays, Megaphone } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import Image from 'next/image'
 import { nameInitials } from '@/lib/utils'
+import { VerComo } from '@/components/ver-como'
 
 export function Navbar() {
   const { data: session } = useSession()
@@ -33,7 +34,6 @@ export function Navbar() {
   }
 
   const role = session?.user?.role || 'STUDENT'
-  const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN'
   const isInstructorOrAbove = role === 'INSTRUCTOR' || role === 'ADMIN' || role === 'SUPERADMIN'
   const isSuperadmin = role === 'SUPERADMIN'
 
@@ -49,27 +49,20 @@ export function Navbar() {
         ? 'bg-blue-100 text-blue-700 border-blue-200'
         : ''
 
+  // «Casa» depende del rol: el alumno vive en sus clases; el staff, en la
+  // programación. Antes el logo devolvía a la página pública de bienvenida.
+  const inicio = role === 'STUDENT' ? '/lessons' : '/programacion'
+
   return (
     <header className="h-14 border-b  bg-white flex items-center justify-between px-6 sticky top-0 z-50">
       {/* Logo */}
-      <Link href="/" className="flex items-center gap-6">
+      <Link href={inicio} className="flex items-center gap-6">
         <Image src="/sophia_icon.svg" alt="Sophia Logo" width={32} height={32} />
       </Link>
 
       {/* Navigation Links */}
       <nav className="flex items-center gap-6">
-        <Link
-          href="/"
-          className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-            pathname === '/'
-              ? 'text-instructor-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <Home className="h-4 w-4" />
-          Inicio
-        </Link>
-        {role !== 'ADMIN' && (
+        {role === 'STUDENT' && (
           <Link
             href="/lessons"
             className={`flex items-center gap-2 text-sm font-medium transition-colors ${
@@ -145,6 +138,10 @@ export function Navbar() {
         )}
       </nav>
 
+      <div className="flex items-center gap-3">
+        {/* Solo el superadmin: mirar la app con el alcance de otra persona */}
+        {isSuperadmin && <VerComo />}
+
       {/* User Menu */}
       {session?.user ? (
         <DropdownMenu>
@@ -200,6 +197,7 @@ export function Navbar() {
           </Button>
         </Link>
       )}
+      </div>
     </header>
   )
 }
