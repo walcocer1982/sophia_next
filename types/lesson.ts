@@ -207,6 +207,10 @@ export interface CurrentActivityContext {
  * sub-preguntas (variante laxa). Destacado solo se logra al 1er disparo.
  */
 export interface ActivityCompletionResult {
+  /** El modelo vio que la respuesta va MÁS ALLÁ de los criterios (→ destacado). */
+  goes_beyond?: boolean
+  /** Completitud que estimó el modelo; la usada (`completeness_percentage`) se deriva de los criterios. */
+  completeness_reported?: number
   completed: boolean
   criteriaMatched: string[]
   criteriaMissing: string[]
