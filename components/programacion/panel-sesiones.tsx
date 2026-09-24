@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import type { Lesson, Section } from './types'
 import { closeTime, formatDate, hoursBetween, localTime, toLocalISO, todayISO } from './helpers'
 import { avisosDe, estadoDe, faltaPara, fin, horasSugeridas } from './avisos'
+import { AccionesSeccion } from './acciones-seccion'
 
 /** Reloj del panel. Date.now() en el render es impuro y dejaba el «cierra en…»
  *  congelado hasta el siguiente re-render. */
@@ -67,6 +68,8 @@ export function PanelSesiones({ section, canEdit, onToggleLesson }: Props) {
           </Button>
         )}
       </div>
+
+      {canEdit && <AccionesSeccion section={section} />}
 
       {abrirPlan && (
         <ProgramarPlan
