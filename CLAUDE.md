@@ -3,7 +3,7 @@
 **Proyecto:** Sophia Next
 **Arquitectura:** AI-Native Education Platform
 **Fecha:** 2025-11-05
-**Puerto:** 4000
+**Puerto:** 3000
 
 ---
 
@@ -28,7 +28,7 @@
 ### ⚡ Comandos Más Usados
 
 ```bash
-npm run dev              # Servidor de desarrollo (puerto 4000)
+npm run dev              # Servidor de desarrollo (puerto 3000)
 npm run build            # Build de producción (pre-push)
 npx tsc --noEmit         # Verificar tipos (pre-push)
 npx prisma generate      # Generar Prisma Client
@@ -62,7 +62,7 @@ Auth:        NextAuth v5 beta.30 (JWT strategy)
 AI:          Anthropic Claude API
 UI:          shadcn/ui + Framer Motion
 Deployment:  Vercel
-Dev Server:  Puerto 4000 + Turbopack
+Dev Server:  Puerto 3000 + Turbopack
 ```
 
 **Arquitectura AI-Native:**
@@ -109,7 +109,7 @@ sophia_next/
 │
 ├── .env                          # Variables de entorno (NO commitear)
 ├── .env.example                  # Template
-└── package.json                  # Puerto 4000 en scripts
+└── package.json                  # Puerto 3000 en scripts
 ```
 
 **✅ Limpieza:** El archivo duplicado `lib/auth.ts` fue eliminado. Solo existe `auth.ts` en la raíz.
@@ -1515,7 +1515,7 @@ Agregar en [Google Cloud Console](https://console.cloud.google.com):
 
 ```
 # Development
-http://localhost:4000/api/auth/callback/google
+http://localhost:3000/api/auth/callback/google
 
 # Production
 https://[tu-dominio].vercel.app/api/auth/callback/google
@@ -1723,7 +1723,7 @@ export default function LoginPage() {
 **A:** Genera `AUTH_SECRET` con `openssl rand -base64 32` y agrégalo a `.env`
 
 **Q:** Google OAuth redirect error
-**A:** Verifica callback URL en Google Cloud Console: `http://localhost:4000/api/auth/callback/google`
+**A:** Verifica callback URL en Google Cloud Console: `http://localhost:3000/api/auth/callback/google`
 
 **Q:** Test User funciona en producción
 **A:** Agregar validación `if (process.env.NODE_ENV !== 'development') return null` en `authorize()`
@@ -1872,7 +1872,7 @@ Esta fase establece la fundación del proyecto. Al completarla tendrás:
 
 - ✅ **Server Components** por defecto - Fetch directo de Prisma sin API route
 - ✅ **Client Components** solo cuando necesitas interactividad (mark con `'use client'`)
-- ✅ **Puerto 4000** - Configurado en `package.json`
+- ✅ **Puerto 3000** - Configurado en `package.json`
 - ✅ **Turbopack** - Builds más rápidos en desarrollo
 - ✅ **proxy.ts** - Reemplaza middleware.ts en Next.js 16, runtime nodejs
 - ⚠️ **No usar `useEffect` para fetch** - Usa server components
