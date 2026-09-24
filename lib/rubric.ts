@@ -1,10 +1,7 @@
 /**
- * 4-level rubric system para evaluación de actividades.
+ * Rúbrica de 4 niveles — UNA sola escala para la actividad y para la lección.
  *
- * DOS escalas distintas:
- *
- * 1) NOTA GLOBAL de la lección (promedio 0-100) → bandas en intervalos
- *    de 5/20 (política de evaluación 2026-06-23):
+ * Bandas de la política de evaluación (2026-06-23), en /20 y en /100:
  *
  *    | Nivel              | En /20    | En /100    |
  *    |--------------------|-----------|------------|
@@ -13,27 +10,34 @@
  *    | En Proceso         | 5 a < 10  | 25 a < 50  |
  *    | En Inicio          | 0 a < 5   | 0 a < 25   |
  *
- *    Convención de borde: el límite inferior pertenece al nivel superior
- *    (5 es Proceso, 10 es Logrado, 15 es Destacado). Passing grade: 50 = 10/20.
+ * Convención de borde: el límite inferior pertenece al nivel superior
+ * (5 es Proceso, 10 es Logrado, 15 es Destacado). Aprobar: 50 = 10/20.
  *
- * 2) NIVEL POR ACTIVIDAD: escala discreta 0-25-50-75-100 del evaluador
- *    (beginning/developing/achieved/outstanding) → ver calculateRubricLevel.
- *    NO usa las bandas globales: 50 = developing siempre es Proceso.
- *
- * SOURCE OF TRUTH: la rúbrica se deriva del grade numérico calculado en
- * lib/grading.ts. Esta capa solo mapea el número al label.
+ * Hasta el 14 set 2026 había DOS escalas: la actividad puntuaba 25/50/75/100 y
+ * la lección se leía con estas bandas, así que «Logrado» en cada actividad (75)
+ * se convertía en «Logrado destacado» al promediar, y quien agotaba intentos
+ * (tope 50) aprobaba. Ahora cada nivel de actividad vale el PUNTO MEDIO de su
+ * banda (lib/grading.ts → COMPREHENSION_SCORES) y el mismo mapeo numérico
+ * sirve para la actividad y para la lección: gradeToRubricLevel().
  */
 
 import { activityScore, type ScorableActivity } from './grading'
 
 export const GRADE_THRESHOLDS = {
-  LOGRADO_DESTACADO: 75, // 15/20 — antes era 17.5/20
-  LOGRADO: 50,           // 10/20 — passing (antes era 15/20)
-  EN_PROCESO: 25,        // 5/20  — antes era 12.5/20
+  LOGRADO_DESTACADO: 75, // 15/20
+  LOGRADO: 50,           // 10/20 — aprobado
+  EN_PROCESO: 25,        // 5/20
   EN_INICIO: 0,
 } as const
 
 export const PASSING_GRADE = GRADE_THRESHOLDS.LOGRADO // 50 = 10/20 = Logrado
+
+/**
+ * Completitud mínima (0-100) que una actividad exige para «cumplir» cuando el
+ * diseñador no fijó otra. Antes había dos defaults (60 en el prompt del tutor,
+ * 50 en el verificador) para la misma actividad.
+ */
+export const DEFAULT_MIN_COMPLETENESS = 50
 
 export type RubricLevel = 'logrado_destacado' | 'logrado' | 'en_proceso' | 'en_inicio'
 
@@ -68,26 +72,17 @@ const RUBRIC_CONFIG: Record<RubricLevel, Omit<RubricResult, 'level'>> = {
 }
 
 /**
- * Calculate rubric level for a single activity.
+ * Nivel de UNA actividad. Se deriva del mismo número que la nota
+ * (activityScore, que ya incluye el tope por intentos agotados y los
+ * criterios eliminatorios) y se lee con las MISMAS bandas que la lección.
  *
- * Delega en activityScore() (lib/grading.ts) para tener UNA fuente de verdad.
- * Mapea la escala DISCRETA por actividad (no las bandas de la nota global):
- * 100 = analyzed → Destacado, >=75 = applied → Logrado,
- * >=50 = understood → Proceso, <50 = memorized → Inicio.
+ * Devuelve null cuando la evidencia no permite afirmar nada (intento sin
+ * verificar): el tablero muestra «sin evaluar», no «en inicio».
  */
-export function calculateRubricLevel(
-  ap: ScorableActivity,
-  passedCriteria: boolean,
-): RubricLevel {
-  if (!passedCriteria) return 'en_inicio'
+export function calculateRubricLevel(ap: ScorableActivity): RubricLevel | null {
   const score = activityScore(ap)
-  // Sin nivel legible no se puede afirmar nada del alumno: se reporta el nivel
-  // más bajo y queda como señal de que la evidencia está rota.
-  if (score === null) return 'en_inicio'
-  if (score >= 100) return 'logrado_destacado'
-  if (score >= 75) return 'logrado'
-  if (score >= 50) return 'en_proceso'
-  return 'en_inicio'
+  if (score === null) return null
+  return gradeToRubricLevel(score)
 }
 
 /**
@@ -120,8 +115,7 @@ export function calculateOverallRubric(activityLevels: RubricLevel[]): RubricLev
 }
 
 /**
- * Convert numeric grade (0-100) to rubric level.
- * Uses Peruvian grading thresholds.
+ * Número (0-100) → nivel. Único mapeo, para actividades y para lecciones.
  */
 export function gradeToRubricLevel(grade: number): RubricLevel {
   if (grade >= GRADE_THRESHOLDS.LOGRADO_DESTACADO) return 'logrado_destacado'

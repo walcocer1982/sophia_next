@@ -1,7 +1,20 @@
 import { anthropic, extractJsonFromMarkdown, callAndParseJson } from '@/lib/anthropic'
 import { logger } from '@/lib/logger'
-import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric } from '@/types/lesson'
+import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric, SuccessCriteria } from '@/types/lesson'
 import { normalizeLevel } from '@/lib/levels'
+import { DEFAULT_MIN_COMPLETENESS } from '@/lib/rubric'
+
+/**
+ * Qué hizo el alumno en el turno. Lo decide el verificador con el contexto
+ * completo; antes lo decidían regex sobre el texto (/pas[oó]/, /ayuda/,
+ * /no\s*puedo/) que leían «en el paso 3» o «no puedo operar sin permiso»
+ * como «no sé».
+ */
+const STUDENT_INTENT_RULES = `REGLAS PARA student_intent (qué hizo el alumno en este turno):
+- "answer": intentó responder la pregunta, bien o mal.
+- "asks_for_help": pide una pista, dice que no entiende LA PREGUNTA, o pregunta algo para poder responder.
+- "does_not_know": admite que no conoce EL TEMA ("no sé", "nunca lo vi", "no me lo han explicado", "paso").
+- Decide por el sentido, no por palabras sueltas: "en el paso 3 se ventila" es answer; "no puedo operar sin permiso" es answer.`
 
 /**
  * Construir sección de hints para el prompt de verificación
@@ -34,7 +47,7 @@ function buildHintsSection(hints: VerificationHints): string {
  * Prompt de verificación para preguntas ABIERTAS
  * Evalúa calidad de razonamiento, no keywords específicos
  */
-function buildOpenEndedVerificationPrompt(
+export function buildOpenEndedVerificationPrompt(
   agentInstruction: string,
   activity: Activity,
   userMessage: string,
@@ -67,7 +80,7 @@ Evalúa la CALIDAD DEL RAZONAMIENTO del estudiante, no si menciona palabras clav
 REGLA CRÍTICA — CONTEXTO DE CONVERSACIÓN:
 Antes de evaluar, revisa la CONVERSACIÓN PREVIA. Si el instructor hizo una pregunta de seguimiento diferente a la original, evalúa si el estudiante respondió correctamente a ESA pregunta. No marques como "off_topic" si el estudiante responde a lo que le preguntaron.
 
-REGLA — TOLERANCIA A ERRORES DE VOZ (Whisper): si una palabra suena parecida a un término del tema, interpretala como ese término y procedé como si la hubiera dicho bien. NO descartes un criterio ni señales debilidad por eso — son artefactos técnicos. Si la INTENCIÓN está clara en el contexto, el criterio está cumplido.
+REGLA — TOLERANCIA A ERRORES DE VOZ (Whisper): si una palabra suena parecida a un término del tema, interprétala como ese término y procede como si la hubiera dicho bien. NO descartes un criterio ni señales debilidad por eso — son artefactos técnicos. Si la INTENCIÓN está clara en el contexto, el criterio está cumplido.
 
 CRITERIOS PARA PREGUNTA ABIERTA:
 - ¿Demuestra reflexión genuina sobre el tema?
@@ -77,18 +90,6 @@ CRITERIOS PARA PREGUNTA ABIERTA:
 
 REGLA PRINCIPAL: Si el estudiante muestra pensamiento crítico y engagement con el tema, es SUFICIENTE para avanzar. No busques una respuesta "perfecta".
 
-NIVELES DE DOMINIO (4 niveles oficiales, definiciones operacionales claras):
-
-- "memorized" = EN INICIO: Responde muy básico, monosilábico, o A VECES NO RESPONDE. Repuesta vacía, irrelevante, o solo "sí/no/no sé". Mínimo de palabras y NO aborda lo que se preguntó.
-
-- "understood" = EN PROCESO: TRATA de responder pero NO SE LE ENTIENDE BIEN. Respuesta vaga, confusa, o solo cubre 1 criterio de forma incompleta. Hay intento pero no claridad.
-
-- "applied" = LOGRADO: Cumple MÁS DE UN criterio de la actividad. Cubre al menos 2 de los criterios "must_include" con claridad, sin errores conceptuales graves. Este es el nivel ESPERADO cuando responde bien.
-
-- "analyzed" = DESTACADO: SUSTENTA su respuesta. Más allá de cumplir criterios, da una RAZÓN, una EXPLICACIÓN, un ARGUMENTO de por qué. Por ejemplo: "elijo X porque cuando pasa Y, entonces Z" — hay justificación clara.
-
-REGLAS CRÍTICAS PARA CLASIFICAR:
-- Contá los criterios de "must_include" que la respuesta cubre con claridad:
 PROFUNDIDAD (campo goes_beyond):
 - true SOLO si cumple TODOS los aspectos Y ademas sustenta el porque, aporta un
   ejemplo propio o conecta con otro tema — algo que el aspecto no pedia.
@@ -131,7 +132,8 @@ Responde en formato JSON con esta estructura EXACTA:
   "confidence": "high" | "medium" | "low",
   "ready_to_advance": boolean,
   "needs_scaffolding": boolean,
-  "next_subquestion": "string o null"
+  "next_subquestion": "string o null",
+  "student_intent": "answer" | "asks_for_help" | "does_not_know"
 }
 
 REGLA CRÍTICA — criteriaMatched/criteriaMissing son los NÚMEROS de la lista "ASPECTOS A OBSERVAR" de arriba (ej: [1,3]). NO inventes descripciones ni copies texto: usa SOLO los números de la lista. Si un aspecto no aplica, no lo agregues.
@@ -152,13 +154,15 @@ REGLAS PARA next_subquestion:
 - NUNCA listes opciones para que elija (ej: ~"¿es A, B o C?"~)
 - null si needs_scaffolding=false
 
+${STUDENT_INTENT_RULES}
+
 Responde SOLO con el JSON, sin texto adicional.`
 }
 
 /**
  * Prompt de verificación ESTÁNDAR (criterios específicos)
  */
-function buildStandardVerificationPrompt(
+export function buildStandardVerificationPrompt(
   agentInstruction: string,
   activity: Activity,
   userMessage: string,
@@ -202,7 +206,7 @@ REGLAS DE EVALUACIÓN FLEXIBLE:
 - Si el estudiante demuestra que ENTENDIÓ LA IDEA CENTRAL, marca el criterio como cumplido
 - Solo marca como NO cumplido si claramente NO ENTENDIÓ o tiene información ERRÓNEA
 
-REGLA — TOLERANCIA A ERRORES DE VOZ (Whisper): si una palabra suena parecida a un término del tema, interpretala como ese término y NO bajes el nivel ni descartes un criterio por eso. Solo cuestioná si cambia el SIGNIFICADO conceptual.
+REGLA — TOLERANCIA A ERRORES DE VOZ (Whisper): si una palabra suena parecida a un término del tema, interprétala como ese término y NO descartes un criterio por eso. Solo cuestiónala si cambia el SIGNIFICADO conceptual.
 
 PROFUNDIDAD (campo goes_beyond):
 - true SOLO si la respuesta cumple TODOS los criterios Y además aporta algo que
@@ -226,7 +230,8 @@ Responde en formato JSON con esta estructura EXACTA:
   "confidence": "high" | "medium" | "low",
   "ready_to_advance": boolean,
   "needs_scaffolding": boolean,
-  "next_subquestion": "string o null"
+  "next_subquestion": "string o null",
+  "student_intent": "answer" | "asks_for_help" | "does_not_know"
 }
 
 REGLAS PARA response_type:
@@ -240,7 +245,7 @@ REGLAS PARA ready_to_advance (decisión PEDAGÓGICA — que el alumno no se trab
 - true si completeness_percentage >= ${minCompleteness}
 - true si cumple los criterios centrales aunque le falte alguno accesorio
 - false si el estudiante claramente no entendió el concepto central
-- Ante la duda, dejá avanzar: trabar a alguien cuesta más que dejarlo seguir.
+- Ante la duda, deja avanzar: trabar a alguien cuesta más que dejarlo seguir.
   Esta generosidad NO afecta su nota — la nota sale de los criterios cumplidos.
 
 REGLAS PARA needs_scaffolding (DESGLOSE):
@@ -257,6 +262,8 @@ REGLAS PARA next_subquestion (cuando needs_scaffolding=true):
   ❌ NUNCA listes opciones para que elija ("¿es A, B o C?")
   ❌ NUNCA digas "te falta hablar de X"
 - null si needs_scaffolding=false
+
+${STUDENT_INTENT_RULES}
 
 Responde SOLO con el JSON, sin texto adicional.`
 }
@@ -301,7 +308,7 @@ function buildAccumulatedStudentResponse(
  * Devuelve `level` en la escala nueva (beginning/developing/achieved/outstanding);
  * el caller lo mapea al enum viejo.
  */
-function buildRubricVerificationPrompt(
+export function buildRubricVerificationPrompt(
   activity: Activity,
   userMessage: string,
   conversationHistory: { role: 'user' | 'assistant'; content: string }[] | undefined,
@@ -316,7 +323,7 @@ function buildRubricVerificationPrompt(
     ? `\n- POST-EXPLICACIÓN: ya le explicaste el concepto en esta actividad. Si el alumno solo REPITE lo explicado → "developing" como máximo; NO marques "achieved" ni "outstanding".`
     : ''
 
-  return `Eres un evaluador pedagógico. Comparás la respuesta del alumno con las respuestas-referencia de cada nivel y devolvés un veredicto.
+  return `Eres un evaluador pedagógico. Comparas la respuesta del alumno con las respuestas-referencia de cada nivel y devuelves un veredicto.
 
 PREGUNTA: ${activity.verification.question}
 
@@ -334,14 +341,16 @@ RESPUESTA DEL ESTUDIANTE:
 ${conversationHistory && conversationHistory.length > 0 ? `\nCONTEXTO PREVIO (intervenciones del instructor):\n${conversationHistory.slice(-4).filter((m) => m.role === 'assistant').map((m) => `Instructor: ${m.content}`).join('\n\n')}` : ''}
 
 CÓMO EVALUAR:
-- Elegí el nivel cuya referencia MÁS se parezca en la COMPRENSIÓN demostrada, NO en las palabras exactas. Acepta paráfrasis, sinónimos y ejemplos propios.
+- Elige el nivel cuya referencia MÁS se parezca en la COMPRENSIÓN demostrada, NO en las palabras exactas. Acepta paráfrasis, sinónimos y ejemplos propios.
 - La condición real de aprobar son los CRITERIOS (must_include); las referencias solo calibran el nivel.
 - Avanza (ready_to_advance=true) si completeness >= ${minCompleteness}% o el nivel es "${expectedNew}" o superior.
 - "no sé" / "no conozco" / "es la primera vez" / no responde → response_type "incorrect" (NUNCA "off_topic").
 - Si la respuesta trata de OTRO tema distinto al de ESTA pregunta (contesta algo que no se preguntó acá — p.ej. responde sobre el tema de otra actividad) → response_type "off_topic". Distinción: "incorrect" = intento sobre ESTE tema pero equivocado; "off_topic" = habla de un tema diferente al preguntado.
-- Tolerá errores de transcripción de voz (Whisper): si una palabra suena parecida a un término del tema, interpretala como ese término.${capClause}
+- Tolera errores de transcripción de voz (Whisper): si una palabra suena parecida a un término del tema, interprétala como ese término.${capClause}
 
-Devolvé SOLO este JSON (sin texto adicional):
+${STUDENT_INTENT_RULES}
+
+Devuelve SOLO este JSON (sin texto adicional):
 {
   "completed": boolean,
   "level": "beginning" | "developing" | "achieved" | "outstanding",
@@ -353,7 +362,8 @@ Devolvé SOLO este JSON (sin texto adicional):
   "confidence": "high" | "medium" | "low",
   "ready_to_advance": boolean,
   "needs_scaffolding": boolean,
-  "next_subquestion": "string o null"
+  "next_subquestion": "string o null",
+  "student_intent": "answer" | "asks_for_help" | "does_not_know"
 }`
 }
 
@@ -369,14 +379,17 @@ export async function verifyActivityCompletion(
 ): Promise<ActivityCompletionResult> {
   // Backwards compatibility: support both old and new structure
   // Old: verification.criteria[], New: verification.success_criteria.must_include[]
-  // AJUSTE: Reducido min_completeness por defecto de 60% a 50% para ser más permisivo
-  const successCriteria = activity.verification.success_criteria || {
+  const successCriteria: SuccessCriteria = activity.verification.success_criteria || {
     must_include: (activity.verification as { criteria?: string[] }).criteria || [],
-    min_completeness: 50,
+    min_completeness: DEFAULT_MIN_COMPLETENESS,
     understanding_level: 'developing' as const
   }
-  const minCompleteness = successCriteria.min_completeness ?? 50
+  const minCompleteness = successCriteria.min_completeness ?? DEFAULT_MIN_COMPLETENESS
   const expectedLevel = normalizeLevel(successCriteria.understanding_level)
+  // Eliminatorios: textos de los must_include marcados en `critical` (1-based).
+  const criticos = (successCriteria.critical ?? [])
+    .map((i) => successCriteria.must_include[i - 1])
+    .filter((c): c is string => typeof c === 'string' && c.length > 0)
   const hints = successCriteria.hints || {}
 
   // Old: activity.agent_instruction, New: activity.teaching.agent_instruction
@@ -396,13 +409,18 @@ export async function verifyActivityCompletion(
   // Construir contexto para verificación. Si Sophia ya dio una mini-explicación
   // didáctica en esta actividad, agregamos un bloque que le pide al evaluador
   // distinguir entre repetición de lo enseñado vs integración con palabras propias.
+  // (El nivel no se le pide al modelo: se deriva de los criterios. Por eso la
+  // regla habla de criterios y no de niveles; el tope post-explicación en
+  // «en proceso» lo aplica el código más abajo.)
   const explainedClause = wasExplained
     ? `\n\nCONTEXTO IMPORTANTE: Sophia YA EXPLICÓ el concepto en esta actividad antes de esta respuesta.
-REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
-- Si el estudiante solo REPITE lo que Sophia le acaba de explicar → understanding_level = "memorized" (Inicio)
-- Si el estudiante INTEGRA la explicación con sus palabras / un ejemplo propio / una conexión → understanding_level = "understood" (Proceso) MÁXIMO
-- NUNCA marques "applied" (Logrado) ni "analyzed" (Destacado) después de explicación — esos niveles requieren que el estudiante haya demostrado dominio SIN que se le enseñara primero.
-- Cap absoluto post-explicación: understood (Proceso).`
+REGLA POST-EXPLICACIÓN:
+- Un criterio cuenta como cubierto solo si el estudiante lo formula con sus palabras, con un ejemplo propio o con una conexión. Repetir la explicación casi literal NO lo cubre.
+- goes_beyond siempre false después de una explicación.`
+    : ''
+
+  const criticalClause = criticos.length > 0
+    ? `\n\nCRITERIOS ELIMINATORIOS (sin ellos la respuesta NO está completa, aunque cubra el resto): ${criticos.map((c) => `«${c}»`).join(', ')}. Con estos sé estricto: márcalos como cubiertos solo si el estudiante los formula de manera inequívoca.`
     : ''
 
   // Fase B: si la actividad tiene rúbrica pre-generada, usamos el prompt corto
@@ -411,12 +429,13 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
   const useRubric = !!rubric &&
     !!rubric.beginning && !!rubric.developing && !!rubric.achieved && !!rubric.outstanding
 
-  const verificationPrompt = useRubric
+  const basePrompt = useRubric
     ? buildRubricVerificationPrompt(activity, accumulatedResponse, conversationHistory, rubric, successCriteria.must_include, minCompleteness, expectedLevel, wasExplained)
     : (isOpenEnded
         ? buildOpenEndedVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, hintsSection, expectedLevel)
         : buildStandardVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, successCriteria, hintsSection, minCompleteness, expectedLevel)
       ) + explainedClause
+  const verificationPrompt = basePrompt + criticalClause
 
   try {
     const response = await anthropic.messages.create({
@@ -452,6 +471,16 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
     }
     result.criteriaMatched = expandCriteria(result.criteriaMatched)
     result.criteriaMissing = expandCriteria(result.criteriaMissing)
+
+    // Eliminatorios: sin ellos no hay «completed», cubra lo que cubra.
+    if (criticos.some((c) => !result.criteriaMatched.includes(c))) {
+      result.completed = false
+    }
+
+    // Intención del alumno, saneada a los tres valores conocidos.
+    const intent = (result as { student_intent?: unknown }).student_intent
+    result.student_intent =
+      intent === 'asks_for_help' || intent === 'does_not_know' ? intent : 'answer'
 
     // Normalizar el nivel: el prompt de rúbrica devuelve `level` (escala nueva);
     // el prompt fallback devuelve understanding_level (escala vieja).
@@ -552,118 +581,36 @@ REGLA POST-EXPLICACIÓN (CAP DE NIVEL):
 
     return result
   } catch (error) {
-    console.error('❌ Error verifying activity completion:', error)
-
-    // Fallback: verificación simple por keywords (o por longitud si open-ended)
-    return fallbackVerification(userMessage, activity, isOpenEnded ? effectiveThreshold : minCompleteness, isOpenEnded)
+    logger.error('verification.failed', { activityId: activity.id, error: String(error) })
+    return resultadoSinVerificar()
   }
 }
 
 /**
- * Verificación fallback simple si la IA falla
+ * Resultado cuando el verificador NO respondió (API caída, JSON inválido).
+ *
+ * Antes acá había una verificación por palabras clave: diez palabras de
+ * cualquier cosa daban `correct` y avanzaban con nivel «en proceso», o sea una
+ * nota inventada sobre nada. Ahora el alumno avanza igual —no se lo traba por
+ * una falla técnica— pero el intento se guarda SIN nivel ni criterios (ver
+ * `unverified`): no puntúa ni aparece en el tablero como evaluado hasta que
+ * scripts/reverificar-pendientes.ts lo pase de nuevo por el verificador sobre
+ * la respuesta guardada.
  */
-function fallbackVerification(
-  userMessage: string,
-  activity: Activity,
-  minCompleteness: number,
-  isOpenEnded: boolean = false
-): ActivityCompletionResult {
-  // Para preguntas abiertas en fallback: matchear contra must_include literales por
-  // keywords. Antes devolvía ["Respuesta con reflexión"] genérico que era inútil
-  // para el reporte. Ahora intenta dar crédito real por los criterios cubiertos.
-  if (isOpenEnded) {
-    const wordCount = userMessage.trim().split(/\s+/).length
-    const hasSubstance = wordCount >= 10
-    const messageLower = userMessage.toLowerCase()
-    const criteria = activity.verification.success_criteria?.must_include || []
-
-    const criteriaMatched: string[] = []
-    const criteriaMissing: string[] = []
-    for (const criterion of criteria) {
-      const keywords = criterion
-        .toLowerCase()
-        .split(' ')
-        .filter((w) => w.length > 4)
-      const hasMatch = keywords.some((k) => messageLower.includes(k))
-      if (hasMatch) criteriaMatched.push(criterion)
-      else criteriaMissing.push(criterion)
-    }
-
-    const total = criteria.length
-    const completeness_percentage = total > 0
-      ? Math.round((criteriaMatched.length / total) * 100)
-      : (hasSubstance ? 60 : 20)
-
-    return {
-      completed: hasSubstance && criteriaMatched.length === total,
-      criteriaMatched,
-      criteriaMissing,
-      completeness_percentage,
-      understanding_level: hasSubstance ? 'developing' : 'beginning',
-      response_type: hasSubstance ? 'correct' : 'partial',
-      feedback: hasSubstance
-        ? 'Buena reflexión sobre el tema.'
-        : 'Intenta desarrollar un poco más tu respuesta.',
-      confidence: 'low',
-      ready_to_advance: hasSubstance,
-    }
-  }
-
-  const messageLower = userMessage.toLowerCase()
-  const criteriaMatched: string[] = []
-  const criteriaMissing: string[] = []
-  // Backwards compatibility: support both old and new structure
-  const criteria = activity.verification.success_criteria?.must_include ||
-    (activity.verification as { criteria?: string[] }).criteria || []
-
-  // Verificación simple: buscar keywords de cada criterio
-  criteria.forEach((criterion) => {
-    const criterionKeywords = criterion
-      .toLowerCase()
-      .split(' ')
-      .filter((w) => w.length > 4) // Solo palabras >4 chars
-
-    const hasKeywords = criterionKeywords.some((keyword) =>
-      messageLower.includes(keyword)
-    )
-
-    if (hasKeywords) {
-      criteriaMatched.push(criterion)
-    } else {
-      criteriaMissing.push(criterion)
-    }
-  })
-
-  const totalCriteria = criteria.length
-  const completeness_percentage = totalCriteria > 0
-    ? Math.round((criteriaMatched.length / totalCriteria) * 100)
-    : 0
-
-  const completed = criteriaMissing.length === 0
-  const ready_to_advance = completeness_percentage >= minCompleteness
-
-  // Determinar response_type basado en porcentaje
-  let response_type: ResponseType = 'partial'
-  if (completeness_percentage >= 80) {
-    response_type = 'correct'
-  } else if (completeness_percentage < 20) {
-    response_type = 'off_topic'
-  } else if (completeness_percentage < 40) {
-    response_type = 'incorrect'
-  }
-
+export function resultadoSinVerificar(): ActivityCompletionResult {
   return {
-    completed,
-    criteriaMatched,
-    criteriaMissing,
-    completeness_percentage,
-    understanding_level: 'developing' as UnderstandingLevel, // Default en fallback
-    response_type,
-    feedback: completed
-      ? '¡Excelente! Has comprendido los conceptos clave.'
-      : 'Bien, pero falta profundizar en algunos puntos.',
-    confidence: 'low', // Baja confianza en fallback
-    ready_to_advance,
+    completed: false,
+    criteriaMatched: [],
+    criteriaMissing: [],
+    completeness_percentage: 0,
+    understanding_level: 'developing', // marcador de tipo: NO se persiste (ver `unverified`)
+    response_type: 'partial',
+    feedback: '',
+    confidence: 'low',
+    ready_to_advance: true,
+    needs_scaffolding: false,
+    next_subquestion: undefined,
+    unverified: true,
   }
 }
 
@@ -736,27 +683,4 @@ Responde ÚNICAMENTE con JSON:
       ready_to_advance: false,
     }
   }
-}
-
-/**
- * Determinar si debe mostrarse un hint basado en intentos fallidos
- * NOTA: En el nuevo schema no hay hints predefinidos, se guía con el método socrático
- */
-export function shouldShowHint(
-  failedAttempts: number
-): { show: boolean; hintLevel: 'subtle' | 'direct' | 'explicit' } {
-  // Sin hints predefinidos, el nivel de ayuda aumenta con los intentos
-  if (failedAttempts < 2) {
-    return { show: false, hintLevel: 'subtle' }
-  }
-
-  if (failedAttempts < 4) {
-    return { show: true, hintLevel: 'subtle' }
-  }
-
-  if (failedAttempts < 6) {
-    return { show: true, hintLevel: 'direct' }
-  }
-
-  return { show: true, hintLevel: 'explicit' }
 }

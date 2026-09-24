@@ -33,7 +33,6 @@ interface MonitoredStudent {
   hoursInactive?: number
   completedAt?: string
   endedAt?: string
-  isGuest?: boolean
 }
 
 interface FunnelActivity {
@@ -453,11 +452,6 @@ export default function CourseDashboardPage() {
                         <Link href={`/dashboard/${courseId}/${s.userId}`} className="hover:text-blue-600">
                           <div className="flex items-center gap-1.5">
                             <p className="font-medium text-gray-700 text-sm">{s.name || s.email}</p>
-                            {s.isGuest && (
-                              <span className="inline-flex items-center gap-0.5 bg-amber-50 text-amber-700 px-1 py-0.5 rounded text-[9px] font-medium">
-                                👤 invitado
-                              </span>
-                            )}
                           </div>
                         </Link>
                       </td>

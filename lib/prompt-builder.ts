@@ -1,6 +1,7 @@
 import type { CurrentActivityContext, ActivityCompletionResult, ActivityType, ActivityComplexity, IntentClassification, LessonContext, Activity } from '@/types/lesson'
 import type { Message } from '@prisma/client'
 import { buildOptimizedContext } from './message-summarizer'
+import { DEFAULT_MIN_COMPLETENESS } from '@/lib/rubric'
 
 interface PromptBuilderContext {
   activityContext: CurrentActivityContext
@@ -12,90 +13,15 @@ interface PromptBuilderContext {
   intentClassification?: IntentClassification
   lessonContext?: LessonContext  // Contexto normativo/técnico de la lección
   nextActivity?: Activity  // Siguiente actividad (cuando ready_to_advance = true)
-  lastUserMessage?: string  // Último mensaje del estudiante (para detectar "no sé")
   methodology?: 'REFLECTIVE' | 'CODE'  // Metodología del curso (default REFLECTIVE)
   projectBrief?: unknown               // Propuesta acordada en la sesión-bisagra (CODE personalizado)
   wasExplained?: boolean               // Sophia ya dio una mini-explicación didáctica en esta actividad
-  language?: 'ES' | 'EN'               // Idioma en que Sophia debe responder al estudiante (default ES)
 }
 
-/**
- * Detecta si el estudiante expresó que no sabe la respuesta
- * Expandido para detectar más variantes de confusión/duda
- */
-function isStudentUnsure(message: string): boolean {
-  const trimmed = message.trim()
-
-  // Patrones explícitos de "no sé"
-  const unsurePatterns = [
-    /no\s*(lo\s*)?s[eé]/i,
-    /no\s*tengo\s*(ni\s*)?idea/i,
-    /no\s*entiendo/i,
-    /no\s*recuerdo/i,
-    /no\s*me\s*acuerdo/i,
-    /no\s*puedo/i,
-    /no\s*s[eé]\s*qu[eé]\s*(hacer|decir|responder)/i,
-    /no\s*me\s*sale/i,
-    /me\s*rindo/i,
-    /me\s*confund[íi]/i,
-    /estoy\s*(muy\s*)?(confundid[oa]|perdid[oa])/i,
-    /ayuda/i,
-    /pista/i,
-    /dame\s*(una\s*)?(pista|ayuda)/i,
-    /^\s*[\?¿]+\s*$/,                    // Solo signos de interrogación
-    /^(mmm|ehh|umm|hmm)\s*\??$/i,        // Sonidos de duda
-    /ni\s*idea/i,
-    /pas[oó]/i,                          // "paso" como rendirse
-  ]
-
-  // (función de detección "fuerte" abajo — patrones específicos)
-  void 0
-
-  if (unsurePatterns.some(pattern => pattern.test(trimmed))) {
-    return true
-  }
-
-  // Respuestas muy cortas (<15 chars) que no son confirmaciones
-  const confirmationPatterns = [
-    /^(si|sí|ok|vale|entendido|claro|listo|perfecto|de\s*acuerdo)$/i,
-  ]
-  if (trimmed.length < 15 && trimmed.length > 0) {
-    const isConfirmation = confirmationPatterns.some(p => p.test(trimmed))
-    if (!isConfirmation && !/[a-záéíóúñ]{4,}/i.test(trimmed)) {
-      // Muy corto y sin palabras significativas = probable confusión
-      return true
-    }
-  }
-
-  return false
-}
-
-/**
- * Detector "fuerte" de no-sé: el estudiante no tiene ninguna base sobre el tema
- * y necesita que se le ENSEÑE el concepto, no que se le hagan más preguntas.
- *
- * Distinto de isStudentUnsure() porque excluye:
- * - "no estoy seguro" / "no me animo" (duda, sí tiene algo)
- * - "no entiendo" (puede ser de la pregunta, no del tema)
- *
- * Solo dispara para confesiones literales de desconocimiento total del tema.
- */
-export function isStudentUnsureStrong(message: string): boolean {
-  const trimmed = message.trim().toLowerCase()
-  const strongPatterns = [
-    /^no\s*s[eé][.!]*$/i,                       // "no sé" / "no se" puro
-    /^no\s*(lo\s*)?s[eé][.,!\s]*nada/i,         // "no sé nada"
-    /no\s*tengo\s*(ni\s*)?idea/i,                // "no tengo idea"
-    /ni\s*(la\s+m[aá]s\s+m[ií]nima\s+)?idea/i,  // "ni idea"
-    /no\s*conozco/i,                             // "no conozco X"
-    /nunca\s*(lo\s+)?(he\s+|hab[ií]a\s+)?(visto|escuchado|o[ií]do)/i, // "nunca lo había escuchado"
-    /no\s*me\s*ha\s*explicado/i,                 // "no me ha explicado"
-    /no\s*lo\s*entiendo\s*nada/i,                // "no lo entiendo nada"
-    /^pas[oó][.!]*$/i,                           // "paso"
-    /^me\s*rindo[.!]*$/i,                        // "me rindo"
-  ]
-  return strongPatterns.some(p => p.test(trimmed))
-}
+// La intención del alumno («no sé», «dame una pista») la decide el verificador
+// con el contexto completo (ActivityCompletionResult.student_intent). Acá vivían
+// dos listas de regex que leían «en el paso 3» como rendirse y «no puedo operar
+// sin permiso» como no saber.
 
 /**
  * Tipo de retorno con bloques para Prompt Caching
@@ -224,69 +150,16 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
     intentClassification,
     lessonContext,
     nextActivity,
-    lastUserMessage = '',
     methodology = 'REFLECTIVE',
     projectBrief,
     wasExplained = false,
-    language = 'ES',
   } = context
   const isCodeMethodology = methodology === 'CODE'
 
-  // Bloque de instrucción de idioma — STICKY: Sophia responde SIEMPRE en el
-  // idioma del toggle del kiosko, sin importar en qué idioma le escriba el
-  // estudiante. El bug a evitar es mezclar idiomas dentro de una sola
-  // respuesta (Claude tiende a "filtrar" español cuando el contenido fuente
-  // está en español). Reglas más agresivas + self-check.
-  const languageInstruction = language === 'EN' ? `
-
-═══════════════════════════════════════════════════════════════
-LANGUAGE LOCK — CRITICAL ENFORCEMENT (READ FIRST)
-═══════════════════════════════════════════════════════════════
-The student selected ENGLISH for this kiosko session. This is LOCKED.
-
-OUTPUT LANGUAGE: 100% English. Every single word in every response.
-
-REGISTER: This is a TECHNICAL TRAINING for adult professionals — neutral,
-professional English. Warm but NOT childish or condescending. No baby-talk,
-no diminutives, no "little by little / step by little step". Use correct
-technical vocabulary and explain it; treat the student as a capable adult.
-
-ABSOLUTE RULES:
-1. NEVER mix Spanish and English in the same response. Not one Spanish word.
-   (Single exception: image labels — see rule 4.)
-2. NEVER respond in Spanish — even if the student writes entirely in Spanish,
-   you understand them but reply in English.
-3. The lesson content below (agent_instruction, success_criteria, verification
-   question, key points) is written in Spanish. TRANSLATE all concepts to
-   English when referencing them in your reply. Never quote Spanish verbatim.
-4. IMAGE LABELS — the ONLY allowed Spanish: the images on screen may show
-   labels in Spanish. The FIRST time you reference a label, quote it exactly
-   as the student sees it with its English translation in parentheses, using
-   the pattern "<Spanish label> (<English translation>)" — so they can map
-   what they see to what you say. After that first mention, use ONLY the
-   English term. This exception applies exclusively to text visible in the
-   images, never to your own sentences, connectors, or explanations.
-5. Translate the lesson's technical terms to their standard English
-   equivalents naturally and consistently — same term, same translation,
-   throughout the whole session.
-6. Greetings: "Hi" or "Hello" — NEVER "Hola".
-7. Confirmations: "Right", "Exactly", "Got it" — NEVER "¿Sí?", "¿Verdad?",
-   "¿Claro?", "Vale", "Bueno", "Perfecto" (in Spanish), "Exacto".
-8. Connectors: "So", "Then", "Now" — NEVER "Entonces", "Bueno", "A ver".
-
-SELF-CHECK BEFORE SENDING (mandatory):
-Scan your response for any Spanish word. The only Spanish allowed is a
-first-mention image label in the "Label (Translation)" pattern (rule 4).
-Anything else, rewrite the sentence in English. Common slip-ups to catch:
-- Ending a sentence with "¿no?" or "¿verdad?"
-- Mid-sentence "claro,", "bueno,", "a ver,"
-- Spanish technical terms not translated (outside the image-label pattern)
-- Spanish accent marks (á, é, í, ó, ú, ñ) on non-proper-noun words
-═══════════════════════════════════════════════════════════════
-` : ''
-
-  // Detectar si el estudiante expresó que no sabe
-  const studentIsUnsure = isStudentUnsure(lastUserMessage)
+  // Qué hizo el alumno en este turno, según el verificador.
+  const studentIntent = verificationResult?.student_intent
+  const studentIsUnsure = studentIntent === 'asks_for_help' || studentIntent === 'does_not_know'
+  const studentHasNoBase = studentIntent === 'does_not_know'
 
   const {
     activity,
@@ -322,8 +195,8 @@ Anything else, rewrite the sentence in English. Common slip-ups to catch:
 `
 
   // Registro de español: neutro latinoamericano con tuteo (Perú), nunca voseo
-  // argentino. Se omite en EN (el LANGUAGE LOCK ya gobierna ese caso).
-  const dialectInstruction = language === 'EN' ? '' : `REGISTRO DE ESPAÑOL (OBLIGATORIO):
+  // argentino. tests/prompt.test.ts verifica que el propio prompt lo cumpla.
+  const dialectInstruction = `REGISTRO DE ESPAÑOL (OBLIGATORIO):
 - Usa español NEUTRO latinoamericano con registro peruano. Trato de "tú" (tuteo).
 - Conjuga con TUTEO: "tú tienes", "tú quieres", "tú puedes", "mira", "fíjate", "imagina".
 - PROHIBIDO el voseo argentino: NUNCA "vos", "tenés", "querés", "podés", "mirá", "fijate", "imaginá", "dale", "che".
@@ -331,7 +204,7 @@ Anything else, rewrite the sentence in English. Common slip-ups to catch:
 
 `
 
-  const staticBlock1 = `${languageInstruction}${registerInstruction}${dialectInstruction}IDENTIDAD: Eres Sophia, instructora educativa (MUJER). Usa SIEMPRE género femenino al referirte a ti misma (instructora, mentora, lista, atenta).
+  const staticBlock1 = `${registerInstruction}${dialectInstruction}IDENTIDAD: Eres Sophia, instructora educativa (MUJER). Usa SIEMPRE género femenino al referirte a ti misma (instructora, mentora, lista, atenta).
 
 REGLA CRÍTICA — GÉNERO DEL ESTUDIANTE:
 - NO asumas el género del estudiante. Usa lenguaje neutro o masculino genérico.
@@ -473,8 +346,19 @@ Refiérete a las entidades concretas del brief cuando instruyas cada paso. Para 
 
   // Old: verification.criteria[], New: verification.success_criteria.must_include[]
   const successCriteria = verification.success_criteria?.must_include || (verification as { criteria?: string[] }).criteria || []
-  const minCompleteness = verification.success_criteria?.min_completeness ?? 60
+  const minCompleteness = verification.success_criteria?.min_completeness ?? DEFAULT_MIN_COMPLETENESS
   const isOpenEnded = verification.open_ended === true
+  // Eliminatorios: lo que en campo no admite error. Sophia nunca los revela,
+  // ni siquiera cuando explica lo que faltó al agotar los intentos.
+  const criticos = (verification.success_criteria?.critical ?? [])
+    .map((i) => successCriteria[i - 1])
+    .filter((c): c is string => typeof c === 'string' && c.length > 0)
+  const criticosBlock = criticos.length > 0
+    ? `\nCRITERIOS ELIMINATORIOS — NUNCA los reveles, los expliques ni los insinúes, ni siquiera al agotar los intentos: ${criticos.map((c) => `«${c}»`).join(', ')}`
+    : ''
+  const salvoEliminatorios = criticos.length > 0
+    ? ' (EXCEPTO los criterios eliminatorios: esos no se revelan nunca)'
+    : ''
   // Default true for backwards compatibility - existing activities without flag are evaluative
   const isEvaluative = verification.is_evaluative !== false
 
@@ -483,12 +367,12 @@ Refiérete a las entidades concretas del brief cuando instruyas cada paso. Para 
     explanation: `TIPO DE PREGUNTAS: CERRADAS (comprensión directa)
 - Pregunta sobre lo que ACABAS de explicar, no sobre lo que el estudiante debería deducir
 - Ej: "¿Cuáles son los 3 tipos de...?", "¿Qué diferencia hay entre X e Y?"
-- Si responde bien, puedes profundizar: "¿Y por qué es importante esa diferencia?"
+- Si responde bien, cierra y avanza: no agregues preguntas de profundización
 - NO pidas análisis ni aplicación — eso es para la práctica`,
     practice: `TIPO DE PREGUNTAS: CERRADAS → ABIERTAS (progresión)
 - Empieza con preguntas específicas del escenario: "¿Qué tipo de riesgo ves aquí?"
-- Si responde correctamente, abre: "¿Por qué clasificaste así?" o "¿Qué harías diferente si...?"
-- Si se equivoca, mantén cerradas para guiar: "¿Es tipo A o tipo B?"`,
+- Si responde correctamente y los criterios ya están cubiertos, cierra y avanza
+- Si se equivoca, mantén cerradas para guiar: pregunta por UN elemento concreto del escenario (nunca listes opciones para que elija)`,
     reflection: `TIPO DE PREGUNTAS: ABIERTAS (razonamiento)
 - No hay respuesta única correcta
 - Evalúa calidad del razonamiento, no keywords
@@ -514,7 +398,7 @@ REGLAS — NO ES EVALUACIÓN:
 - Si no responde bien, simplemente continúa sin penalizar.`
     : isOpenEnded
     ? `VERIFICACIÓN - Pregunta ABIERTA: "${verification.question}"
-Aspectos a observar (guías, no criterios estrictos): ${successCriteria.join(' | ')}
+Aspectos a observar (guías, no criterios estrictos): ${successCriteria.join(' | ')}${criticosBlock}
 Máximo intentos: ${maxAttempts}
 
 ${questionGuidance}
@@ -525,7 +409,7 @@ PREGUNTA ABIERTA — REGLAS:
 - Si el estudiante reflexiona genuinamente, permite avanzar
 - NO corrijas opiniones válidas, enriquece la discusión`
     : `VERIFICACIÓN - Pregunta: "${verification.question}"
-Criterios: ${successCriteria.join(' | ')}
+Criterios: ${successCriteria.join(' | ')}${criticosBlock}
 Umbral de aprobación: ${minCompleteness}%
 Máximo intentos: ${maxAttempts}
 
@@ -535,7 +419,7 @@ VERIFICACIÓN FLEXIBLE:
 - Evalúa COMPRENSIÓN del concepto, no perfección de formato
 - Acepta respuestas correctas aunque no sigan el formato exacto
 - Si la comprensión es clara (${minCompleteness}%+), permite avanzar
-- Máximo ${maxAttempts} intentos, luego ofrece continuar de todos modos`
+- Al agotar los ${maxAttempts} intentos se continúa igual, pero continuar no es aprobar: no lo presentes como logro`
 
   // Image block — contextual directives by activity type + showWhen
   // Supports both images[] (new) and image (legacy)
@@ -593,7 +477,7 @@ ${verificationBlock}
 
 ${activity.commonMistakes?.length ? `ERRORES COMUNES A DETECTAR:
 ${activity.commonMistakes.map(m => `- ${m}`).join('\n')}
-Si detectas estos errores, NO corrijas directamente. Pregunta qué los llevó a esa conclusión.` : ''}
+Si detectas uno de estos errores, dilo con claridad ("No exactamente") y pregunta qué lo llevó a esa conclusión.` : ''}
 
 Tu objetivo: que el estudiante comprenda y responda "${verification.question}".`
 
@@ -623,28 +507,32 @@ ${optimizedHistory}
 
   // Resultado de verificación si existe
   if (verificationResult) {
+    // El verificador no respondió (falla técnica). El alumno avanza igual,
+    // pero Sophia no debe calificar una respuesta que nadie evaluó.
+    const sinVerificar = verificationResult.unverified === true
+    if (sinVerificar) {
+      dynamicPrompt += `\n\n⚠️ LA RESPUESTA NO PUDO VERIFICARSE (falla técnica, no del estudiante). NO digas que es correcta ni incorrecta: agradece con un cierre neutro ("Gracias, sigamos") y continúa. Se evaluará después.`
+    }
+
     if (verificationResult.completed || verificationResult.ready_to_advance) {
       if (isLastActivity) {
         dynamicPrompt += `\n\nESTADO: COMPLETADA (ÚLTIMA ACTIVIDAD — ES EL FINAL DE LA LECCIÓN)
 
 CÓMO RESPONDER (50-70 palabras MÁXIMO):
-1. Validación corta en 1 oración: "Exacto." o "Perfecto, lo entendiste."
+1. ${sinVerificar ? 'Cierre neutro en 1 oración: "Gracias, con esto terminamos."' : 'Validación corta en 1 oración: "Exacto." o "Perfecto, lo entendiste."'}
 2. Resumen breve en 2-3 bullets de lo APRENDIDO EN TODA LA LECCIÓN.
-3. Cerrá EXACTAMENTE con: "Gracias por participar." o "¡Gracias por participar!". Una sola oración, sin agregar nada.
+3. Cierra EXACTAMENTE con: "Gracias por participar." o "¡Gracias por participar!". Una sola oración, sin agregar nada.
 
 ⛔ PROHIBIDO ABSOLUTO EN EL CIERRE:
 - Hacer MÁS preguntas — la lección terminó
 - Preguntas retóricas ("¿te das cuenta?", "¿ves cómo?", "¿qué fue lo más importante?")
 - Introducir temas nuevos que no estaban en la lección
 - Pedir "una última reflexión" o "una idea más"
-- Mencionar marketing tipo "esto fue una probada", "hay más para aprender", "si te interesa la minería", "para más contenido"
 - Mencionar el nombre "Sophia" en tercera persona ("adentro de Sophia hay...")
-- Promocionar nada, sugerir cursos adicionales o decir que esto fue un demo
+- Promocionar nada ni sugerir otros cursos
 - Cualquier frase de cierre que no sea literalmente "Gracias por participar"
 
-El cierre debe sentirse como un PROFESOR que termina la clase — no como un VENDEDOR que pitchea el siguiente curso.
-
-Si el estudiante responde después de tu cierre, agradecé en 1 oración corta y NO continúes el diálogo.`
+Si el estudiante responde después de tu cierre, agradece en 1 oración corta y NO continúes el diálogo.`
       } else if (nextActivity) {
         const nextTeaching = nextActivity.teaching?.agent_instruction || (nextActivity as { agent_instruction?: string }).agent_instruction || ''
         const nextQuestion = nextActivity.verification.question
@@ -654,7 +542,7 @@ Si el estudiante responde después de tu cierre, agradecé en 1 oración corta y
 ⚠️ REGLA ANTI-REPETICIÓN: Si ya felicitaste o resumiste en tu mensaje anterior, NO vuelvas a hacerlo. Ve DIRECTO al nuevo tema.
 
 FORMATO DE TRANSICIÓN (máximo 80 palabras total):
-1. "Correcto/Bien." (1 palabra de cierre, NO resumas lo que ya dijiste)
+1. ${sinVerificar ? '"Gracias, sigamos." (sin validar la respuesta: no pudo verificarse)' : '"Correcto/Bien." (1 palabra de cierre, NO resumas lo que ya dijiste)'}
 2. Introduce el nuevo tema en 2-3 oraciones máximo
 3. Termina con la pregunta de verificación
 
@@ -687,7 +575,7 @@ Pregunta: "${nextQuestion}"
       // genéricas por response_type: Sophia debe hacer la sub-pregunta SUGERIDA
       // sin revelar la respuesta esperada.
       if (verificationResult.needs_scaffolding && verificationResult.next_subquestion) {
-        dynamicPrompt += `\n\nESTADO: DESGLOSE — la respuesta está parcial/incompleta pero el estudiante está en tema. Hacé UNA sub-pregunta específica para que llegue al criterio que falta.
+        dynamicPrompt += `\n\nESTADO: DESGLOSE — la respuesta está parcial/incompleta pero el estudiante está en tema. Haz UNA sub-pregunta específica para que llegue al criterio que falta.
 ${matchedStr}
 ${missingStr}
 
@@ -695,8 +583,8 @@ SUB-PREGUNTA SUGERIDA POR EL EVALUADOR:
 "${verificationResult.next_subquestion}"
 
 CÓMO RESPONDER (máximo 50-70 palabras):
-1. Reconocé lo que dijo bien en 1 oración corta ("Bien, eso es parte de la respuesta").
-2. Hacé la SUB-PREGUNTA sugerida arriba (o una variante que apunte al MISMO criterio faltante).
+1. Reconoce lo que dijo bien en 1 oración corta ("Bien, eso es parte de la respuesta").
+2. Haz la SUB-PREGUNTA sugerida arriba (o una variante que apunte al MISMO criterio faltante).
 3. NO repitas la pregunta original entera.
 
 ⛔ PROHIBIDO al hacer la sub-pregunta:
@@ -713,16 +601,17 @@ Nivel acumulado actual: ${verificationResult.understanding_level}
       switch (responseType) {
         case 'partial':
           if (attempts >= 3) {
-            // Después de 3+ intentos parciales: dar la respuesta y avanzar
+            // Después de 3+ intentos parciales: cerrar y avanzar. Lo que faltó
+            // se explica brevemente, salvo los eliminatorios, que no se revelan.
             responseGuidance = `RESPUESTA PARCIAL TRAS ${attempts} INTENTOS — Ya es suficiente, avanza.
 ${matchedStr}
 ${missingStr}
 
 CÓMO RESPONDER (máximo 60-80 palabras):
-1. "Bien. [Lo que dijo bien]. Para completar: [lo que faltó explicado brevemente]."
+1. "Bien. [Lo que dijo bien]. Para completar: [lo que faltó explicado brevemente${salvoEliminatorios}]."
 2. NO hagas más preguntas sobre este tema
 3. Avanza directamente al siguiente tema o actividad
-⚠️ El estudiante ya intentó ${attempts} veces. Explica lo que falta y AVANZA.`
+⚠️ El estudiante ya intentó ${attempts} veces. Cierra y AVANZA; no lo presentes como si hubiera logrado la actividad.`
           } else {
             responseGuidance = `RESPUESTA PARCIAL — Va por buen camino.
 ${matchedStr}
@@ -797,23 +686,24 @@ ${extractedScenario ? `📍 ESCENARIO A USAR (OBLIGATORIO):
   }
 
   // Estudiante dice "no sé": dos caminos según severidad y si ya fue explicado.
-  // - "Fuerte" + primer intento + sin explicación previa → MINI-EXPLICACIÓN didáctica
-  //   (el visitante no tiene base, hay que enseñar antes de seguir preguntando)
-  // - "Suave" o segunda vez → reformulación con escenario (sin opciones reveladas)
+  // - No tiene base + primer intento + sin explicación previa → MINI-EXPLICACIÓN
+  //   didáctica (hay que enseñar antes de seguir preguntando)
+  // - Pide ayuda, o segunda vez → reformulación con escenario (sin opciones reveladas)
   if (studentIsUnsure) {
-    const isStrong = isStudentUnsureStrong(lastUserMessage)
     const firstTime = (attempts || 0) <= 1
-    const shouldExplain = isStrong && firstTime && !wasExplained
+    const shouldExplain = studentHasNoBase && firstTime && !wasExplained
 
     if (shouldExplain) {
       // Mini-explicación derivada de los criterios `must_include` de la actividad.
-      // Sophia entrega el CONCEPTO base, no la respuesta a la pregunta.
-      const criteria = verification.success_criteria?.must_include || []
+      // Sophia entrega el CONCEPTO base, no la respuesta a la pregunta. Los
+      // eliminatorios no entran en la explicación.
+      const criteria = (verification.success_criteria?.must_include || [])
+        .filter((c) => !criticos.includes(c))
       const criteriaList = criteria.length > 0
         ? criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')
         : '(usar la información del bloque OBJETIVO de la actividad)'
 
-      dynamicPrompt += `\n\n📚 ESTUDIANTE NO TIENE BASE — ENSEÑÁ ANTES DE PREGUNTAR
+      dynamicPrompt += `\n\n📚 ESTUDIANTE NO TIENE BASE — ENSEÑA ANTES DE PREGUNTAR
 
 El estudiante dijo "no sé" / "no conozco" — necesita que le ENSEÑES el concepto, NO más preguntas.
 
@@ -821,41 +711,41 @@ CONCEPTOS QUE SE ESPERABAN (úsalos como base de la explicación):
 ${criteriaList}
 
 CÓMO RESPONDER (90-120 palabras MÁXIMO):
-1. Empezá con: "Te explico brevemente:" o "Va de menos a más:"
-2. Explicá los conceptos en TUS PROPIAS PALABRAS, simples y concretas. NO los listes como bullets — armá 2-3 oraciones fluidas.
-3. Cerrá con: "Ahora con esto en mente, [reformulá la pregunta de verificación]"
+1. Empieza con: "Te explico brevemente:" o "Va de menos a más:"
+2. Explica los conceptos en palabras simples y concretas. NO los listes como bullets — arma 2-3 oraciones fluidas.
+3. Cierra con: "Ahora con esto en mente, [reformula la pregunta de verificación]"
 
 PREGUNTA ORIGINAL A REFORMULAR AL FINAL:
 "${verification.question}"
 
 ⛔ PROHIBIDO:
-- Abrir VALIDANDO ("Está bien", "Correcto", "Bien", "Vale") — el alumno admitió que no sabe; abrí con calma ("No te preocupes" / "Tranquilo, te explico"), NO como si su respuesta fuera correcta
-- Empezar con la pregunta (primero ENSEÑÁ)
-- Dar la respuesta exacta a la pregunta (solo el CONCEPTO base que necesita)
-- Listar criterios literal (parafraseá)
+- Abrir VALIDANDO ("Está bien", "Correcto", "Bien", "Vale") — el alumno admitió que no sabe; abre con calma ("No te preocupes" / "Tranquilo, te explico"), NO como si su respuesta fuera correcta
+- Empezar con la pregunta (primero ENSEÑA)
+- Dar la respuesta exacta a la pregunta (solo el CONCEPTO base que necesita)${criticos.length > 0 ? '\n- Mencionar los criterios eliminatorios' : ''}
+- Listar criterios literal (parafrasea)
 - Texto >120 palabras
 - Más preguntas exploratorias antes de la pregunta de verificación reformulada`
     } else {
-      // Caso "suave" o ya hubo explicación previa → reformulación sin opciones reveladas
+      // Pide ayuda, o ya hubo explicación previa → reformulación sin opciones reveladas
       const questionText = verification.question
       const scenarioMatch = questionText.match(/[Tt]e describo[^:]*:\s*([^?]+)/i) ||
                             questionText.match(/[Ii]magina\s+(?:que\s+)?(?:estás\s+en\s+)?([^?]+)/i) ||
                             questionText.match(/[Oo]bserva[:]?\s*([^?]+)/i)
       const extractedScenario = scenarioMatch ? scenarioMatch[1]?.trim() || scenarioMatch[0]?.trim() : null
 
-      dynamicPrompt += `\n\n🚨 ESTUDIANTE DICE "NO SÉ" — DESCOMPONÉ SIN REVELAR
+      dynamicPrompt += `\n\n🚨 ESTUDIANTE PIDE AYUDA O DICE "NO SÉ" — DESCOMPÓN SIN REVELAR
 
 ${wasExplained ? 'Ya le explicaste antes en esta actividad. No vuelvas a re-explicar todo.' : ''}
 PREGUNTA ORIGINAL: "${verification.question}"
 ${extractedScenario ? `ESCENARIO: "${extractedScenario}"` : ''}
 
 CÓMO RESPONDER (máx 60 palabras):
-1. Hacé UNA sub-pregunta CONCRETA que ataque el criterio más simple primero
-2. Usá el MISMO escenario (no inventes otro)
+1. Haz UNA sub-pregunta CONCRETA que ataque el criterio más simple primero
+2. Usa el MISMO escenario (no inventes otro)
 3. La sub-pregunta debe inducir, NO revelar la respuesta
 
 ⛔ PROHIBIDO:
-- Abrir VALIDANDO ("Está bien", "Correcto", "Bien", "Vale") — el alumno no sabe; reconocé sin validar ("No te preocupes") y guiá
+- Abrir VALIDANDO ("Está bien", "Correcto", "Bien", "Vale") — el alumno no sabe; reconoce sin validar ("No te preocupes") y guía
 - Listar opciones para que elija ("¿es A o B?")
 - Dar la respuesta dentro de la sub-pregunta
 - Re-explicar toda la teoría
@@ -863,26 +753,28 @@ CÓMO RESPONDER (máx 60 palabras):
     }
   }
 
-  // Scaffolding docente: progresión de 5 intentos
+  // Scaffolding docente: progresión por intentos. Ninguna etapa entrega la
+  // respuesta a un criterio eliminatorio; y agotar los intentos no es lograr:
+  // el código avanza al alumno (avance forzado), pero no lo aprueba.
   if (attempts >= 1) {
     const hintStrategies: Record<number, string> = {
-      1: `INTENTO 2/5 — PISTA SUTIL:
+      1: `INTENTO 2/${maxAttempts} — PISTA SUTIL:
 - Reformula la pregunta de otra manera
 - Da una pista indirecta: "Piensa en..." o "Fíjate en..."
 - NO des la respuesta`,
-      2: `INTENTO 3/5 — PISTA DIRECTA:
-- Señala exactamente qué falta: "Te falta considerar..."
-- Da opciones: "¿Es A o B?"
-- Reduce la pregunta a algo más específico`,
-      3: `INTENTO 4/5 — EXPLICA Y PIDE QUE REPITA:
-- Explica el concepto que falta en 2-3 oraciones
-- Pide que el estudiante lo repita con sus propias palabras
-- "Entonces, con eso en mente, ¿cómo responderías?"`,
-      4: `INTENTO 5/5 — DA LA RESPUESTA Y AVANZA:
-- Da la respuesta completa en 2-3 oraciones claras
-- Pregunta: "¿Tiene sentido?" o "¿Queda claro?"
-- Cuando el estudiante confirme, avanza a la siguiente actividad
-- NO hagas más preguntas sobre este tema`,
+      2: `INTENTO 3/${maxAttempts} — PISTA DIRECTA:
+- Señala qué aspecto falta, sin nombrar el concepto: "Te falta considerar qué pasa cuando..."
+- Reduce la pregunta a algo más específico (sin listar opciones para que elija)
+- NO des la respuesta`,
+      3: `INTENTO 4/${maxAttempts} — EXPLICA LA BASE Y PIDE QUE LA APLIQUE:
+- Explica en 2-3 oraciones el concepto de fondo que le falta${salvoEliminatorios}
+- Pide que lo aplique al escenario: "Entonces, con eso en mente, ¿cómo responderías?"
+- NO des la respuesta a la pregunta`,
+      4: `INTENTO 5/${maxAttempts} — ÚLTIMO INTENTO: CIERRA Y AVANZA, SIN DAR LA RESPUESTA COMO LOGRO:
+- Reconoce en 1 oración lo que sí llegó a decir
+- Explica en 2 oraciones lo que faltó${salvoEliminatorios}
+- Di que continúan con el siguiente tema. Sin preguntas de confirmación (nada de «queda claro» o «tiene sentido») ni más preguntas sobre este tema
+- NO digas que la actividad quedó lograda: quedó pendiente`,
     }
     const hintLevel = Math.min(attempts, 4)
     dynamicPrompt += `\n\n${hintStrategies[hintLevel]}`

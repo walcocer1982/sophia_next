@@ -3,6 +3,7 @@ import { tituloActividad } from '@/lib/actividad-titulo'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
 import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '@/lib/rubric'
+import { enriquecerConPlan } from '@/lib/grading'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -114,9 +115,14 @@ export async function GET(
       const lastAttempt = evidence?.attempts?.at(-1)
 
       const passedCriteria = progress?.passedCriteria !== false // default true for old data
+      // Mismo cálculo que la nota: el plan aporta tipo, peso, intentos
+      // permitidos y eliminatorios. null = completada pero sin evidencia
+      // legible (verificador caído): «sin evaluar», no «en inicio».
       const rubricLevel = progress?.status === 'COMPLETED' && progress
-        ? calculateRubricLevel(progress, passedCriteria)
+        ? calculateRubricLevel(enriquecerConPlan(progress, actDef))
         : null
+      const sinVerificar =
+        progress?.status === 'COMPLETED' && rubricLevel === null && !!lastAttempt
 
       return {
         id: actDef.id,
@@ -131,6 +137,7 @@ export async function GET(
         criteriaMissing: lastAttempt?.analysis?.criteriaMissing || [],
         rubricLevel,
         passedCriteria,
+        sinVerificar,
         completedAt: progress?.completedAt,
       }
     })
