@@ -33,6 +33,8 @@ const VerificationHintsSchema = z.object({
 
 const SuccessCriteriaSchema = z.object({
   must_include: z.array(z.string()).min(1).max(7),
+  // Índices 1-based de must_include que son eliminatorios (ver types/lesson.ts).
+  critical: z.array(z.number().int().min(1).max(7)).max(7).optional(),
   min_completeness: z.number().min(0).max(100).optional(),
   understanding_level: z
     // Acepta la escala nueva (logro) y la vieja (cognitiva) para que las
@@ -52,6 +54,18 @@ const VerificationSchema = z.object({
   success_criteria: SuccessCriteriaSchema,
   max_attempts: z.number().min(1).max(5).optional(),
   open_ended: z.boolean().optional(),
+  // Zod descarta las claves que no declara: estas tres se perdían cada vez que
+  // Verificación guardaba, y la rúbrica generada al publicar volvía a cero.
+  is_evaluative: z.boolean().optional(),
+  rubric: z
+    .object({
+      beginning: z.string(),
+      developing: z.string(),
+      achieved: z.string(),
+      outstanding: z.string(),
+    })
+    .optional(),
+  scaffold_hints: z.array(z.object({ criterion: z.number(), hint: z.string() })).optional(),
 })
 
 const TeachingImageSchema = z.object({
@@ -76,8 +90,9 @@ const ActivitySchema = z.object({
   keyPointIndex: z.number().min(0).nullable(),
   // Peso relativo en el cálculo de la nota final. Default por tipo
   // (explanation=1, reflection=2, practice=3, closing=4) si no se setea.
-  // 0 = no aporta a la nota (actividad opcional).
-  weight: z.number().min(0).max(10).optional(),
+  // Mínimo 1: con weight 0 en todas las actividades (S0 de tutoría, ago 2026)
+  // la nota salía 0. Para que una actividad no cuente: is_evaluative=false.
+  weight: z.number().min(1).max(10).optional(),
   teaching: TeachingSchema,
   verification: VerificationSchema,
   commonMistakes: z.array(z.string()).optional(),

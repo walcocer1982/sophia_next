@@ -94,6 +94,9 @@ export function VerificationManager({
               ...(updates.must_include !== undefined && {
                 must_include: updates.must_include,
               }),
+              ...(updates.critical !== undefined && {
+                critical: updates.critical,
+              }),
               ...(updates.understanding_level !== undefined && {
                 understanding_level: normalizeLevel(updates.understanding_level),
               }),

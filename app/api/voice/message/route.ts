@@ -148,7 +148,8 @@ export async function POST(request: Request) {
     }
   }
 
-  // Persistir
+  // Persistir. Verificador caído: sin nivel ni criterios (ver chat/stream).
+  const sinVerificar = verification.unverified === true
   const attemptRecord = {
     studentResponse: content,
     analysis: {
@@ -156,9 +157,11 @@ export async function POST(request: Request) {
       completed: verification.completed,
       criteriaMatched: verification.criteriaMatched,
       criteriaMissing: verification.criteriaMissing,
-      understanding_level: verification.understanding_level,
-      response_type: verification.response_type,
-      completeness_percentage: verification.completeness_percentage,
+      understanding_level: sinVerificar ? undefined : verification.understanding_level,
+      response_type: sinVerificar ? undefined : verification.response_type,
+      completeness_percentage: sinVerificar ? undefined : verification.completeness_percentage,
+      student_intent: verification.student_intent,
+      unverified: sinVerificar || undefined,
     },
     timestamp: new Date().toISOString(),
   }
@@ -181,8 +184,10 @@ export async function POST(request: Request) {
       update: {
         status: 'COMPLETED',
         completedAt: new Date(),
-        passedCriteria: true,
-        aiFeedback: verification.feedback,
+        passedCriteria: !sinVerificar,
+        aiFeedback: sinVerificar
+          ? 'Sin verificar: el verificador no respondió. Pendiente de re-verificación.'
+          : verification.feedback,
         attempts: attempts + 1,
         evidenceData: newEvidence,
       },
@@ -191,8 +196,10 @@ export async function POST(request: Request) {
         activityId: currentActivity.id,
         status: 'COMPLETED',
         completedAt: new Date(),
-        passedCriteria: true,
-        aiFeedback: verification.feedback,
+        passedCriteria: !sinVerificar,
+        aiFeedback: sinVerificar
+          ? 'Sin verificar: el verificador no respondió. Pendiente de re-verificación.'
+          : verification.feedback,
         attempts: attempts + 1,
         evidenceData: newEvidence,
       },

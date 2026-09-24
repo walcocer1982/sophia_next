@@ -3,10 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { anthropic, TUTOR_MODEL } from '@/lib/anthropic'
 import { normalizeLevel, LEVEL_LABEL_ES } from '@/lib/levels'
 import { getCurrentActivity, getFirstActivity, getNextActivity, getTotalActivities, getLessonContext, getActivityById } from '@/lib/lesson-parser'
-import { buildSystemPrompt, getMaxTokensForActivity, isStudentUnsureStrong } from '@/lib/prompt-builder'
+import { buildSystemPrompt, getMaxTokensForActivity } from '@/lib/prompt-builder'
 import { isPassing } from '@/lib/rubric'
 import { notaDeLaSesion } from '@/lib/grading'
-import { gradeTo20 } from '@/lib/assessment-utils'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { detectHallucination } from '@/lib/hallucination-detector'
 import { logger, logChatMessage, logError } from '@/lib/logger'
@@ -17,7 +16,7 @@ import { classifyIntent } from '@/lib/services/intent-classification'
 import { compressMessagesForAPI } from '@/lib/message-summarizer'
 import { generateLessonReport } from '@/lib/lesson-report'
 import { processPlannerAttachments } from '@/lib/planner/attachments'
-import type { LessonContent, ModerationResult, IntentClassification } from '@/types/lesson'
+import type { LessonContent, ModerationResult, IntentClassification, ActivityCompletionResult } from '@/types/lesson'
 import type { Message, Prisma } from '@prisma/client'
 
 export const runtime = 'nodejs'
@@ -231,14 +230,6 @@ export async function POST(request: Request) {
   const scaffoldingTurns = existingEvidence.scaffoldingTurns || 0
   const wasExplained = existingEvidence.wasExplained === true
 
-  // Detectar si esta vuelta vamos a inyectar una MINI-EXPLICACIÓN (no-sé fuerte
-  // + primer intento + no fue explicado antes). Si sí, marcamos el flag para
-  // que el verificador en la próxima vuelta sepa "ya hubo enseñanza".
-  const willExplainThisTurn =
-    !wasExplained &&
-    (activityProgress?.attempts || 0) <= 1 &&
-    isStudentUnsureStrong(message)
-
   // Cap de sub-preguntas (desglose) por tipo de actividad. Reflection cierra
   // pronto porque es una sola pregunta abierta — no se desglosa repetidamente.
   // CODE methodology no escala (usa verifyStepCompletion binario).
@@ -307,14 +298,14 @@ export async function POST(request: Request) {
     // Hallucination de voz: skip AI verifier (caro), tratar como off_topic
     // suave para que Sophia pida repetir sin contar como intento real.
     hallucinationCheck.isHallucination
-      ? Promise.resolve({
+      ? Promise.resolve<ActivityCompletionResult>({
           completed: false,
           criteriaMatched: [] as string[],
           criteriaMissing: [] as string[],
           completeness_percentage: 0,
           understanding_level: 'beginning' as const,
           response_type: 'off_topic' as const,
-          feedback: 'No te entendí bien, ¿podés repetir?',
+          feedback: 'No te entendí bien, ¿puedes repetir?',
           confidence: 'high' as const,
           ready_to_advance: false,
           needs_scaffolding: false,
@@ -325,7 +316,7 @@ export async function POST(request: Request) {
     // genérico) que contaminaba evidenceData y rompía el reporte (no podía
     // distinguir qué must_include real cumplió).
     : activityAlreadyCompleted
-      ? Promise.resolve({
+      ? Promise.resolve<ActivityCompletionResult>({
           completed: true,
           criteriaMatched: [] as string[],
           criteriaMissing: [] as string[],
@@ -344,6 +335,16 @@ export async function POST(request: Request) {
           ? verifyStepCompletion(message, currentActivity, conversationHistory)
           : verifyActivityCompletion(message, currentActivity, conversationHistory, wasExplained))
   ])
+
+  // Detectar si esta vuelta vamos a inyectar una MINI-EXPLICACIÓN (el alumno
+  // admite que no conoce el tema + primer intento + no fue explicado antes).
+  // Si sí, marcamos el flag para que el verificador en la próxima vuelta sepa
+  // "ya hubo enseñanza". Quién decide que «no sabe» es el verificador, con el
+  // contexto completo — no un regex sobre el texto.
+  const willExplainThisTurn =
+    !wasExplained &&
+    attempts <= 1 &&
+    verification.student_intent === 'does_not_know'
 
   // Logging de clasificación
   logger.info('chat.stream.classification', {
@@ -469,11 +470,9 @@ export async function POST(request: Request) {
     intentClassification: intent,
     lessonContext,
     nextActivity: nextActivityData || undefined,
-    lastUserMessage: message,  // Para detectar "no sé" y extraer escenario
     methodology: lessonSession.lesson.course?.methodology ?? 'REFLECTIVE',
     projectBrief: lessonSession.projectBrief ?? undefined,
     wasExplained,
-    language: lessonSession.language,
   })
 
   // ═══════════════════════════════════════════════════════════════
@@ -715,19 +714,6 @@ const allActivities = await prisma.activityProgress.findMany({
               },
             })
 
-            // Si la sesión pertenece a un participante de kiosko, persistir su
-            // nota AQUÍ y no solo al presionar "Salir": los visitantes de feria
-            // suelen abandonar el stand sin salir y quedaban sin calificación.
-            await prisma.assessmentParticipant.updateMany({
-              where: { sessionId: lessonSession.id, completedAt: null },
-              data: {
-                grade,
-                gradeOver20: grade === null ? null : gradeTo20(grade),
-                passed: grade !== null && isPassing(grade),
-                completedAt: new Date(),
-              },
-            })
-
             logger.info('chat.stream.lesson_completed', {
               sessionId,
               totalActivities: getTotalActivities(contentJson),
@@ -757,6 +743,11 @@ const allActivities = await prisma.activityProgress.findMany({
         // 5. Guardar resultado de verificación en ActivityProgress
         // (La verificación ya corrió ANTES del streaming, usamos ese resultado)
         // Usar ready_to_advance en lugar de solo completed para mayor flexibilidad
+        // Verificador caído: el intento se guarda SIN nivel ni criterios, para
+        // que no puntúe hasta que scripts/reverificar-pendientes.ts lo evalúe
+        // sobre la respuesta guardada. Antes se guardaba un nivel inventado.
+        const sinVerificar = verification.unverified === true
+
         if (verification.ready_to_advance) {
           // Marcar actividad como completada
           // Construir evidenceData con historial de intentos (como Instructoria)
@@ -767,9 +758,11 @@ const allActivities = await prisma.activityProgress.findMany({
               completed: verification.completed,
               criteriaMatched: verification.criteriaMatched,
               criteriaMissing: verification.criteriaMissing,
-              understanding_level: verification.understanding_level,
-              response_type: verification.response_type,
-              completeness_percentage: verification.completeness_percentage,
+              understanding_level: sinVerificar ? undefined : verification.understanding_level,
+              response_type: sinVerificar ? undefined : verification.response_type,
+              completeness_percentage: sinVerificar ? undefined : verification.completeness_percentage,
+              student_intent: verification.student_intent,
+              unverified: sinVerificar || undefined,
             },
             timestamp: new Date().toISOString(),
           }
@@ -791,8 +784,11 @@ const allActivities = await prisma.activityProgress.findMany({
             update: {
               status: 'COMPLETED',
               completedAt: new Date(),
-              passedCriteria: true,
-              aiFeedback: verification.feedback,
+              // Sin verificar no es «cumplió»: queda false hasta la re-verificación.
+              passedCriteria: !sinVerificar,
+              aiFeedback: sinVerificar
+                ? 'Sin verificar: el verificador no respondió. Pendiente de re-verificación.'
+                : verification.feedback,
               attempts: attempts + 1,
               evidenceData: updatedEvidence,
             },
@@ -801,12 +797,21 @@ const allActivities = await prisma.activityProgress.findMany({
               activityId: currentActivity.id,
               status: 'COMPLETED',
               completedAt: new Date(),
-              passedCriteria: true,
-              aiFeedback: verification.feedback,
+              passedCriteria: !sinVerificar,
+              aiFeedback: sinVerificar
+                ? 'Sin verificar: el verificador no respondió. Pendiente de re-verificación.'
+                : verification.feedback,
               attempts: attempts + 1,
               evidenceData: updatedEvidence,
             },
           })
+
+          if (sinVerificar) {
+            logger.warn('chat.stream.activity_unverified', {
+              sessionId,
+              activityId: currentActivity.id,
+            })
+          }
 
           logger.info('chat.stream.activity_completed', {
             sessionId,
@@ -899,6 +904,7 @@ const allActivities = await prisma.activityProgress.findMany({
               understanding_level: verification.understanding_level,
               response_type: verification.response_type,
               completeness_percentage: verification.completeness_percentage,
+              student_intent: verification.student_intent,
               wasScaffolding: willScaffold, // marca para auditoría/scoring
             },
             timestamp: new Date().toISOString(),

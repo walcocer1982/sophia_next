@@ -194,7 +194,7 @@ ANTI-REDUNDANCIA:
 Genera entre 4-5 actividades total (MÁXIMO 5 para 45 min).
 - Usa el contenido técnico proporcionado y las instrucciones de enseñanza.
 - Genera IDs en formato: "{tema_slug}_{001}".
-- agent_instruction: MÁXIMO 60 palabras. Sé conciso — la IA tutora es inteligente, no necesita instrucciones literales ni que le dictes cada ejemplo. Dale la directiva y el enfoque, no un guion.
+- agent_instruction: entre 50 y 80 palabras. Sé conciso — la IA tutora es inteligente, no necesita instrucciones literales ni que le dictes cada ejemplo. Dale la directiva y el enfoque, no un guion.
 - Preguntas de verificación contextualizadas (escenarios reales, NO preguntas teóricas).
 - ⚠️ UNA SOLA PREGUNTA por verificación: verification.question debe contener UN único interrogante.
   PROHIBIDO encadenar preguntas ("identifica X, Y y Z... y además dime W"). El estudiante responde
@@ -203,7 +203,10 @@ Genera entre 4-5 actividades total (MÁXIMO 5 para 45 min).
   una sola pregunta con lista explícita ("Menciona los 3 datos más importantes de...") y refleja
   cada elemento en must_include — nunca como preguntas separadas en el mismo turno.
 - 2-4 criterios observables por actividad (concisos, no redundantes).
-- El understanding_level debe escalar con la progresión: memorized → understood → applied → analyzed.
+- ELIMINATORIOS (success_criteria.critical: índices 1-based de must_include): marca así el criterio que en campo no admite error (una regla de seguridad, un paso normativo, un valor límite). Máximo 1 por actividad y solo en practice o closing. La IA tutora nunca lo revela, ni al agotar intentos; sin él la actividad queda en «En inicio». Si ningún criterio es de ese tipo, omite el campo.
+- weight: NUNCA 0. Si una actividad no debe contar para la nota, usa is_evaluative: false. Si no tienes un motivo, no pongas weight (se aplica el default por tipo).
+- El CIERRE pide UNA aplicación concreta a la situación del estudiante, no que resuma toda la lección: en las clases dictadas hasta ahora el cierre fue siempre la actividad con más intentos, porque cargaba la síntesis entera.
+- El understanding_level debe escalar con la progresión: beginning → developing → achieved → outstanding.
 
 ⚠️ NIVEL DE PREGUNTAS SEGÚN TIPO DE ACTIVIDAD (Taxonomía de Bloom):
 - EXPLICACIÓN → Preguntas de COMPRENSIÓN (Bloom: Recordar/Comprender):
@@ -249,8 +252,9 @@ FORMATO DE ACTIVIDAD:
     "question": "string",
     "success_criteria": {
       "must_include": ["string"],
+      "critical": [1],  // opcional: índices 1-based de must_include que son eliminatorios
       "min_completeness": 60,
-      "understanding_level": "memorized|understood|applied|analyzed"
+      "understanding_level": "beginning|developing|achieved|outstanding"
     },
     "max_attempts": 5,
     "open_ended": true

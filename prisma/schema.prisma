@@ -63,7 +63,6 @@ model User {
   courses            Course[]
   sectionInstructors SectionInstructor[]
   enrollments        Enrollment[]
-  assessmentsCreated Assessment[]
 
   @@index([email])
   @@index([googleId])
@@ -145,38 +144,12 @@ model Sede {
 }
 
 // ============================================
-// 2.6 EVENT CAMPAIGNS (ferias, conferencias, demos)
-// ============================================
-
-model EventCampaign {
-  id         String    @id @default(cuid())
-  name       String              // "27th World Mining Congress 2026"
-  shortName  String?             // "WMC 2026"
-  startDate  DateTime
-  endDate    DateTime
-  location   String?             // "Lima, Perú"
-  url        String?             // link al sitio del evento
-  isArchived Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-
-  // Relaciones
-  assessments Assessment[]
-
-  @@index([startDate])
-}
-
-// ============================================
 // 3. CONTENIDO EDUCATIVO
 // ============================================
 
 enum CourseMethodology {
   REFLECTIVE // Actividades + verificación socrática (default)
   CODE       // Instrucciones paso a paso + verificación binaria
-}
-
-enum CourseTrack {
-  REGULAR  // Programa formal: sección + período + estudiante inscripto
-  CONTINUA // Cursos abiertos: kioskos/eventos sin estructura académica
 }
 
 enum CourseScope {
@@ -196,10 +169,6 @@ model Course {
   userId      String?            // Instructor que creó el curso
   careerId    String?            // Programa académico (Career = Programa)
   voiceEnabled Boolean @default(true)  // Si false, el chat del curso oculta el botón de voz
-  // Track: cómo se entrega el curso
-  //  - REGULAR: vive en Programación (sección + período + estudiantes)
-  //  - CONTINUA: vive en Eventos (kioskos, sin estructura académica)
-  track       CourseTrack @default(REGULAR)
   // Scope: alcance del curso dentro del plan académico
   //  - TRANSVERSAL: se dicta en todas las sedes (no requiere carrera).
   //  - SPECIALIZATION: específico de la carrera asignada (careerId).
@@ -227,14 +196,12 @@ model Course {
   careers  Career[]  @relation("CourseCareers")
   lessons  Lesson[]
   sections Section[]
-  // Un curso puede ofrecerse en VARIAS sedes (m:n). CONTINUA puede no tener
-  // ninguna (delivery itinerante via eventos).
+  // Un curso puede ofrecerse en VARIAS sedes (m:n).
   sedes    Sede[]    @relation("CourseSedes")
 
   @@index([slug])
   @@index([userId])
   @@index([careerId])
-  @@index([track])
   @@index([scope])
   @@index([deletedAt])
 }
@@ -259,37 +226,9 @@ model Lesson {
   course            Course                  @relation(fields: [courseId], references: [id], onDelete: Cascade)
   sessions          LessonSession[]
   sectionSchedules  SectionLessonSchedule[]
-  assessments       Assessment[]
-  translations      LessonContentTranslation[]
 
   @@index([slug])
   @@index([courseId])
-}
-
-/**
- * Cache de traducción del contenido estático de una lección (title, objective,
- * keyPoints, descripciones de imágenes). Se llena lazy: la primera vez que un
- * visitante del kiosko elige EN para una lección, Haiku traduce y se guarda.
- * Próximas veces se lee del cache — costo ~$0.001 por lección, una sola vez.
- *
- * NO incluye el contenido de las actividades (agent_instruction, must_include,
- * verification.question). Esos se quedan en español como single source of
- * truth — Claude los traduce on-the-fly via system prompt en cada respuesta.
- */
-model LessonContentTranslation {
-  id                String   @id @default(cuid())
-  lessonId          String
-  language          Language
-  title             String
-  objective         String   @db.Text
-  keyPoints         String[]
-  imageDescriptions Json     @default("[]") // [{ url, description }]
-  generatedAt       DateTime @default(now())
-
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-
-  @@unique([lessonId, language])
-  @@index([lessonId])
 }
 
 // ============================================
@@ -333,7 +272,6 @@ model LessonSession {
   lesson     Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   messages   Message[]
   activities ActivityProgress[]
-  assessmentParticipant AssessmentParticipant?
   survey     LessonSurvey?
 
   @@unique([userId, lessonId, sessionAttempt])
@@ -509,64 +447,4 @@ model SectionLessonSchedule {
   @@unique([sectionId, lessonId])
   @@index([sectionId])
   @@index([lessonId])
-}
-
-// ============================================
-// 5. EVALUACIONES ANÓNIMAS (MODO EVENTO/KIOSKO)
-// ============================================
-
-model Assessment {
-  id              String    @id @default(cuid())
-  code            String    @unique  // Código corto único: "AB12CD"
-  title           String
-  lessonId        String
-  createdById     String              // Admin que la creó (Paola)
-  isActive        Boolean   @default(true)
-  // Viene de la rama experimento/avatar-3d, que ya la aplicó a esta base. Se
-  // declara acá para que `db push` desde otras ramas no la borre.
-  avatarEnabled   Boolean   @default(true)  // Avatar 3D de Sophia (off = modo liviano sin avatar, para equipos débiles)
-  timeLimitMin    Int       @default(10)  // Minutos por participante
-  collectEmail    Boolean   @default(false) // Solicitar email opcional
-  collectDni      Boolean   @default(true)  // Solicitar DNI
-  // Campaña que agrupa este kiosko (opcional). Ej: "27th World Mining Congress 2026".
-  // Permite agrupar visualmente varios kioskos del mismo evento.
-  campaignId      String?
-  createdAt       DateTime  @default(now())
-  closedAt        DateTime?
-  expiresAt       DateTime? // Cuándo se borran los datos temporales
-
-  lesson       Lesson                  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  createdBy    User                    @relation(fields: [createdById], references: [id])
-  campaign     EventCampaign?          @relation(fields: [campaignId], references: [id])
-  participants AssessmentParticipant[]
-
-  @@index([code])
-  @@index([createdById])
-  @@index([campaignId])
-}
-
-model AssessmentParticipant {
-  id              String    @id @default(cuid())
-  assessmentId    String
-  firstName       String
-  lastName        String?
-  dni             String?
-  email           String?
-  startedAt       DateTime  @default(now())
-  completedAt     DateTime?
-  grade           Float?    // 0-100, después se convierte a 0-20
-  gradeOver20     Float?    // Nota final sobre 20
-  passed          Boolean   @default(false)
-  sessionId       String?   @unique // Link to the LessonSession of this participant
-  language        Language  @default(ES) // Idioma elegido en el toggle del registro
-
-  assessment Assessment    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  session    LessonSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-
-  // Nota: NO ponemos @@unique([assessmentId, dni]) porque hay datos legacy
-  // con DNIs duplicados de antes del feature de recovery. La unicidad se
-  // enforce en código (lib /api/eval/[code]/start) — si el DNI ya existe,
-  // se reusa el participant en vez de crear uno nuevo.
-  @@index([assessmentId])
-  @@index([assessmentId, dni]) // index no-único para búsqueda rápida en recovery
 }

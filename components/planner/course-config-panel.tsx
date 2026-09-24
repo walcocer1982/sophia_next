@@ -10,7 +10,6 @@ import { apiFetch } from '@/lib/api-client'
 import { useAsyncOp } from '@/lib/hooks/use-async-op'
 
 type Methodology = 'REFLECTIVE' | 'CODE'
-type Track = 'REGULAR' | 'CONTINUA'
 
 interface SedeOption {
   id: string
@@ -22,7 +21,6 @@ interface CourseConfig {
   title: string
   capacidad: string | null
   methodology: Methodology
-  track: Track
   sedeIds: string[]  // ids de las sedes asignadas al curso
   voiceEnabled: boolean
   allowPaste: boolean
@@ -33,11 +31,6 @@ interface CourseConfig {
 const METHODOLOGY_LABELS: Record<Methodology, string> = {
   REFLECTIVE: 'Reflexiva (socrática)',
   CODE: 'Código / instruccional',
-}
-
-const TRACK_LABELS: Record<Track, string> = {
-  REGULAR: 'Regular (con sección + período)',
-  CONTINUA: 'Continua (eventos / kioskos)',
 }
 
 export function CourseConfigPanel({
@@ -182,26 +175,6 @@ export function CourseConfigPanel({
             )}
           </div>
 
-          {/* Track (Regular vs Continua) */}
-          <p className="mb-1.5 text-xs font-medium text-gray-700 border-t border-gray-100 pt-2">Track del curso</p>
-          <div className="mb-3 space-y-1">
-            {(['REGULAR', 'CONTINUA'] as Track[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => t !== config.track && patch({ track: t }, 'track')}
-                disabled={isPending('track')}
-                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm ${
-                  config.track === t
-                    ? 'bg-indigo-50 font-medium text-indigo-700'
-                    : 'hover:bg-gray-50 text-gray-600'
-                }`}
-              >
-                {TRACK_LABELS[t]}
-                {config.track === t && <Check className="h-3.5 w-3.5" />}
-              </button>
-            ))}
-          </div>
-
           {/* Sedes (multi-select) */}
           <div className="mb-3 border-t border-gray-100 pt-2">
             <div className="mb-1.5 flex items-center justify-between">
@@ -214,7 +187,7 @@ export function CourseConfigPanel({
               </span>
             </div>
             <p className="mb-2 text-[10px] leading-snug text-gray-500">
-              Marca las sedes donde se dicta este curso. Los CONTINUA pueden no tener ninguna (delivery itinerante via eventos).
+              Marca las sedes donde se dicta este curso.
             </p>
             {availableSedes.length === 0 ? (
               <p className="text-xs text-gray-400 italic">No hay sedes creadas. Crealas en Config → Sedes.</p>

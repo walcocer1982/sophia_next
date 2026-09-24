@@ -205,6 +205,33 @@ export function useProgramacion() {
     }
   }
 
+  /**
+   * Matricula por DNI: el líder pega la lista («estos veinte para tutoría») y
+   * el padrón resuelve quiénes son. Devuelve los DNIs que no están.
+   */
+  const handleMatricularPorDni = async (sectionId: string, dnis: string[]) => {
+    try {
+      const res = await fetch(`/api/admin/sections/${sectionId}/enrollments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dnis }),
+      })
+      const texto = await res.text()
+      const data = texto ? JSON.parse(texto) : {}
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`)
+      const faltan: string[] = data.noEncontrados ?? []
+      toast.success(`${data.enrolled} matriculado${data.enrolled !== 1 ? 's' : ''}`)
+      if (faltan.length > 0) {
+        toast.warning(`Sin padrón (${faltan.length}): ${faltan.join(', ')}`, { duration: 10_000 })
+      }
+      await refetch()
+      return data as { enrolled: number; noEncontrados: string[] }
+    } catch (e) {
+      toast.error((e as Error).message)
+      return null
+    }
+  }
+
   const handleUnenrollStudent = async (sectionId: string, userId: string, name: string) => {
     if (!confirm(`¿Quitar a "${name || userId}" de la sección?`)) return
     try {
@@ -385,6 +412,7 @@ export function useProgramacion() {
     handleRenameSection,
     handleArchiveSection,
     handleEnrollStudent,
+    handleMatricularPorDni,
     handleUnenrollStudent,
     handleAssignInstructor,
     handleUnassignInstructor,

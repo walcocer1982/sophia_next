@@ -1,0 +1,66 @@
+[
+  {
+    "_nota": "EJEMPLO. Reemplazar por respuestas reales del corpus (Química, tutoría) etiquetadas a mano por el instructor. Los índices de `cubiertos` son 1-based sobre must_include.",
+    "nombre": "cubre todo sin sustentar",
+    "actividad": {
+      "id": "ejemplo_001",
+      "type": "practice",
+      "keyPointIndex": 0,
+      "teaching": { "agent_instruction": "Presenta un escenario de ingreso a una labor recién disparada y pregunta qué hace antes de avanzar." },
+      "verification": {
+        "question": "Entras a una labor recién disparada. ¿Qué haces antes de avanzar?",
+        "success_criteria": {
+          "must_include": ["ventilar para evacuar los gases", "desatar las rocas sueltas", "revisar el sostenimiento"],
+          "critical": [1],
+          "min_completeness": 60,
+          "understanding_level": "achieved"
+        },
+        "max_attempts": 5
+      }
+    },
+    "respuesta": "Primero ventilo, después hago el desate y miro que los pernos estén bien.",
+    "esperado": { "cubiertos": [1, 2, 3], "completed": true }
+  },
+  {
+    "nombre": "cubre parte, sin el eliminatorio",
+    "actividad": {
+      "id": "ejemplo_001",
+      "type": "practice",
+      "keyPointIndex": 0,
+      "teaching": { "agent_instruction": "Presenta un escenario de ingreso a una labor recién disparada y pregunta qué hace antes de avanzar." },
+      "verification": {
+        "question": "Entras a una labor recién disparada. ¿Qué haces antes de avanzar?",
+        "success_criteria": {
+          "must_include": ["ventilar para evacuar los gases", "desatar las rocas sueltas", "revisar el sostenimiento"],
+          "critical": [1],
+          "min_completeness": 60,
+          "understanding_level": "achieved"
+        },
+        "max_attempts": 5
+      }
+    },
+    "respuesta": "Reviso que no haya rocas sueltas y que el sostenimiento aguante.",
+    "esperado": { "cubiertos": [2, 3], "completed": false }
+  },
+  {
+    "nombre": "no sabe",
+    "actividad": {
+      "id": "ejemplo_001",
+      "type": "practice",
+      "keyPointIndex": 0,
+      "teaching": { "agent_instruction": "Presenta un escenario de ingreso a una labor recién disparada y pregunta qué hace antes de avanzar." },
+      "verification": {
+        "question": "Entras a una labor recién disparada. ¿Qué haces antes de avanzar?",
+        "success_criteria": {
+          "must_include": ["ventilar para evacuar los gases", "desatar las rocas sueltas", "revisar el sostenimiento"],
+          "critical": [1],
+          "min_completeness": 60,
+          "understanding_level": "achieved"
+        },
+        "max_attempts": 5
+      }
+    },
+    "respuesta": "la verdad no sé, nunca he entrado a una labor",
+    "esperado": { "cubiertos": [], "completed": false }
+  }
+]

@@ -71,9 +71,17 @@ export interface VerificationHints {
  */
 export interface SuccessCriteria {
   must_include: string[]                    // Criterios que DEBE cumplir
-  min_completeness?: number                 // Porcentaje mínimo (0-100), default: 60
-  understanding_level?: UnderstandingLevel  // Nivel esperado, default: 'understood'
+  min_completeness?: number                 // Porcentaje mínimo (0-100); default en lib/rubric.ts
+  understanding_level?: UnderstandingLevel  // Nivel esperado, default: 'developing'
   hints?: VerificationHints                 // Hints opcionales para guiar verificación
+  /**
+   * Criterios ELIMINATORIOS: índices 1-based dentro de must_include.
+   * Sin ellos la actividad no se considera cumplida aunque se cubra el resto,
+   * Sophia nunca los revela ni los explica (ni al agotar intentos), y la
+   * calificación de la actividad queda en «En inicio» si nunca se cubrieron.
+   * Pensado para lo que en campo no admite error (seguridad, norma).
+   */
+  critical?: number[]
 }
 
 /**
@@ -224,6 +232,20 @@ export interface ActivityCompletionResult {
   needs_scaffolding?: boolean
   /** Sugerencia de sub-pregunta específica para descomponer (sin revelar la respuesta) */
   next_subquestion?: string
+  /**
+   * Qué hizo el alumno en este turno, según el verificador (reemplaza a los
+   * regex que leían «paso» o «ayuda» en el texto):
+   *  - answer: intentó responder
+   *  - asks_for_help: pide una pista o dice que no entiende la pregunta
+   *  - does_not_know: admite que no conoce el tema («no sé», «nunca lo vi»)
+   */
+  student_intent?: 'answer' | 'asks_for_help' | 'does_not_know'
+  /**
+   * true cuando el verificador no respondió (error de API, JSON inválido).
+   * El alumno avanza igual, pero el intento se guarda SIN nivel: no puntúa
+   * hasta que scripts/reverificar-pendientes.ts lo re-verifique.
+   */
+  unverified?: boolean
 }
 
 /**

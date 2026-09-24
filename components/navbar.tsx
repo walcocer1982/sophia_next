@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, BookOpen, Sparkles, Shield, LayoutDashboard, CalendarDays, Megaphone } from 'lucide-react'
+import { User, LogOut, Settings, BookOpen, Sparkles, Shield, LayoutDashboard, CalendarDays } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -110,17 +110,8 @@ export function Navbar() {
               <LayoutDashboard className="h-4 w-4" />
               Monitor
             </Link>
-            <Link
-              href="/eventos"
-              className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-                pathname.startsWith('/eventos')
-                  ? 'text-instructor-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Megaphone className="h-4 w-4" />
-              Eventos
-            </Link>
+            {/* «Eventos» (kiosko de ferias) se retiró el 14 set 2026: Sophia es
+                para los cursos de carrera. Ver investigacion/mejoras-sophia.md. */}
           </>
         )}
         {isSuperadmin && (

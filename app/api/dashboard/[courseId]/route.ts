@@ -3,41 +3,46 @@ import { tituloActividad } from '@/lib/actividad-titulo'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
 import { checkAndGeneratePartialReports } from '@/lib/lesson-report'
-import { cleanupInactiveGuestsForCourse } from '@/lib/cleanup-guests'
 import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '@/lib/rubric'
-import { calculateGrade } from '@/lib/grading'
+import { calculateGrade, enriquecerConPlan, type ActividadDelPlan, type ProgresoGuardado } from '@/lib/grading'
 import { normalizeLevel, LEGACY_LABEL } from '@/lib/levels'
 import { logger } from '@/lib/logger'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
 
+type ProgresoConEstado = ProgresoGuardado & { status: string }
+type PlanPorActividad = Map<string, ActividadDelPlan>
+
+/** Actividades completadas, unidas a lo que el plan dice de cada una (tipo,
+ *  peso, intentos permitidos, eliminatorios): así el tablero puntúa con los
+ *  mismos datos que la nota final. */
+function completadasConPlan(activities: ProgresoConEstado[], plan: PlanPorActividad) {
+  return activities
+    .filter((a) => a.status === 'COMPLETED')
+    .map((a) => enriquecerConPlan(a, plan.get(a.activityId)))
+}
+
 // Partial grade from completed activities (shared formula — see lib/grading.ts)
-function calculatePartialGrade(activities: Array<{
-  status: string
-  attempts: number
-  tangentCount: number
-  evidenceData: unknown
-}>): number | null {
-  const completed = activities.filter(a => a.status === 'COMPLETED')
+function calculatePartialGrade(activities: ProgresoConEstado[], plan: PlanPorActividad): number | null {
+  const completed = completadasConPlan(activities, plan)
   if (completed.length === 0) return null
   return calculateGrade(completed)
 }
 
 // Calculate rubric levels from session activities
-function calculateSessionRubric(activities: Array<{
-  status: string
-  attempts: number
-  evidenceData: unknown
-  passedCriteria?: boolean | null
-}>): { lastActivityLevel: RubricLevel | null; overallLevel: RubricLevel | null } {
-  const completed = activities.filter(a => a.status === 'COMPLETED')
+function calculateSessionRubric(
+  activities: ProgresoConEstado[],
+  plan: PlanPorActividad
+): { lastActivityLevel: RubricLevel | null; overallLevel: RubricLevel | null } {
+  const completed = completadasConPlan(activities, plan)
   if (completed.length === 0) return { lastActivityLevel: null, overallLevel: null }
 
-  const levels: RubricLevel[] = completed.map(ap => {
-    const passed = ap.passedCriteria !== false
-    return calculateRubricLevel(ap, passed)
-  })
+  // null = sin evidencia legible (p.ej. verificador caído): no se cuenta.
+  const levels = completed
+    .map((ap) => calculateRubricLevel(ap))
+    .filter((l): l is RubricLevel => l !== null)
+  if (levels.length === 0) return { lastActivityLevel: null, overallLevel: null }
 
   const lastActivityLevel = levels.at(-1) || null
   const overallLevel = calculateOverallRubric(levels)
@@ -92,16 +97,6 @@ export async function GET(
     })
     allowedStudentIds = new Set(enrollments.map(e => e.userId))
   }
-
-  // Limpieza de guests kiosko inactivos > 2 días ANTES de fetchear el course.
-  // Si no lo hacemos antes, las sesiones de esos guests aparecen en las
-  // "Alertas de Inactividad" y ensucian el dashboard con visitantes de feria
-  // (Hannah, Walther, Alcocer, etc — los del 03/06).
-  // Await: necesitamos que el course query NO vea esas sesiones.
-  await cleanupInactiveGuestsForCourse(courseId).catch((err: unknown) => {
-    // Si falla la limpieza, no rompemos el dashboard — solo log y seguimos.
-    logger.error('dashboard.cleanup_failed', { courseId, error: String(err) })
-  })
 
   // Get course with all published lessons and their sessions
   const course = await prisma.course.findUnique({
@@ -178,7 +173,12 @@ export async function GET(
       ? new Date(new Date(l.availableAt).getTime() + l.closesAfterHours * 60 * 60 * 1000)
       : null
     const isClosed = closesAt ? now > closesAt : false
-    return l.sessions.map(s => ({ ...s, lessonClosesAt: closesAt, lessonIsClosed: isClosed }))
+    // Plan de la lección, por actividad: lo necesita la nota y la rúbrica.
+    const content = l.contentJson as LessonContent | null
+    const plan: PlanPorActividad = new Map(
+      (content?.activities || []).map((a) => [a.id, a as ActividadDelPlan])
+    )
+    return l.sessions.map(s => ({ ...s, lessonClosesAt: closesAt, lessonIsClosed: isClosed, plan }))
   })
 
   // Filter by section if applicable
@@ -187,20 +187,15 @@ export async function GET(
     : allSessionsRaw
 
   // === MARK ABANDONED SESSIONS (persist + reclassify) ===
-  // Guests del kiosko (@assessment.local) sin actividad > 1h -> abandoned.
-  // Estudiantes regulares sin actividad > 24h -> abandoned.
+  // Estudiantes sin actividad > 24h -> abandoned.
   // Solo aplica a sesiones aún no completadas y sin endedAt previo.
-  const GUEST_THRESHOLD_MS = 1 * 60 * 60 * 1000
-  const REGULAR_THRESHOLD_MS = 24 * 60 * 60 * 1000
-  const GUEST_EMAIL_SUFFIX = '@assessment.local'
+  const ABANDON_THRESHOLD_MS = 24 * 60 * 60 * 1000
   const nowMs = now.getTime()
   const toAbandon: { id: string; endedAt: Date }[] = []
   for (const s of allSessions) {
     if (s.completedAt || s.endedAt) continue
-    const isGuest = s.user.email?.endsWith(GUEST_EMAIL_SUFFIX) ?? false
-    const threshold = isGuest ? GUEST_THRESHOLD_MS : REGULAR_THRESHOLD_MS
     const inactivityMs = nowMs - new Date(s.lastActivityAt).getTime()
-    if (inactivityMs > threshold) {
+    if (inactivityMs > ABANDON_THRESHOLD_MS) {
       // Cierra la sesión 30 min después de la última actividad (estimación
       // razonable: la persona dejó el dispositivo poco después).
       const closedAt = new Date(new Date(s.lastActivityAt).getTime() + 30 * 60 * 1000)
@@ -267,8 +262,8 @@ export async function GET(
         lastActivityAt: s.lastActivityAt,
         activeMinutes,
         messageCount: s._count.messages,
-        grade: s.grade ?? calculatePartialGrade(s.activities),
-        ...calculateSessionRubric(s.activities),
+        grade: s.grade ?? calculatePartialGrade(s.activities, s.plan),
+        ...calculateSessionRubric(s.activities, s.plan),
       }
     })
 
@@ -296,8 +291,8 @@ export async function GET(
         lastActivityAt: s.lastActivityAt,
         activeMinutes,
         messageCount: s._count.messages,
-        grade: s.grade ?? calculatePartialGrade(s.activities),
-        ...calculateSessionRubric(s.activities),
+        grade: s.grade ?? calculatePartialGrade(s.activities, s.plan),
+        ...calculateSessionRubric(s.activities, s.plan),
         hoursInactive: Math.round((Date.now() - s.lastActivityAt.getTime()) / 1000 / 60 / 60),
       }
     })
@@ -328,8 +323,8 @@ export async function GET(
         lastActivityAt: s.lastActivityAt,
         activeMinutes,
         messageCount: s._count.messages,
-        grade: s.grade ?? calculatePartialGrade(s.activities),
-        ...calculateSessionRubric(s.activities),
+        grade: s.grade ?? calculatePartialGrade(s.activities, s.plan),
+        ...calculateSessionRubric(s.activities, s.plan),
         completedAt: s.completedAt,
       }
     })
@@ -342,7 +337,6 @@ export async function GET(
       const meta = s.activityId ? activityMeta[s.activityId] : null
       const currentActivityProgress = s.activities.find(a => a.activityId === s.activityId)
       const activeMinutes = Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 1000 / 60)
-      const isGuest = s.user.email?.endsWith(GUEST_EMAIL_SUFFIX) ?? false
       return {
         userId: s.user.id,
         name: s.user.name,
@@ -360,9 +354,8 @@ export async function GET(
         endedAt: s.endedAt,
         activeMinutes,
         messageCount: s._count.messages,
-        grade: s.grade ?? calculatePartialGrade(s.activities),
-        ...calculateSessionRubric(s.activities),
-        isGuest,
+        grade: s.grade ?? calculatePartialGrade(s.activities, s.plan),
+        ...calculateSessionRubric(s.activities, s.plan),
       }
     })
 

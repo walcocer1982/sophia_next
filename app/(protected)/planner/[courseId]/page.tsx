@@ -4,7 +4,7 @@ import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
 import { esAdminDelCurso } from '@/lib/alcance'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, Megaphone, CalendarDays } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, CalendarDays } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AgregarSesion } from '@/components/planner/agregar-sesion'
 import { PublishToggle } from '@/components/planner/publish-toggle'
@@ -21,7 +21,6 @@ type CourseWithLessons = {
   isPublished: boolean
   voiceEnabled: boolean
   methodology: 'REFLECTIVE' | 'CODE'
-  track: 'REGULAR' | 'CONTINUA'
   allowPaste: boolean
   allowImagePaste: boolean
   sedes: Array<{ id: string }>
@@ -36,7 +35,7 @@ type CourseWithLessons = {
     isPublished: boolean
     availableAt: Date | null
     closesAfterHours: number
-    _count: { assessments: number; sectionSchedules: number }
+    _count: { sectionSchedules: number }
   }>
 }
 
@@ -61,7 +60,6 @@ export default async function CourseOverviewPage({
       isPublished: true,
       voiceEnabled: true,
       methodology: true,
-      track: true,
       allowPaste: true,
       allowImagePaste: true,
       userId: true,
@@ -80,7 +78,7 @@ export default async function CourseOverviewPage({
           isPublished: true,
           availableAt: true,
           closesAfterHours: true,
-          _count: { select: { assessments: true, sectionSchedules: true } },
+          _count: { select: { sectionSchedules: true } },
         },
       },
     },
@@ -187,7 +185,6 @@ export default async function CourseOverviewPage({
                   title: course.title,
                   capacidad: course.capacidad,
                   methodology: course.methodology,
-                  track: course.track,
                   sedeIds: course.sedes.map((s) => s.id),
                   voiceEnabled: course.voiceEnabled,
                   allowPaste: course.allowPaste,
@@ -383,17 +380,6 @@ export default async function CourseOverviewPage({
                             title: a.teaching?.agent_instruction || '',
                           }))}
                         />
-                        {/* "Clases" se mudó a /eventos (todos los kioskos en un lugar). Acá solo badge informativo. */}
-                        {lesson._count.assessments > 0 && (
-                          <Link
-                            href="/eventos"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-orange-200 bg-orange-50 text-xs font-medium text-orange-700 hover:bg-orange-100 transition-colors"
-                            title="Ver en Eventos"
-                          >
-                            <Megaphone className="h-3 w-3" />
-                            {lesson._count.assessments} evento{lesson._count.assessments !== 1 ? 's' : ''}
-                          </Link>
-                        )}
                         {/* «Programar» vivía acá como enlace suelto a /programacion:
                             el mismo destino repetido en cada sesión, que además no
                             llevaba a programar ESTA sesión sino a la raíz. Programar
