@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
   const [curso, sede, carrera] = await Promise.all([
     prisma.course.findFirst({
-      where: { id: courseId, deletedAt: null, track: 'REGULAR' },
+      where: { id: courseId, deletedAt: null },
       select: { id: true, title: true, scope: true, careers: { select: { id: true } } },
     }),
     prisma.sede.findUnique({

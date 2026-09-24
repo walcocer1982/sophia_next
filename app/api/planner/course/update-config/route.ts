@@ -22,7 +22,6 @@ export async function POST(request: Request) {
     title?: string
     capacidad?: string | null  // descripción / competencia general
     methodology?: 'REFLECTIVE' | 'CODE'
-    track?: 'REGULAR' | 'CONTINUA'
     sedeIds?: string[]   // m:n: reemplaza el set completo de sedes
     voiceEnabled?: boolean
     allowPaste?: boolean
@@ -65,12 +64,6 @@ export async function POST(request: Request) {
     }
     data.methodology = body.methodology
   }
-  if (body.track !== undefined) {
-    if (body.track !== 'REGULAR' && body.track !== 'CONTINUA') {
-      return NextResponse.json({ error: 'track inválido' }, { status: 400 })
-    }
-    data.track = body.track
-  }
   // sedeIds: reemplaza el set completo (m:n). Pasar [] vacía la relación.
   if (Array.isArray(body.sedeIds)) {
     data.sedes = { set: body.sedeIds.map((id) => ({ id })) }
@@ -112,7 +105,6 @@ export async function POST(request: Request) {
       title: true,
       capacidad: true,
       methodology: true,
-      track: true,
       voiceEnabled: true,
       allowPaste: true,
       allowImagePaste: true,

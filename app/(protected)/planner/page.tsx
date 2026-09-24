@@ -55,7 +55,7 @@ export default async function PlannerPage({
       orderBy: { title: 'asc' },
       select: {
         id: true, title: true, capacidad: true, isPublished: true,
-        scope: true, track: true, careerId: true,
+        scope: true, careerId: true,
         careers: { select: { id: true } },
         user: { select: { name: true } },
         lessons: { select: { contentJson: true, isPublished: true } },
@@ -86,7 +86,6 @@ export default async function PlannerPage({
       title: c.title,
       capacidad: c.capacidad,
       isPublished: c.isPublished,
-      track: c.track,
       scope: c.scope,
       instructor: c.user?.name ?? null,
       total: c.lessons.length,

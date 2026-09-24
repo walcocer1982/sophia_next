@@ -9,7 +9,6 @@ export interface CursoLista {
   title: string
   capacidad: string | null
   isPublished: boolean
-  track: 'REGULAR' | 'CONTINUA'
   scope: 'TRANSVERSAL' | 'SPECIALIZATION'
   instructor: string | null
   total: number
@@ -187,12 +186,6 @@ export function Explorador({ grupos, cursos, seleccion }: Props) {
                     </div>
                   </div>
 
-                  {c.track === 'CONTINUA' && (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                      <Megaphone className="h-3 w-3" />
-                      Kiosko
-                    </span>
-                  )}
                   {!c.isPublished && (
                     <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
                       Borrador

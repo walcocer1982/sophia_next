@@ -17,8 +17,6 @@ export const runtime = 'nodejs'
  *  - SUPERADMIN / ADMIN: ven todas las secciones
  *  - INSTRUCTOR: ven solo las secciones donde son SectionInstructor
  *  - STUDENT: 403
- *
- * Solo cursos REGULAR (los CONTINUA viven en Eventos, no en Programación).
  */
 export async function GET(request: Request) {
   const session = await auth()
@@ -37,7 +35,7 @@ export async function GET(request: Request) {
   const includeArchived = searchParams.get('includeArchived') === 'true'
 
   let sectionWhere: Prisma.SectionWhereInput = {
-    course: { track: 'REGULAR', deletedAt: null },
+    course: { deletedAt: null },
   }
   // Antes solo el INSTRUCTOR se recortaba, y por sección asignada; ADMIN veía
   // todas las sedes. Ahora los tres roles pasan por el mismo alcance: sede x
@@ -45,7 +43,7 @@ export async function GET(request: Request) {
   const { alcance, viendoComo } = await alcanceEfectivo(session)
   if (alcance.role !== 'SUPERADMIN') {
     // AND y no spread: el alcance trae su propio `course` y `OR`, que pisarían
-    // el filtro de track REGULAR.
+    // el filtro de deletedAt.
     sectionWhere = { AND: [sectionWhere, seccionesVisibles(alcance)] }
   }
 
@@ -95,7 +93,6 @@ export async function GET(request: Request) {
           select: {
             id: true,
             title: true,
-            track: true,
             scope: true,
             career: {
               select: { id: true, code: true, name: true },
@@ -129,11 +126,11 @@ export async function GET(request: Request) {
     }),
   ])
 
-  // Cursos REGULAR para selector al crear sección (solo si tiene permisos)
+  // Cursos para «Agregar curso» (solo si tiene permisos)
   const canCreate = role === 'SUPERADMIN' || role === 'ADMIN'
   const regularCourses = canCreate
     ? await prisma.course.findMany({
-        where: { track: 'REGULAR', deletedAt: null },
+        where: { deletedAt: null },
         orderBy: { title: 'asc' },
         select: {
           id: true, title: true, scope: true,

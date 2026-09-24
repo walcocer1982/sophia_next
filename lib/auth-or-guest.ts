@@ -1,14 +1,11 @@
 import { auth } from '@/auth'
-import { cookies } from 'next/headers'
-import { prisma } from './prisma'
 
 /**
- * Returns the current user from either:
- *  - NextAuth session (Google OAuth)
- *  - Guest cookie set during /eval/[code]/start
+ * Usuario autenticado para los endpoints de chat, voz y encuesta.
  *
- * Used by chat/voice endpoints so the same flow works for authenticated
- * students and anonymous assessment participants.
+ * Hasta el 14 set 2026 acá se leía primero la cookie `guest_user_id` del
+ * kiosko (/eval). El kiosko se retiró; queda solo la sesión de NextAuth. El
+ * nombre y la forma del resultado se conservan para no tocar a los callers.
  */
 export interface AuthOrGuestResult {
   userId: string
@@ -17,26 +14,6 @@ export interface AuthOrGuestResult {
 }
 
 export async function getAuthOrGuest(): Promise<AuthOrGuestResult | null> {
-  // Priority 1: guest cookie (used in /eval kiosko mode)
-  // We check this FIRST so that if Paola is logged in OAuth on the same laptop
-  // running an event, the guest takes precedence for the duration of their session.
-  const cookieStore = await cookies()
-  const guestUserId = cookieStore.get('guest_user_id')?.value
-  if (guestUserId) {
-    const user = await prisma.user.findUnique({
-      where: { id: guestUserId },
-      select: { id: true, role: true },
-    })
-    if (user) {
-      return {
-        userId: user.id,
-        isGuest: true,
-        role: user.role,
-      }
-    }
-  }
-
-  // Priority 2: NextAuth OAuth session
   const session = await auth()
   if (session?.user?.id) {
     return {
@@ -45,6 +22,5 @@ export async function getAuthOrGuest(): Promise<AuthOrGuestResult | null> {
       role: session.user.role || 'STUDENT',
     }
   }
-
   return null
 }

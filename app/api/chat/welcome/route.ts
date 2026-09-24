@@ -47,9 +47,6 @@ export async function POST(request: Request) {
             },
           },
         },
-        assessmentParticipant: {
-          select: { firstName: true },
-        },
       },
     })
 
@@ -57,9 +54,9 @@ export async function POST(request: Request) {
       return new Response('Session not found', { status: 404 })
     }
 
-    // If this is a guest assessment participant, get only the FIRST given name (no compound)
-    const rawFirstName = lessonSession.assessmentParticipant?.firstName || null
-    const participantFirstName = rawFirstName?.trim().split(/\s+/)[0] || null
+    // El saludo con nombre era del kiosko (registro del visitante). En /learn
+    // Sophia no personaliza el saludo.
+    const participantFirstName: string | null = null
 
     // Obtener contenido de la lección
     const contentJson = await getLessonContent(lessonSession.lesson.id) as LessonContent
@@ -108,25 +105,7 @@ export async function POST(request: Request) {
       tangentCount: 0,
       lessonContext,
       methodology,
-      language: lessonSession.language,
     })
-
-    // El welcome se traduce al idioma de la sesión. Si EN, regla muy estricta
-    // para evitar que se filtre español. Lo agregamos AL FINAL del prompt porque
-    // los modelos pagan más atención a las últimas instrucciones.
-    const welcomeLanguageRule = lessonSession.language === 'EN'
-      ? `
-
-═══════════════════════════════════════════════════════════════
-LANGUAGE LOCK — CRITICAL:
-═══════════════════════════════════════════════════════════════
-Generate the welcome ENTIRELY in English. Every single word. No Spanish.
-- Greet with "Hi {name}" or "Hello {name}" — NEVER "Hola".
-- Translate the lesson topic from Spanish to English when introducing it.
-- Translate the lesson's technical terms to their standard English equivalents.
-- The ending question MUST be in English too.
-- Self-check: scan your output for any Spanish word, rewrite if found.`
-      : ''
 
     // Instrucción para mensaje de bienvenida - Presenta el tema e invita a aprender
     const greetingLine = participantFirstName
@@ -179,14 +158,14 @@ LARGO TOTAL: 3-5 oraciones. NO más.
 
 ESTRUCTURA NATURAL:
 1. Saludo + presentación (1 oración) — di ${greetingLine}
-2. Mencioná el TEMA y parafraseá el OBJETIVO de la lección de forma genérica (1-2 oraciones, sin spoiler de respuestas)
+2. Menciona el TEMA y parafrasea el OBJETIVO de la lección de forma genérica (1-2 oraciones, sin spoiler de respuestas)
 ${isCodeMethodology
   ? '3. Anticipa que es una guía paso a paso y pregunta si está listo para empezar el primer paso (1 oración)'
   : '3. Pregunta sobre experiencia previa para conectar (1 oración)'}
 
 REGLA FINAL OBLIGATORIA: el mensaje DEBE terminar con UNA pregunta dirigida al estudiante. NUNCA con un statement neutro — eso deja al estudiante sin saber si tiene que responder.
 
-NO asumas el género del estudiante. Usa formas neutras.${welcomeLanguageRule}
+NO asumas el género del estudiante. Usa formas neutras.
 
 Genera el mensaje ahora, sin formato, conversacional.`
 
