@@ -27,18 +27,27 @@ export interface ActivityEdits {
   agent_instruction: string
   question: string
   must_include: string[]
+  /** Índices 1-based de must_include que son eliminatorios. */
+  critical: number[]
   open_ended: boolean
   max_attempts: number
   understanding_level: string
 }
 
+/** Un criterio por línea; «!» al inicio marca el eliminatorio (ver types/lesson.ts). */
+function criteriosATexto(a: Activity): string {
+  const criticos = a.verification.success_criteria.critical ?? []
+  return a.verification.success_criteria.must_include
+    .map((c, i) => (criticos.includes(i + 1) ? `! ${c}` : c))
+    .join('\n')
+}
 
 export function ActivityCard({ activity, position, total, keyPoints, isApproved, onApprove, onRevoke, onEdit }: ActivityCardProps) {
   const [isExpanded, setIsExpanded] = useState(!isApproved)
   const [isEditing, setIsEditing] = useState(false)
   const [editInstruction, setEditInstruction] = useState(activity.teaching.agent_instruction)
   const [editQuestion, setEditQuestion] = useState(activity.verification.question)
-  const [editCriteria, setEditCriteria] = useState(activity.verification.success_criteria.must_include.join('\n'))
+  const [editCriteria, setEditCriteria] = useState(criteriosATexto(activity))
   const [editOpenEnded, setEditOpenEnded] = useState(activity.verification.open_ended ?? false)
   const [editMaxAttempts, setEditMaxAttempts] = useState(activity.verification.max_attempts ?? 5)
   const [editUnderstandingLevel, setEditUnderstandingLevel] = useState<string>(normalizeLevel(activity.verification.success_criteria?.understanding_level))
@@ -130,13 +139,21 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                   rows={4}
                   placeholder="Un criterio por línea"
                 />
-                <p className="mt-1 text-[10px] text-muted-foreground">Un criterio por línea</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Un criterio por línea. Empieza la línea con «!» para marcarlo eliminatorio: Sophia nunca lo
+                  revela y, sin él, la actividad queda en «En inicio».
+                </p>
               </>
             ) : (
               <ul className="list-inside list-disc space-y-1">
                 {activity.verification.success_criteria.must_include.map((c, i) => (
                   <li key={i} className="text-sm text-muted-foreground">
                     {c}
+                    {(activity.verification.success_criteria.critical ?? []).includes(i + 1) && (
+                      <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
+                        eliminatorio
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -236,14 +253,19 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                     className="bg-blue-600 hover:bg-blue-700"
                     onClick={(e) => {
                       e.stopPropagation()
-                      const criteria = editCriteria
+                      const lineas = editCriteria
                         .split('\n')
                         .map((c) => c.trim())
                         .filter(Boolean)
+                      const criteria = lineas.map((l) => l.replace(/^!\s*/, ''))
+                      const critical = lineas
+                        .map((l, i) => (l.startsWith('!') ? i + 1 : 0))
+                        .filter((i) => i > 0)
                       onEdit?.(activity.id, {
                         agent_instruction: editInstruction.trim(),
                         question: editQuestion.trim(),
                         must_include: criteria,
+                        critical,
                         open_ended: editOpenEnded,
                         max_attempts: editMaxAttempts,
                         understanding_level: editUnderstandingLevel,
@@ -261,7 +283,7 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                       e.stopPropagation()
                       setEditInstruction(activity.teaching.agent_instruction)
                       setEditQuestion(activity.verification.question)
-                      setEditCriteria(activity.verification.success_criteria.must_include.join('\n'))
+                      setEditCriteria(criteriosATexto(activity))
                       setEditOpenEnded(activity.verification.open_ended ?? false)
                       setEditMaxAttempts(activity.verification.max_attempts ?? 5)
                       setEditUnderstandingLevel(normalizeLevel(activity.verification.success_criteria?.understanding_level))
