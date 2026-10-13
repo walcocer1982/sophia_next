@@ -12,6 +12,12 @@ console.log('[Auth] ENV check:', {
   DATABASE_URL: !!process.env.DATABASE_URL,
 })
 
+// Refresco del usuario (rol, carrera, sede, matrícula) guardado por 60 s. Ver el
+// callback `jwt`. En Vercel es por instancia; vale igual: es un refresco, no la
+// fuente de verdad.
+const REFRESCO_TTL_MS = 60_000
+const refrescos = new Map<string, { hasta: number; role: unknown; careerId: unknown; sedeId: unknown; hasEnrollment: unknown }>()
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
   providers: [
@@ -145,20 +151,47 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // would otherwise keep STUDENT in their JWT until logout, silently hiding
       // admin-only UI (planner action buttons, dashboard, etc.).
       if (token.sub) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.sub },
-          select: { role: true, careerId: true, sedeId: true },
-        })
-        if (dbUser) {
-          token.role = dbUser.role
-          token.careerId = dbUser.careerId
-          token.sedeId = dbUser.sedeId
+        // El refresco se guarda 60 s por usuario: cada página y cada llamada de la
+        // lección (el chat, el sondeo de progreso cada pocos segundos) pasaba por
+        // acá y pagaba una ida y vuelta a Neon (~200 ms) antes de su propio
+        // trabajo. Un cambio de rol tarda hasta un minuto en verse.
+        const guardado = refrescos.get(token.sub)
+        if (guardado && guardado.hasta > Date.now()) {
+          token.role = guardado.role
+          token.careerId = guardado.careerId
+          token.sedeId = guardado.sedeId
+          token.hasEnrollment = guardado.hasEnrollment
+          return token
         }
-        if (!token.hasEnrollment) {
-          const enrollmentCount = await prisma.enrollment.count({
-            where: { userId: token.sub },
+        // Si la base no responde, se conserva el token (firmado) con los datos del
+        // último refresco. Sin este try, la excepción invalidaba la sesión y
+        // NextAuth borraba la cookie: un corte de segundos de Neon (6 oct 2026)
+        // sacó al usuario de la lección y lo mandó al login.
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.sub },
+            select: { role: true, careerId: true, sedeId: true },
           })
-          token.hasEnrollment = enrollmentCount > 0
+          if (dbUser) {
+            token.role = dbUser.role
+            token.careerId = dbUser.careerId
+            token.sedeId = dbUser.sedeId
+          }
+          if (!token.hasEnrollment) {
+            const enrollmentCount = await prisma.enrollment.count({
+              where: { userId: token.sub },
+            })
+            token.hasEnrollment = enrollmentCount > 0
+          }
+          refrescos.set(token.sub, {
+            hasta: Date.now() + REFRESCO_TTL_MS,
+            role: token.role,
+            careerId: token.careerId,
+            sedeId: token.sedeId,
+            hasEnrollment: token.hasEnrollment,
+          })
+        } catch (error) {
+          console.warn('⚠️  auth.jwt: no se pudo refrescar el usuario; se mantiene el token', error instanceof Error ? error.message.split('\n').pop() : error)
         }
       }
 

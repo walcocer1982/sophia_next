@@ -11,6 +11,10 @@ import { detectHallucination } from '@/lib/hallucination-detector'
 import { logger, logChatMessage, logError } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { verifyActivityCompletion, verifyStepCompletion } from '@/lib/activity-verification'
+import { applyPick, newChoiceState, parseChoicePick, renderChoice, type ChoiceState } from '@/lib/choice'
+import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/support-blocks'
+import { citedFromTexts, createMarkerFilter, stripMarkers, type MarkerCheck } from '@/lib/material-markers'
+import type { ChoiceTurn } from '@/lib/prompt-builder'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
 import { classifyIntent } from '@/lib/services/intent-classification'
 import { compressMessagesForAPI } from '@/lib/message-summarizer'
@@ -18,6 +22,9 @@ import { generateLessonReport } from '@/lib/lesson-report'
 import { processPlannerAttachments } from '@/lib/planner/attachments'
 import type { LessonContent, ModerationResult, IntentClassification, ActivityCompletionResult } from '@/types/lesson'
 import type { Message, Prisma } from '@prisma/client'
+import type Anthropic from '@anthropic-ai/sdk'
+import { checkReply, checksIntro, newChecksState, readCheck, type ChecksState, type CheckTurn } from '@/lib/checks'
+import { describeStateForPrompt, initialState, sanitizeState, type MaterialState, type SimState } from '@/lib/simulator'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -39,6 +46,21 @@ function extractProjectBrief(text: string): { brief: unknown | null; cleaned: st
     // JSON inválido — preservamos el mensaje original y no guardamos brief
     return { brief: null, cleaned: text }
   }
+}
+
+/**
+ * ¿La respuesta de Sophia plantea la pregunta de la actividad siguiente?
+ * Sophia parafrasea, así que no se exige el texto literal: basta con que
+ * aparezca al menos un tercio de las palabras con contenido de la pregunta.
+ */
+function planteaLaPregunta(respuesta: string, pregunta: string): boolean {
+  const normalizar = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ')
+  const palabras = [...new Set(normalizar(pregunta).split(/\s+/).filter((w) => w.length >= 5))]
+  if (palabras.length === 0) return true
+  const texto = normalizar(respuesta)
+  const presentes = palabras.filter((w) => texto.includes(w)).length
+  return presentes / palabras.length >= 1 / 3
 }
 
 export async function POST(request: Request) {
@@ -77,13 +99,26 @@ export async function POST(request: Request) {
     sessionId,
     message,
     attachments,
+    materialState,
   } = (await request.json()) as {
     sessionId: string
     message: string
     attachments?: Array<{ name: string; mimeType: string; dataBase64: string }>
+    /** Estado de los ecualizadores del panel (spec del panel §16.3). Se valida contra la lección. */
+    materialState?: MaterialState
   }
 
-  // 1. Validate session and fetch full contentJson with course data
+  // Cronómetro por fase; se registra al final (chat.stream.timing). Sirve para
+  // ver dónde se va el tiempo de cada turno sin reproducirlo a mano.
+  const t0 = performance.now()
+  const marcas: Record<string, number> = {}
+  const marcar = (fase: string) => { marcas[fase] = Math.round(performance.now() - t0) }
+
+  // 1. Validate session and fetch full contentJson with course data.
+  // Una sola ida y vuelta a Neon: la sesión trae sus últimos 20 mensajes y el
+  // progreso de TODAS sus actividades (antes eran tres consultas en fila,
+  // ~1 s antes de empezar a pensar). El contenido de la lección va aparte
+  // porque tiene su propio caché de 60 s.
   const lessonSession = await prisma.lessonSession.findFirst({
     where: {
       id: sessionId,
@@ -105,8 +140,14 @@ export async function POST(request: Request) {
           },
         },
       },
+      // Últimos 20 mensajes SIN filtrar por activityId (el filtro causaba que
+      // el mensaje de transición se perdiera, dejando a Claude sin contexto del
+      // escenario cuando el estudiante decía "no sé").
+      messages: {
+        orderBy: { timestamp: 'desc' },
+        take: 20,
+      },
       activities: {
-        where: { status: 'COMPLETED' },
         orderBy: { completedAt: 'asc' },
       },
     },
@@ -116,25 +157,10 @@ export async function POST(request: Request) {
     return new Response('Session not found', { status: 404 })
   }
 
-  // Cargar últimos 20 mensajes SIN filtrar por activityId
-  // (El filtro por activityId causaba que el mensaje de transición se perdiera,
-  // dejando a Claude sin contexto del escenario cuando el estudiante decía "no sé")
-  // ⚡ OPTIM #4: mensajes + contenido de lección EN PARALELO (ambos solo
-  // dependen de lessonSession). Antes eran 2 awaits secuenciales a Neon.
-  const [messages, contentJsonRaw] = await Promise.all([
-    prisma.message.findMany({
-      where: {
-        sessionId: lessonSession.id,
-      },
-      orderBy: { timestamp: 'desc' },
-      take: 20,
-    }),
-    getLessonContent(lessonSession.lesson.id),
-  ])
+  const contentJsonRaw = await getLessonContent(lessonSession.lesson.id)
+  marcar('db')
 
-  // Adjuntar mensajes a lessonSession para mantener compatibilidad (cast para TypeScript)
-  const sessionWithMessages = lessonSession as typeof lessonSession & { messages: Message[] }
-  sessionWithMessages.messages = messages
+  const sessionWithMessages = lessonSession
 
   // 2. Lesson content (ya cargado en paralelo arriba)
   const contentJson = contentJsonRaw as LessonContent
@@ -184,11 +210,33 @@ export async function POST(request: Request) {
     return new Response('No activities found in lesson', { status: 500 })
   }
 
-  // Historial completo para verificación (necesita contexto completo)
-  const conversationHistory = sessionWithMessages.messages.reverse().map((m: Message) => ({
+  // A partir de aquí los mensajes quedan en orden CRONOLÓGICO (ascendente).
+  // `reverse()` muta el arreglo: todo lo que sigue (prompt, búsquedas del último
+  // mensaje de Sophia) lo recibe ya ascendente. Por eso «el último» se busca
+  // desde el final con `ultimoDe`, nunca con `find`, que devolvería el más viejo.
+  sessionWithMessages.messages.reverse()
+  const ultimoDe = (role: 'user' | 'assistant') =>
+    [...sessionWithMessages.messages].reverse().find((m) => m.role === role)
+
+  const conversationHistory = sessionWithMessages.messages.map((m: Message) => ({
     role: m.role as 'user' | 'assistant',
     content: m.content,
   }))
+
+  // Turno de conexión: el alumno contesta la pregunta de bienvenida (experiencia
+  // previa), no la de la actividad 1. Esa respuesta no se verifica contra los
+  // criterios de la actividad. Solo se puede saber si la ventana de 20 mensajes
+  // incluye el inicio de la sesión.
+  const ventanaIncluyeInicio = sessionWithMessages.messages.length < 20
+  const bienvenida = ventanaIncluyeInicio && sessionWithMessages.messages[0]?.role === 'assistant'
+    ? sessionWithMessages.messages[0]
+    : null
+  const isWelcomeReply = bienvenida !== null &&
+    !sessionWithMessages.messages.some((m) => m.role === 'user')
+  // La respuesta del alumno a la bienvenida (si ya ocurrió) tampoco es evidencia.
+  const respuestaABienvenida = bienvenida && sessionWithMessages.messages[1]?.role === 'user'
+    ? sessionWithMessages.messages[1]
+    : null
 
   // Historial comprimido para enviar a Claude (optimizado)
   // - Mensajes del estudiante: completos
@@ -209,16 +257,18 @@ export async function POST(request: Request) {
   // 3. 🔥 NUEVO: Verificación ANTICIPADA antes de generar respuesta
   const currentActivity = currentActivityContext.activity
 
-  // Obtener intentos y tangent count actuales
-  const activityProgress = await prisma.activityProgress.findUnique({
-    where: {
-      lessonSessionId_activityId: {
-        lessonSessionId: lessonSession.id,
-        activityId: currentActivity.id,
-      },
-    },
-    select: { status: true, attempts: true, tangentCount: true, evidenceData: true },
-  })
+  // Historial para el VERIFICADOR: solo lo conversado en ESTA actividad. Antes
+  // recibía los últimos mensajes de la sesión entera y acumulaba respuestas de
+  // actividades anteriores: así una actividad que nunca se planteó (la rúbrica
+  // de EVA-NOTA) se dio por cumplida con la respuesta al cálculo de la anterior.
+  const activityHistory = sessionWithMessages.messages
+    .filter((m) => m.activityId === currentActivity.id && m !== bienvenida && m !== respuestaABienvenida)
+    .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+  // Sin mensajes archivados bajo la actividad (datos viejos): el último par basta.
+  const verifierHistory = activityHistory.length > 0 ? activityHistory : conversationHistory.slice(-2)
+
+  // Intentos, tangentes y evidencia de la actividad actual (vino con la sesión)
+  const activityProgress = lessonSession.activities.find((a) => a.activityId === currentActivity.id) ?? null
 
   const attempts = activityProgress?.attempts || 0
   const tangentCount = activityProgress?.tangentCount || 0
@@ -229,6 +279,60 @@ export async function POST(request: Request) {
   } | null) || { attempts: [] }
   const scaffoldingTurns = existingEvidence.scaffoldingTurns || 0
   const wasExplained = existingEvidence.wasExplained === true
+  // true si este turno se retiene el avance porque Sophia no pasó a la siguiente actividad
+  let retenido = false
+
+  // ── Paso cerrado (alternativas) ──────────────────────────────────────────
+  // Si la actividad lo tiene y aún no se resolvió, este mensaje es la elección
+  // del alumno: se corrige acá, sin modelo, y Sophia solo reacciona.
+  const sessionSeed = lessonSession.id
+  const choice = currentActivity.choice
+  let choiceState: ChoiceState | undefined =
+    (existingEvidence as { choice?: ChoiceState }).choice ??
+    (choice ? newChoiceState(`${sessionSeed}:${currentActivity.id}`, choice) : undefined)
+  let choiceTurn: ChoiceTurn | undefined
+  // ¿La bienvenida planteó la actividad 1 (paso cerrado o pregunta abierta)?
+  // Si no (lecciones viejas o bienvenida genérica), este turno es de conexión.
+  const planteadoEnBienvenida = bienvenida
+    ? planteaLaPregunta(bienvenida.content, choice?.prompt ?? currentActivity.teaching?.first_question ?? currentActivity.verification.question)
+    : true
+  const esTurnoDeConexion = isWelcomeReply && !planteadoEnBienvenida
+  if (choice && choiceState && !choiceState.resolved && activityProgress?.status !== 'COMPLETED' && !esTurnoDeConexion) {
+    const pick = parseChoicePick(message, choice, choiceState.order)
+    if (pick === null) {
+      choiceTurn = 'no_pick'
+    } else {
+      choiceState = applyPick(choiceState, choice, pick)
+      choiceTurn = choiceState.correct ? 'pick_correct' : choiceState.revealed ? 'pick_wrong_revealed' : 'pick_wrong_retry'
+    }
+    logger.info('chat.stream.choice_turn', { sessionId, activityId: currentActivity.id, choiceTurn, picks: choiceState.picks })
+  }
+  // «La b, porque entregó los TC y rindió el examen»: eligió bien Y ya justificó.
+  // No se le vuelve a preguntar: el mismo mensaje pasa al paso 2 y se verifica.
+  const pickWithReason =
+    choiceTurn === 'pick_correct' && message.trim().split(/\s+/).length >= 8
+  if (pickWithReason) {
+    logger.info('chat.stream.choice_pick_with_reason', { sessionId, activityId: currentActivity.id })
+    choiceTurn = undefined
+  }
+
+  // ── Comprobación de cierre (spec del panel §16.1, decisión 15) ──────────
+  // 2 a 4 preguntas cerradas antes de la reflexión. Las corrige y las responde
+  // el código («Correcto» / «No: era B) …»), sin modelo y sin verificador.
+  const checks = currentActivity.checks
+  let checksState: ChecksState | undefined =
+    (existingEvidence as { checks?: ChecksState }).checks ??
+    (checks?.length ? newChecksState(sessionSeed, currentActivity.id, checks) : undefined)
+  let checkTurn: CheckTurn | undefined
+  if (checks?.length && checksState && !checksState.done && !choice && activityProgress?.status !== 'COMPLETED' && !esTurnoDeConexion) {
+    const leido = readCheck(message, checks, checksState)
+    checksState = leido.state
+    checkTurn = leido.turn
+    logger.info('chat.stream.check_turn', { sessionId, activityId: currentActivity.id, checkTurn })
+  }
+  const respuestaFija = checkTurn && checks && checksState
+    ? checkReply(checks, checksState, checkTurn, currentActivity.verification.question)
+    : null
 
   // Cap de sub-preguntas (desglose) por tipo de actividad. Reflection cierra
   // pronto porque es una sola pregunta abierta — no se desglosa repetidamente.
@@ -249,7 +353,7 @@ export async function POST(request: Request) {
     (currentActivity as { agent_instruction?: string }).agent_instruction || ''
 
   // 🔥 FIX: Buscar el último mensaje del INSTRUCTOR (no cualquier mensaje)
-  const lastInstructorMessage = sessionWithMessages.messages.find(m => m.role === 'assistant')
+  const lastInstructorMessage = ultimoDe('assistant')
 
   // Detectar si la actividad ya fue completada previamente
   const activityAlreadyCompleted = activityProgress?.status === 'COMPLETED'
@@ -284,11 +388,25 @@ export async function POST(request: Request) {
     suggested_response_strategy: 'acknowledge_answer',
   }
 
+  const SIN_VERIFICAR: ActivityCompletionResult = {
+    completed: false,
+    criteriaMatched: [],
+    criteriaMissing: [],
+    completeness_percentage: 0,
+    understanding_level: 'beginning',
+    response_type: 'continuation',
+    feedback: '',
+    confidence: 'high',
+    ready_to_advance: false,
+    needs_scaffolding: false,
+    next_subquestion: undefined,
+  }
+
   const [moderation, intent, verification] = await Promise.all([
-    isContinuationMessage
+    isContinuationMessage || choiceTurn || checkTurn
       ? Promise.resolve(SAFE_MODERATION)
       : moderateContent(message, { lessonTitle }),
-    isContinuationMessage
+    isContinuationMessage || choiceTurn || checkTurn
       ? Promise.resolve(CONTINUATION_INTENT)
       : classifyIntent(message, currentActivity, {
           currentLesson: lessonTitle,
@@ -311,6 +429,19 @@ export async function POST(request: Request) {
           needs_scaffolding: false,
           next_subquestion: undefined,
         })
+    // Comprobación de cierre: corregida en código; no hay verificación de IA.
+    : checkTurn
+      ? Promise.resolve<ActivityCompletionResult>(SIN_VERIFICAR)
+    // Paso cerrado: ya se corrigió en código; no hay verificación de IA.
+    : choiceTurn
+      ? Promise.resolve<ActivityCompletionResult>({
+          ...SIN_VERIFICAR,
+          response_type: choiceTurn === 'pick_correct' ? 'correct' : choiceTurn === 'no_pick' ? 'continuation' : 'incorrect',
+        })
+    // Respuesta a una bienvenida genérica (lecciones viejas): es conexión, no
+    // la actividad 1. No se verifica ni cuenta intento; Sophia la plantea ahora.
+    : esTurnoDeConexion
+      ? Promise.resolve<ActivityCompletionResult>(SIN_VERIFICAR)
     // Solo skip verificación si la actividad YA está completada en DB.
     // criteriaMatched queda [] — antes era ["Actividad ya completada"] (string
     // genérico) que contaminaba evidenceData y rompía el reporte (no podía
@@ -332,19 +463,28 @@ export async function POST(request: Request) {
       // Continuaciones ("sí", "listo"): verificar acumulativamente.
       // CODE: verificación binaria (¿completó el paso?). REFLECTIVE: socrática.
       : (lessonSession.lesson.course?.methodology === 'CODE'
-          ? verifyStepCompletion(message, currentActivity, conversationHistory)
-          : verifyActivityCompletion(message, currentActivity, conversationHistory, wasExplained))
+          ? verifyStepCompletion(message, currentActivity, verifierHistory)
+          : verifyActivityCompletion(message, currentActivity, verifierHistory, wasExplained, allLessonBlocks(contentJson, lessonSession.isTest)))
   ])
+  marcar('gate')
 
   // Detectar si esta vuelta vamos a inyectar una MINI-EXPLICACIÓN (el alumno
   // admite que no conoce el tema + primer intento + no fue explicado antes).
   // Si sí, marcamos el flag para que el verificador en la próxima vuelta sepa
   // "ya hubo enseñanza". Quién decide que «no sabe» es el verificador, con el
   // contexto completo — no un regex sobre el texto.
+  // En una conversación sobre el panel el primer «no sé» pide la acción, no
+  // explica (prompt-builder, «PIDE UNA ACCIÓN»): no hay explicación que marcar.
+  const esConversacionDePanel =
+    !currentActivity.choice &&
+    !currentActivity.checks &&
+    (getActivityBlocks(currentActivity).length > 0 ||
+      blocksForActivity(contentJson, currentActivity.id, lessonSession.isTest).pinned.some((b) => b.type === 'simulator'))
   const willExplainThisTurn =
     !wasExplained &&
     attempts <= 1 &&
-    verification.student_intent === 'does_not_know'
+    verification.student_intent === 'does_not_know' &&
+    !esConversacionDePanel
 
   // Logging de clasificación
   logger.info('chat.stream.classification', {
@@ -460,7 +600,45 @@ export async function POST(request: Request) {
     completedActivitiesCount: completedActivityIds.length,
   })
 
-  const { staticBlocks, dynamicPrompt } = buildSystemPrompt({
+  // ── Material de apoyo: qué ya mostró Sophia y qué marcadores valen ──────
+  // Lo citado sale de los marcadores [[block:ID]] / [[marker:ID:n]] guardados en
+  // sus mensajes (el navegador hace la misma cuenta para mostrar el panel).
+  const materialCitado = citedFromTexts(
+    sessionWithMessages.messages.filter((m) => m.role === 'assistant').map((m) => m.content),
+  )
+  const idsDeLaLeccion = new Set(allLessonBlocks(contentJson, lessonSession.isTest).map((b) => b.id))
+  const bloquesActuales = getActivityBlocks(currentActivity)
+  // Un bloque se puede mostrar si existe en la lección. Un señalamiento, solo si
+  // es de una imagen de ESTA actividad: así una escena de la actividad siguiente
+  // nunca se señala al presentarla (spec §13: «Sophia revela antes de tiempo»).
+  const marcadorValido: MarkerCheck = (kind, id, n) => {
+    if (kind === 'block') return idsDeLaLeccion.has(id)
+    const b = bloquesActuales.find((x) => x.id === id)
+    return b?.type === 'image' && !!b.markers?.some((m) => m.n === n)
+  }
+
+  // ── Ecualizadores del panel: lo que el alumno movió (spec del panel §16.3) ──
+  // El navegador manda el estado; se valida contra la lección. Si no movió
+  // nada, se describe el caso con que abre. Las notas propias («Mis notas»)
+  // llegan a Sophia en este turno pero no se guardan (decisión 14).
+  const simuladoresVisibles = [
+    ...blocksForActivity(contentJson, currentActivity.id, lessonSession.isTest).pinned,
+    ...bloquesActuales,
+  ].filter((b): b is Extract<typeof b, { type: 'simulator' }> => b.type === 'simulator')
+  const estadosDelPanel: { id: string; state: SimState; texto: string }[] = simuladoresVisibles.map((b) => {
+    const state = sanitizeState(b, materialState?.[b.id]) ?? initialState(b)
+    return { id: b.id, state, texto: describeStateForPrompt(b, state) }
+  })
+  const estadoPanelClause = estadosDelPanel.length
+    ? `\n\nESTADO DEL PANEL (lo que el estudiante ve AHORA; reacciona a esto, no a lo que él crea que vio):\n${estadosDelPanel.map((e) => `- ${e.texto}`).join('\n')}`
+    : ''
+  const panelGuardable = Object.fromEntries(estadosDelPanel.filter((e) => !e.state.own).map((e) => [e.id, e.state]))
+  // Va dentro de la evidencia que escriba este turno (antes se leía y
+  // reescribía la fila al final: dos idas y vueltas más por mensaje).
+  const panelExtra = Object.keys(panelGuardable).length ? { panelState: panelGuardable } : {}
+  let evidenciaEscrita = false
+
+  const { staticBlocks, dynamicPrompt: dynamicPromptBase } = buildSystemPrompt({
     activityContext: currentActivityContext,
     recentMessages: sessionWithMessages.messages,
     tangentCount,
@@ -473,7 +651,25 @@ export async function POST(request: Request) {
     methodology: lessonSession.lesson.course?.methodology ?? 'REFLECTIVE',
     projectBrief: lessonSession.projectBrief ?? undefined,
     wasExplained,
+    sessionSeed,
+    choiceState,
+    choiceTurn,
+    pinnedBlocks: blocksForActivity(contentJson, currentActivity.id, lessonSession.isTest).pinned,
+    isTest: lessonSession.isTest,
+    cited: materialCitado,
   })
+
+  // Turno de conexión: el alumno respondió una bienvenida genérica. Sophia
+  // reconoce lo que dijo y plantea AHORA la actividad 1 (antes la daba por hecha).
+  const dynamicPrompt = esTurnoDeConexion
+    ? dynamicPromptBase + `
+
+ESTADO: CONEXIÓN — el estudiante acaba de responder tu pregunta de bienvenida; todavía NO ha visto la actividad.
+CÓMO RESPONDER (máximo 90 palabras):
+1. Empieza con "Bien." o "Gracias." y reconoce en 1 oración algo concreto de lo que dijo. PROHIBIDO "Correcto", "Exacto" o "Perfecto": no respondió ninguna pregunta evaluable.
+2. Plantea la actividad según tu instrucción, con todo el material que necesita para responder (caso, fragmento).
+3. ${choice ? 'Termina con el PASO CERRADO tal como figura abajo (opciones con letra, una por línea) y pide una letra. NO hagas aún la pregunta abierta.' : `Termina con la pregunta: "${currentActivity.teaching?.first_question ?? currentActivity.verification.question}"`}`
+    : dynamicPromptBase
 
   // ═══════════════════════════════════════════════════════════════
   // 6. CREATE STREAMING RESPONSE CON PROMPT CACHING
@@ -512,12 +708,13 @@ export async function POST(request: Request) {
         // maxTokens dinámico basado en complexity de la actividad
         const maxTokens = getMaxTokensForActivity(currentActivity.complexity)
 
-        const claudeStream = await anthropic.messages.stream({
+        // Comprobación de cierre: la respuesta la escribe el código (sin modelo).
+        const claudeStream = respuestaFija !== null ? streamFijo(respuestaFija) : await anthropic.messages.stream({
           model: TUTOR_MODEL,
           max_tokens: maxTokens,
           system: [
             ...staticBlocks,
-            { type: 'text', text: dynamicPrompt }
+            { type: 'text', text: dynamicPrompt + estadoPanelClause }
           ],
           messages: [
             ...compressedHistory,  // Historial comprimido (preguntas visibles)
@@ -545,10 +742,16 @@ export async function POST(request: Request) {
           controller.enqueue(encoder.encode(`data: ${data}\n\n`))
         }
 
+        // Marcadores del panel: los inválidos se quitan antes de enviar y guardar;
+        // uno partido entre trozos se retiene hasta saber si vale.
+        const filtroMarcadores = createMarkerFilter(marcadorValido)
+
         for await (const event of claudeStream) {
           if (event.type === 'content_block_delta') {
             if (event.delta.type === 'text_delta') {
-              const text = event.delta.text
+              if (marcas.primer_token === undefined) marcar('primer_token')
+              const text = filtroMarcadores.push(event.delta.text)
+              if (!text) continue
               fullResponse += text
               if (suppressFurther) continue
 
@@ -573,6 +776,25 @@ export async function POST(request: Request) {
           } else if (event.type === 'message_delta') {
             outputTokens = event.usage.output_tokens
           }
+        }
+
+        marcar('stream')
+
+        // Lo que retuvo el filtro de marcadores al final del texto.
+        const restoMarcadores = filtroMarcadores.flush()
+        if (restoMarcadores) {
+          fullResponse += restoMarcadores
+          if (!suppressFurther) unsent += restoMarcadores
+        }
+
+        // Eligió mal y le quedan intentos: el modelo no puede mencionar opciones
+        // (sería pista), así que el código vuelve a listarlas TODAS, con las
+        // mismas letras. Sin esto el alumno se queda sin alternativas a la
+        // vista y sin botones para elegir otra.
+        if (choiceTurn === 'pick_wrong_retry' && choice && choiceState) {
+          const opciones = `\n\n${renderChoice(choice, choiceState.order).split('\n').filter((l) => /^[A-E]\) /.test(l)).join('\n')}`
+          fullResponse += opciones
+          if (!suppressFurther) unsent += opciones
         }
 
         // Drenar el buffer si no apareció el marcador (caso normal sin brief).
@@ -600,6 +822,90 @@ export async function POST(request: Request) {
           cleanedAssistantContent = fallbackText
         }
 
+        // ── Puntero y conversación juntos ────────────────────────────────
+        // El verificador puede aprobar la actividad, pero si Sophia NO pasó a la
+        // siguiente (siguió pidiendo «muéstrame el cálculo») y el puntero avanza
+        // igual, la próxima respuesta del alumno se evalúa contra una actividad
+        // que nunca se planteó. Primera vez: el puntero se queda y la actividad
+        // se vuelve a verificar con la respuesta que Sophia está pidiendo.
+        // Segunda vez: se avanza y se agrega la pregunta siguiente al mensaje.
+        // Cierre con comprobación: la primera pregunta la agrega el código, igual
+        // en orden y letras a como la va a corregir (newChecksState es determinista).
+        if (verification.ready_to_advance && !activityAlreadyCompleted && verification.unverified !== true && nextActivityData?.checks?.length) {
+          const intro = `\n\n${checksIntro(nextActivityData.checks, newChecksState(sessionSeed, nextActivityData.id, nextActivityData.checks))}`
+          flushToClient(intro)
+          cleanedAssistantContent += intro
+        }
+        if (verification.ready_to_advance && !activityAlreadyCompleted && verification.unverified !== true) {
+          const siguioElGuion = currentActivityContext.isLastActivity
+            ? !cleanedAssistantContent.includes('?')
+            : nextActivityData
+              ? nextActivityData.checks?.length
+                ? true
+                : planteaLaPregunta(cleanedAssistantContent, nextActivityData.choice?.prompt ?? nextActivityData.teaching?.first_question ?? nextActivityData.verification.question)
+              : true
+          if (!siguioElGuion) {
+            const retenciones = (existingEvidence as { heldBack?: number }).heldBack ?? 0
+            // Si Sophia no dejó ninguna pregunta abierta (cerró, agradeció), no hay
+            // conversación que desfasar: se avanza ya y se agrega la pregunta
+            // siguiente. Retener solo tiene sentido cuando pidió OTRA cosa.
+            if (retenciones < 1 && terminaEnPregunta(cleanedAssistantContent)) {
+              verification.ready_to_advance = false
+              verification.completed = false
+              retenido = true
+              logger.info('chat.stream.advance_held_back', {
+                sessionId,
+                activityId: currentActivity.id,
+                isLast: currentActivityContext.isLastActivity,
+              })
+            } else if (nextActivityData) {
+              const pregunta = `\n\n${nextActivityData.choice?.prompt ?? nextActivityData.teaching?.first_question ?? nextActivityData.verification.question}`
+              flushToClient(pregunta)
+              cleanedAssistantContent += pregunta
+              logger.info('chat.stream.next_question_appended', { sessionId, activityId: currentActivity.id })
+            }
+          }
+        }
+
+        // ── La actividad sigue abierta: el mensaje tiene que terminar preguntando ──
+        // Prueba del 12 oct 2026: con el criterio aún sin cubrir, Sophia dijo
+        // «Exacto… Gracias por participar en esta actividad» y no preguntó nada.
+        // El alumno creyó que la lección había terminado. Si la actividad no
+        // avanza y el mensaje no deja una pregunta, se agrega la pendiente: la
+        // sub-pregunta del desglose o, si no hay, la de la actividad. No aplica a
+        // la comprobación (la escribe el código), al paso cerrado (sus opciones
+        // las maneja su propio flujo) ni al avance forzado por intentos.
+        const avanzaPorIntentos =
+          !verification.ready_to_advance &&
+          verification.response_type !== 'continuation' &&
+          !hallucinationCheck.isHallucination &&
+          attempts + 1 >= (currentActivity.verification.max_attempts || 3)
+        if (
+          !verification.ready_to_advance &&
+          !activityAlreadyCompleted &&
+          !retenido &&
+          respuestaFija === null &&
+          !choiceTurn &&
+          !avanzaPorIntentos &&
+          !terminaEnPregunta(cleanedAssistantContent)
+        ) {
+          // Sin intentos todavía, una actividad que abre con otra pregunta (la
+          // predicción del ecualizador) sigue en esa; el porqué viene después.
+          const pendiente = willScaffold && verification.next_subquestion
+            ? verification.next_subquestion
+            : attempts === 0 && scaffoldingTurns === 0 && currentActivity.teaching?.first_question
+              ? currentActivity.teaching.first_question
+              : currentActivity.verification.question
+          const agregado = `\n\n${pendiente}`
+          flushToClient(agregado)
+          cleanedAssistantContent += agregado
+          logger.warn('chat.stream.open_activity_question_appended', {
+            sessionId,
+            activityId: currentActivity.id,
+            fuente: willScaffold ? 'desglose' : 'actividad',
+          })
+        }
+
         // 4. Save messages to database (con activityId y timestamps explícitos para orden correcto)
         const userTimestamp = new Date()
         const assistantTimestamp = new Date(userTimestamp.getTime() + 1) // +1ms para garantizar orden
@@ -609,9 +915,9 @@ export async function POST(request: Request) {
         // anterior avanzó de actividad mientras Sophia seguía cerrando la previa
         // (el follow-up descrito en 77a0ea1), el puntero ya apunta a la siguiente
         // y el mensaje quedaría archivado bajo la actividad equivocada.
-        // `messages` viene ordenado desc, así que el primer assistant es el último.
+        // `messages` ya está en orden ascendente (ver `ultimoDe`): se busca desde el final.
         const answeredActivityId =
-          messages.find((m) => m.role === 'assistant')?.activityId ?? currentActivity.id
+          ultimoDe('assistant')?.activityId ?? currentActivity.id
 
         const [, assistantMessage] = await prisma.$transaction([
           prisma.message.create({
@@ -748,7 +1054,49 @@ const allActivities = await prisma.activityProgress.findMany({
         // sobre la respuesta guardada. Antes se guardaba un nivel inventado.
         const sinVerificar = verification.unverified === true
 
-        if (verification.ready_to_advance) {
+        if (choiceTurn && choiceState) {
+          // Paso cerrado: guardar su estado; los intentos del paso 2 no se tocan.
+          // (Si eligió bien y justificó en el mismo mensaje, choiceTurn ya es
+          // undefined y el estado se guarda con el intento, más abajo.)
+          evidenciaEscrita = true
+          await prisma.activityProgress.upsert({
+            where: {
+              lessonSessionId_activityId: {
+                lessonSessionId: lessonSession.id,
+                activityId: currentActivity.id,
+              },
+            },
+            update: { evidenceData: JSON.parse(JSON.stringify({ ...existingEvidence, choice: choiceState, ...panelExtra })) },
+            create: {
+              lessonSessionId: lessonSession.id,
+              activityId: currentActivity.id,
+              status: 'IN_PROGRESS',
+              attempts: 0,
+              startedAt: new Date(),
+              evidenceData: JSON.parse(JSON.stringify({ attempts: [], choice: choiceState, ...panelExtra })),
+            },
+          })
+        } else if (checkTurn && checksState) {
+          // Comprobación de cierre: guardar su estado; la reflexión sigue después.
+          evidenciaEscrita = true
+          await prisma.activityProgress.upsert({
+            where: {
+              lessonSessionId_activityId: {
+                lessonSessionId: lessonSession.id,
+                activityId: currentActivity.id,
+              },
+            },
+            update: { evidenceData: JSON.parse(JSON.stringify({ ...existingEvidence, checks: checksState, ...panelExtra })) },
+            create: {
+              lessonSessionId: lessonSession.id,
+              activityId: currentActivity.id,
+              status: 'IN_PROGRESS',
+              attempts: 0,
+              startedAt: new Date(),
+              evidenceData: JSON.parse(JSON.stringify({ attempts: [], checks: checksState, ...panelExtra })),
+            },
+          })
+        } else if (verification.ready_to_advance) {
           // Marcar actividad como completada
           // Construir evidenceData con historial de intentos (como Instructoria)
           const newAttempt = {
@@ -768,12 +1116,18 @@ const allActivities = await prisma.activityProgress.findMany({
           }
           const updatedEvidence = JSON.parse(JSON.stringify({
             attempts: [...(existingEvidence.attempts || []), newAttempt],
+            // Conservar el paso cerrado: sin esto el turno abierto lo borraba y
+            // el siguiente mensaje volvía a leerse como elección.
+            ...(choiceState ? { choice: choiceState } : {}),
+            ...(checksState ? { checks: checksState } : {}),
             // Preservar el conteo de desglose (informativo: cuántas sub-preguntas se usaron antes de completar)
             scaffoldingTurns,
             // Mantener el flag de explicación si ya se dio o se va a dar ahora
             wasExplained: wasExplained || willExplainThisTurn,
+            ...panelExtra,
           }))
 
+          evidenciaEscrita = true
           await prisma.activityProgress.upsert({
             where: {
               lessonSessionId_activityId: {
@@ -823,12 +1177,10 @@ const allActivities = await prisma.activityProgress.findMany({
           // 🔥 NUEVO: Notificar al frontend inmediatamente vía SSE
           const nextActivityContext = getNextActivity(contentJson, currentActivity.id)
           const totalActivities = getTotalActivities(contentJson)
-          const completedCount = await prisma.activityProgress.count({
-            where: {
-              lessonSessionId: lessonSession.id,
-              status: 'COMPLETED',
-            },
-          })
+          // Completadas tras el upsert de arriba: las que ya venían con la
+          // sesión (sin contar esta, por si ya figuraba) más la de este turno.
+          const completedCount =
+            lessonSession.activities.filter((a) => a.status === 'COMPLETED' && a.activityId !== currentActivity.id).length + 1
 
           const activityCompletedData = JSON.stringify({
             type: 'activity_completed',
@@ -856,22 +1208,24 @@ const allActivities = await prisma.activityProgress.findMany({
           // Auto-progresión a siguiente actividad (ahora usa nextActivityContext ya calculado)
 
           if (nextActivityContext) {
-            // Hay siguiente actividad → actualizar sesión
-            await prisma.lessonSession.update({
-              where: { id: lessonSession.id },
-              data: {
-                activityId: nextActivityContext.activityId,
-                lastActivityAt: new Date(),
-              },
-            })
-
+            // Hay siguiente actividad → actualizar sesión.
             // La respuesta de Sophia en este mismo turno es la de transición:
             // introduce la actividad NUEVA, así que se archiva bajo ella. Con eso
             // el próximo mensaje del alumno hereda la actividad correcta.
-            await prisma.message.update({
-              where: { id: assistantMessage.id },
-              data: { activityId: nextActivityContext.activityId },
-            })
+            // Las dos escrituras van juntas: una ida y vuelta en vez de dos.
+            await prisma.$transaction([
+              prisma.lessonSession.update({
+                where: { id: lessonSession.id },
+                data: {
+                  activityId: nextActivityContext.activityId,
+                  lastActivityAt: new Date(),
+                },
+              }),
+              prisma.message.update({
+                where: { id: assistantMessage.id },
+                data: { activityId: nextActivityContext.activityId },
+              }),
+            ])
 
             logger.info('chat.stream.activity_progressed', {
               sessionId,
@@ -923,11 +1277,18 @@ const allActivities = await prisma.activityProgress.findMany({
             scaffoldingTurns: willScaffold ? scaffoldingTurns + 1 : scaffoldingTurns,
             // Mantener/setear el flag de explicación didáctica
             wasExplained: wasExplained || willExplainThisTurn,
+            // Veces que se retuvo el avance por desfase con la conversación
+            heldBack: ((existingEvidence as { heldBack?: number }).heldBack ?? 0) + (retenido ? 1 : 0),
+            ...(choiceState ? { choice: choiceState } : {}),
+            ...(checksState ? { checks: checksState } : {}),
+            ...panelExtra,
           }))
 
           // Scaffolding y off_topic NO cuentan attempt — solo evidencia/contexto.
-          const attemptsIncrement = (willScaffold || isOffTopic) ? 0 : 1
+          // Retenido: el alumno cumplió, solo se esperó a que Sophia cerrara el tema.
+          const attemptsIncrement = (willScaffold || isOffTopic || retenido) ? 0 : 1
 
+          evidenciaEscrita = true
           await prisma.activityProgress.upsert({
             where: {
               lessonSessionId_activityId: {
@@ -960,7 +1321,9 @@ const allActivities = await prisma.activityProgress.findMany({
           // Forzar avance al llegar a 5 intentos
           // La IA ya dio la respuesta en el intento 5 (prompt-builder maneja esto)
           // Marcamos como completado con nivel "En inicio"
-          const forcedAdvanceLimit = 5
+          // Mismo tope que usa el prompt (prompt-builder: max_attempts || 3). Antes
+          // el código esperaba 5 mientras Sophia ya «avanzaba» en el 3: desfase.
+          const forcedAdvanceLimit = currentActivity.verification.max_attempts || 3
           const newAttemptCount = attempts + 1
 
           if (newAttemptCount >= forcedAdvanceLimit) {
@@ -1003,16 +1366,18 @@ const allActivities = await prisma.activityProgress.findMany({
             const nextAct = contentJson.activities[currentIdx + 1]
 
             if (nextAct) {
-              await prisma.lessonSession.update({
-                where: { id: lessonSession.id },
-                data: { activityId: nextAct.id },
-              })
               // Igual que en el avance normal: la respuesta de este turno ya
-              // pertenece a la actividad nueva.
-              await prisma.message.update({
-                where: { id: assistantMessage.id },
-                data: { activityId: nextAct.id },
-              })
+              // pertenece a la actividad nueva. Las dos escrituras van juntas.
+              await prisma.$transaction([
+                prisma.lessonSession.update({
+                  where: { id: lessonSession.id },
+                  data: { activityId: nextAct.id },
+                }),
+                prisma.message.update({
+                  where: { id: assistantMessage.id },
+                  data: { activityId: nextAct.id },
+                }),
+              ])
             } else {
               // No hay siguiente: el avance forzado ocurrió EN la última
               // actividad, así que la lección terminó acá. Antes este camino no
@@ -1066,6 +1431,24 @@ const allActivities = await prisma.activityProgress.findMany({
           })
         }
 
+        // Estado de los ecualizadores en este turno, para la transcripción y el
+        // Monitor (spec del panel §16.3). Si el turno ya escribió evidencia, fue
+        // con el estado incluido (panelExtra); acá queda solo el turno que no
+        // escribió nada (una continuación) sobre una fila que ya existe. Nunca
+        // incluye «Mis notas».
+        if (Object.keys(panelGuardable).length && !evidenciaEscrita && activityProgress) {
+          try {
+            await prisma.activityProgress.update({
+              where: { lessonSessionId_activityId: { lessonSessionId: lessonSession.id, activityId: currentActivity.id } },
+              data: { evidenceData: JSON.parse(JSON.stringify({ ...existingEvidence, panelState: panelGuardable })) },
+            })
+          } catch (e) {
+            logger.warn('chat.stream.panel_state_not_saved', { sessionId, error: String(e) })
+          }
+        }
+        marcar('guardado')
+        logger.info('chat.stream.timing', { sessionId, ...marcas })
+
         // 6. Send done event
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
@@ -1094,4 +1477,19 @@ const allActivities = await prisma.activityProgress.findMany({
       Connection: 'keep-alive',
     },
   })
+}
+
+/**
+ * ¿El mensaje de Sophia deja algo que responder? Mira el último párrafo, sin
+ * marcadores del panel: una pregunta o alternativas «A) …» al final.
+ */
+function terminaEnPregunta(texto: string): boolean {
+  const lineas = stripMarkers(texto).split('\n').map((l) => l.trim()).filter(Boolean)
+  const ultima = lineas.at(-1) ?? ''
+  return ultima.includes('?') || /^[A-E]\)\s/.test(ultima)
+}
+
+/** Una respuesta escrita por el código, con la forma de los eventos de Claude. */
+async function* streamFijo(texto: string): AsyncGenerator<Anthropic.Messages.RawMessageStreamEvent> {
+  yield { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: texto } }
 }

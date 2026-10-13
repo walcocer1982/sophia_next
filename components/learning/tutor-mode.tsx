@@ -13,6 +13,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { OptimisticMessage } from '@/types/chat'
 import { useRef } from 'react'
+import { splitChoiceOptions, stripMarkers } from '@/lib/material-markers'
+import { ChoiceButtons, MaterialChips } from './message-material'
 
 type AvatarState = 'idle' | 'listening' | 'speaking' | 'processing'
 
@@ -69,10 +71,42 @@ export function TutorMode({
     return last?.role === 'assistant' && last.status === 'error'
   }, [messages])
 
+  // Texto de la burbuja sin marcadores del panel; si termina en alternativas
+  // «A) … B) …» y ya terminó de escribirse, van como botones.
+  const burbuja = useMemo(() => {
+    if (!lastAssistantMessage) return null
+    const limpio = stripMarkers(lastAssistantMessage.content)
+    if (lastAssistantMessage.status === 'streaming') return { body: limpio, options: [], tail: '' }
+    const partes = splitChoiceOptions(limpio)
+    return partes.options.length ? partes : { body: limpio, options: [], tail: '' }
+  }, [lastAssistantMessage])
+
+  // Lo que el alumno acaba de enviar y Sophia todavía no contestó con texto.
+  // Va bajo la tarjeta, con «pensando», hasta que llega la primera palabra;
+  // en cuanto Sophia empieza a escribir, su tarjeta nueva lo reemplaza. Sin
+  // esto, durante la espera (unos 5 s) la pantalla no cambiaba y parecía que
+  // el mensaje se había perdido.
+  const mensajePendiente = useMemo(() => {
+    const desde = lastAssistantMessage ? messages.indexOf(lastAssistantMessage) : -1
+    for (let i = messages.length - 1; i > desde; i--) {
+      if (messages[i].role === 'user' && messages[i].content.trim()) return messages[i]
+    }
+    return null
+  }, [messages, lastAssistantMessage])
+
+  // El avatar también cuenta el turno de texto: ámbar mientras Sophia piensa,
+  // azul mientras escribe. La voz fija su propio estado y tiene prioridad.
+  const estadoAvatar: AvatarState =
+    avatarState !== 'idle'
+      ? avatarState
+      : isLoading
+        ? lastAssistantMessage?.status === 'streaming' ? 'speaking' : 'processing'
+        : 'idle'
+
   return (
     <div className="flex h-full flex-col bg-gradient-to-b from-slate-50 to-slate-100 relative">
       {/* Header */}
-      <div className="shrink-0 border-b bg-white px-4 py-3 flex items-center justify-between gap-3">
+      <div className="shrink-0 border-b bg-white pl-4 pr-44 py-3 flex items-center justify-between gap-3">
         <h1 className="text-base font-semibold text-gray-800 truncate">{lessonTitle}</h1>
         {headerExtra}
       </div>
@@ -83,18 +117,18 @@ export function TutorMode({
             message bubble is never covered by the controls panel */}
         {showTextInput ? (
           <div className="shrink-0">
-            <SophiaAvatar state={avatarState} size={120} />
+            <SophiaAvatar state={estadoAvatar} size={120} />
           </div>
         ) : (
           <>
             <div className="hidden lg:block">
-              <SophiaAvatar state={avatarState} size={360} />
+              <SophiaAvatar state={estadoAvatar} size={360} />
             </div>
             <div className="hidden md:block lg:hidden">
-              <SophiaAvatar state={avatarState} size={300} />
+              <SophiaAvatar state={estadoAvatar} size={300} />
             </div>
             <div className="md:hidden">
-              <SophiaAvatar state={avatarState} size={240} />
+              <SophiaAvatar state={estadoAvatar} size={240} />
             </div>
           </>
         )}
@@ -110,23 +144,7 @@ export function TutorMode({
               className="max-w-2xl w-full bg-white rounded-2xl shadow-md p-4 sm:p-5"
             >
               <div className="flex items-center gap-3">
-                <div className="flex gap-1">
-                  <motion.span
-                    animate={{ y: [0, -4, 0] }}
-                    transition={{ duration: 0.8, repeat: Infinity, delay: 0 }}
-                    className="block w-2 h-2 rounded-full bg-blue-400"
-                  />
-                  <motion.span
-                    animate={{ y: [0, -4, 0] }}
-                    transition={{ duration: 0.8, repeat: Infinity, delay: 0.15 }}
-                    className="block w-2 h-2 rounded-full bg-blue-400"
-                  />
-                  <motion.span
-                    animate={{ y: [0, -4, 0] }}
-                    transition={{ duration: 0.8, repeat: Infinity, delay: 0.3 }}
-                    className="block w-2 h-2 rounded-full bg-blue-400"
-                  />
-                </div>
+                <PuntosPensando />
                 <span className="text-sm text-gray-500">Sophia se está preparando...</span>
               </div>
             </motion.div>
@@ -153,8 +171,19 @@ export function TutorMode({
                     code: ({ children }) => <code className="px-1 py-0.5 rounded bg-gray-100 text-gray-800 font-mono text-sm">{children}</code>,
                   }}
                 >
-                  {lastAssistantMessage.content}
+                  {(burbuja?.body ?? '').replace(/([^\n])\n(?!\n)/g, '$1  \n')}
                 </ReactMarkdown>
+                {burbuja && burbuja.options.length > 0 && (
+                  <>
+                    <ChoiceButtons
+                      options={burbuja.options}
+                      onChoose={(texto) => onSendText(texto)}
+                      disabled={isLoading || isGeneratingWelcome}
+                    />
+                    {burbuja.tail && <p className="mt-2 leading-relaxed">{burbuja.tail}</p>}
+                  </>
+                )}
+                {lastAssistantMessage.status !== 'streaming' && <MaterialChips content={lastAssistantMessage.content} />}
                 {lastAssistantMessage.status === 'streaming' && (
                   <motion.span
                     animate={{ opacity: [1, 0.3, 1] }}
@@ -174,6 +203,26 @@ export function TutorMode({
             </motion.div>
           ) : null}
         </AnimatePresence>
+
+        {/* Lo que el alumno acaba de decir, mientras Sophia no responde */}
+        {mensajePendiente && (
+          <motion.div
+            key={mensajePendiente.id}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-2xl w-full flex flex-col items-end gap-2"
+          >
+            <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-[#09222d] px-4 py-2.5 text-base text-white shadow-sm">
+              {mensajePendiente.content}
+            </div>
+            {isLoading && (
+              <div className="flex items-center gap-2 text-sm text-gray-500" aria-live="polite">
+                <PuntosPensando />
+                Sophia está pensando...
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* Error notice — aparece DEBAJO de la pregunta vigente, sin taparla */}
         {lastMessageHasError && (
@@ -267,5 +316,20 @@ export function TutorMode({
         messages={messages}
       />
     </div>
+  )
+}
+
+function PuntosPensando() {
+  return (
+    <span className="flex gap-1" aria-hidden>
+      {[0, 0.15, 0.3].map((delay) => (
+        <motion.span
+          key={delay}
+          animate={{ y: [0, -4, 0] }}
+          transition={{ duration: 0.8, repeat: Infinity, delay }}
+          className="block w-2 h-2 rounded-full bg-blue-400"
+        />
+      ))}
+    </span>
   )
 }

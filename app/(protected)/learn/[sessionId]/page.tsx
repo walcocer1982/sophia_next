@@ -6,27 +6,8 @@ import { LearningLayout } from '@/components/learning/learning-layout'
 import { redirect } from 'next/navigation'
 import { notFound } from 'next/navigation'
 import type { LessonContent } from '@/types/lesson'
+import { allLessonBlocks } from '@/lib/support-blocks'
 
-/**
- * Extrae el nombre del instructor del texto de personalidad
- * Ej: "Eres el Ingeniero Carlos, un experto..." → "Ingeniero Carlos"
- */
-function extractInstructorName(instructorText: string): string {
-  const patterns = [
-    /Eres (?:el |la )?([^,.\n]+)/i,  // "Eres el Ingeniero Carlos"
-    /Soy (?:el |la )?([^,.\n]+)/i,   // "Soy el Ingeniero Carlos"
-    /^([A-Z][a-záéíóú]+ [A-Z][a-záéíóú]+)/,  // "Ingeniero Carlos" al inicio
-  ]
-
-  for (const pattern of patterns) {
-    const match = instructorText.match(pattern)
-    if (match && match[1]) {
-      return match[1].trim()
-    }
-  }
-
-  return 'Instructor AI'
-}
 
 export default async function ChatPage({
   params,
@@ -89,22 +70,11 @@ export default async function ChatPage({
     createdAt: msg.timestamp,
   }))
 
-  // Extract per-activity images from contentJson (supports images[] and legacy image)
-  const allImages = (contentJson?.activities || []).flatMap((a) => {
-    const imgs = a.teaching?.images || (a.teaching?.image ? [a.teaching.image] : [])
-    return imgs.filter((img) => img.url).map((img) => ({
-      activityId: a.id,
-      url: img.url,
-      description: img.description,
-      showWhen: img.showWhen || ('on_reference' as const),
-    }))
-  })
+  // Material de apoyo de toda la lección (bloques + imágenes viejas convertidas).
+  // Las imágenes sin validar solo se ven en sesiones de prueba.
+  const allBlocks = allLessonBlocks(contentJson, lessonSession.isTest)
+  const activityOrder = (contentJson?.activities || []).map((a) => a.id)
   const keyPoints = lessonSession.lesson.keyPoints || []
-
-  // Extraer nombre del instructor del texto completo
-  const instructorName = extractInstructorName(
-    lessonSession.lesson.course?.instructor || ''
-  )
 
   // Build test mode props if this is a test session
   const testMode = lessonSession.isTest && lessonSession.lesson.course
@@ -121,12 +91,13 @@ export default async function ChatPage({
   return (
     <LearningLayout
       sessionId={lessonSession.id}
-      instructorName={instructorName}
       lessonTitle={lessonSession.lesson.title}
       objective={lessonSession.lesson.objective || ''}
       keyPoints={keyPoints}
-      allImages={allImages}
-      videoUrl={lessonSession.lesson.videoUrl}
+      allBlocks={allBlocks}
+      activityOrder={activityOrder}
+      initialActivityId={lessonSession.activityId ?? activityOrder[0] ?? null}
+      isTest={lessonSession.isTest}
       initialProgress={{
         current: completedCount + 1,
         total: totalActivities,

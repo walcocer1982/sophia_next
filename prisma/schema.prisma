@@ -196,6 +196,7 @@ model Course {
   careers  Career[]  @relation("CourseCareers")
   lessons  Lesson[]
   sections Section[]
+  images   CourseImage[]
   // Un curso puede ofrecerse en VARIAS sedes (m:n).
   sedes    Sede[]    @relation("CourseSedes")
 
@@ -204,6 +205,34 @@ model Course {
   @@index([careerId])
   @@index([scope])
   @@index([deletedAt])
+}
+
+// Banco de imágenes del curso (panel de apoyo, etapa 3). Una foto se sube y se
+// describe una vez y la usan varias lecciones: el bloque `image` guarda una
+// copia de url y descripción más `bankId`, así el alumno no depende de esta
+// tabla. Una imagen sin validar no se muestra al alumno.
+// Spec: investigacion/panel-de-apoyo-especificacion.md §9.3
+model CourseImage {
+  id          String    @id @default(cuid())
+  courseId    String
+  url         String
+  description String    @db.Text
+  kind        String    @default("equipment") // scene | term | equipment | diagram
+  source      String    @default("")
+  license     String    @default("")
+  validated   Boolean   @default(false)
+  uploadedBy  String?   // userId de quien la subió
+  validatedBy String?   // userId de quien la validó
+  validatedAt DateTime?
+  tags        String[]  @default([])
+  width       Int?
+  height      Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
 }
 
 model Lesson {

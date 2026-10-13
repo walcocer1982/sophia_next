@@ -1,6 +1,6 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
+import { cursoEditable } from '@/lib/planner/course-access'
 import { notFound, redirect } from 'next/navigation'
 import { VerificationManager } from '@/components/planner/verification-manager'
 import type { Activity } from '@/types/lesson'
@@ -40,7 +40,8 @@ export default async function VerificationPage({
     },
   })) as LessonWithCourse | null
 
-  if (!lesson || !isOwnerOrSuperadmin(session, lesson.course.userId) || lesson.course.id !== courseId) {
+  // Mismo criterio que la ruta de guardado (antes solo dueño o SUPERADMIN).
+  if (!lesson || lesson.course.id !== courseId || !(await cursoEditable(session, courseId))) {
     notFound()
   }
 
@@ -53,8 +54,16 @@ export default async function VerificationPage({
     notFound()
   }
 
+  // Bloques del panel de los que un criterio puede exigir frases (lib/quote-check.ts).
+  const citables = activities.flatMap((a) =>
+    (a.teaching?.blocks ?? [])
+      .filter((b) => b.type === 'text' || b.type === 'table' || b.type === 'case' || b.type === 'formula')
+      .map((b) => ({ id: b.id, title: b.title })),
+  )
+
   return (
     <VerificationManager
+      citables={citables}
       lessonId={lesson.id}
       lessonTitle={lesson.title}
       courseId={courseId}

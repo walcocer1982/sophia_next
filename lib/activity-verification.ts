@@ -1,8 +1,12 @@
 import { anthropic, extractJsonFromMarkdown, callAndParseJson } from '@/lib/anthropic'
 import { logger } from '@/lib/logger'
-import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric, SuccessCriteria } from '@/types/lesson'
+import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric, SuccessCriteria, SupportBlock } from '@/types/lesson'
+import { exigirCitasDelBloque, textoParaVerificador } from '@/lib/quote-check'
 import { normalizeLevel } from '@/lib/levels'
 import { DEFAULT_MIN_COMPLETENESS } from '@/lib/rubric'
+
+/** Criterios que piden la razón: obligatorios en explicación y práctica. */
+export const RAZON_RE = /raz[oó]n|por\s*qu[eé]|justific|explica|argument|fundament|sustent/i
 
 /**
  * Qué hizo el alumno en el turno. Lo decide el verificador con el contexto
@@ -371,11 +375,72 @@ Devuelve SOLO este JSON (sin texto adicional):
  * Verificar si el estudiante completó la actividad usando IA
  * Usa la nueva estructura success_criteria con min_completeness y understanding_level
  */
+/** Minúsculas, sin tildes ni puntuación, espacios simples. */
+function normalizarTexto(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/** ¿La cita está en lo que escribió el alumno? Literal, o 3/4 de sus palabras. */
+function citaEnTexto(cita: string, texto: string): boolean {
+  const c = normalizarTexto(cita)
+  if (!c) return false
+  if (texto.includes(c)) return true
+  const palabras = c.split(' ').filter((w) => w.length >= 3 || /\d/.test(w))
+  if (palabras.length === 0) return false
+  const presentes = palabras.filter((w) => texto.includes(w)).length
+  // 60 %: el modelo a veces parafrasea un poco la cita («3 menos 2 = 1» por
+  // «3 y ya usó 2, le queda 1»); lo que se quiere descartar es la cita inventada.
+  return presentes / palabras.length >= 0.6
+}
+
+/**
+ * Pasa de criteriaMatched a criteriaMissing los criterios sin cita del alumno.
+ * Muta `result` y devuelve cuántos descartó. Si el modelo no mandó `evidence`
+ * en absoluto, no descarta nada (se registra) para no trabar la lección.
+ */
+export function descartarSinEvidencia(
+  result: { criteriaMatched?: unknown; criteriaMissing?: unknown; evidence?: unknown },
+  mustInclude: string[],
+  textosDelAlumno: string[],
+): number {
+  const evidence = result.evidence
+  if (!evidence || typeof evidence !== 'object') {
+    console.warn('⚠️  verifier.no_evidence: el verificador no devolvió citas')
+    return 0
+  }
+  const citas = evidence as Record<string, unknown>
+  const texto = normalizarTexto(textosDelAlumno.join(' '))
+  const matched = Array.isArray(result.criteriaMatched) ? result.criteriaMatched : []
+  const missing = Array.isArray(result.criteriaMissing) ? [...result.criteriaMissing] : []
+  const conservados: unknown[] = []
+  for (const v of matched) {
+    const indice = typeof v === 'number' ? v : mustInclude.indexOf(String(v)) + 1
+    const cita = citas[String(indice)]
+    // Un criterio dicho en partes, en varios mensajes, llega como lista de citas
+    // (o separadas por «|»): cada parte tiene que estar en lo que escribió.
+    const partes = (Array.isArray(cita) ? cita : typeof cita === 'string' ? cita.split('|') : [])
+      .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+    if (partes.length > 0 && partes.every((p) => citaEnTexto(p, texto))) {
+      conservados.push(v)
+    } else {
+      missing.push(v)
+      console.warn('⚠️  verifier.evidence_discarded', { criterio: mustInclude[indice - 1], cita: cita ?? null, alumno: texto.slice(0, 160) })
+    }
+  }
+  const descartados = matched.length - conservados.length
+  result.criteriaMatched = conservados
+  result.criteriaMissing = missing
+  return descartados
+}
+
 export async function verifyActivityCompletion(
   userMessage: string,
   activity: Activity,
   conversationHistory?: { role: 'user' | 'assistant'; content: string }[],
   wasExplained: boolean = false,
+  /** Material de apoyo de la lección (bloques visibles). Para `forVerifier` y `quote_from`. */
+  material: SupportBlock[] = [],
 ): Promise<ActivityCompletionResult> {
   // Backwards compatibility: support both old and new structure
   // Old: verification.criteria[], New: verification.success_criteria.must_include[]
@@ -390,6 +455,16 @@ export async function verifyActivityCompletion(
   const criticos = (successCriteria.critical ?? [])
     .map((i) => successCriteria.must_include[i - 1])
     .filter((c): c is string => typeof c === 'string' && c.length > 0)
+  // La razón es obligatoria en explicación y práctica (decisión del 5 oct 2026):
+  // «la b» sin el porqué cubría la mitad de los criterios y aprobaba. Un
+  // criterio que pide la razón cuenta como eliminatorio aunque la lección no
+  // lo marque. Reflexión y cierre quedan fuera: ahí la pregunta es la razón.
+  const tipoExigente = activity.type === 'explanation' || activity.type === 'practice'
+  if (tipoExigente) {
+    for (const c of successCriteria.must_include) {
+      if (RAZON_RE.test(c) && !criticos.includes(c)) criticos.push(c)
+    }
+  }
   const hints = successCriteria.hints || {}
 
   // Old: activity.agent_instruction, New: activity.teaching.agent_instruction
@@ -400,8 +475,11 @@ export async function verifyActivityCompletion(
 
   // Determinar si es pregunta abierta
   const isOpenEnded = activity.verification.open_ended === true
-  // Umbral efectivo: open-ended es más permisivo (40%) que estándar
-  const effectiveThreshold = isOpenEnded ? 40 : minCompleteness
+  // Umbral efectivo: el 40 % de las preguntas abiertas solo aplica a reflexión
+  // y cierre. En explicación y práctica una pregunta abierta usa el umbral de
+  // la actividad, como las cerradas.
+  const bajaExigencia = isOpenEnded && !tipoExigente
+  const effectiveThreshold = bajaExigencia ? 40 : minCompleteness
 
   // Construir respuesta acumulada del estudiante para evaluar criterios repartidos en varios mensajes
   const accumulatedResponse = buildAccumulatedStudentResponse(userMessage, conversationHistory)
@@ -420,7 +498,7 @@ REGLA POST-EXPLICACIÓN:
     : ''
 
   const criticalClause = criticos.length > 0
-    ? `\n\nCRITERIOS ELIMINATORIOS (sin ellos la respuesta NO está completa, aunque cubra el resto): ${criticos.map((c) => `«${c}»`).join(', ')}. Con estos sé estricto: márcalos como cubiertos solo si el estudiante los formula de manera inequívoca.`
+    ? `\n\nCRITERIOS ELIMINATORIOS (sin ellos la respuesta NO está completa, aunque cubra el resto): ${criticos.map((c) => `«${c}»`).join(', ')}. Márcalos como cubiertos solo si el estudiante los demuestra sin ambigüedad. Lo demuestra tanto si enuncia la regla como si la APLICA bien (por ejemplo, cuenta como vigente algo que la regla dice que no se borra). Vale aunque lo haya dicho repartido en varios mensajes de esta actividad y con faltas de ortografía. Lo que NO vale: que solo lo haya dicho el instructor, o que el estudiante solo repita la pregunta.`
     : ''
 
   // Fase B: si la actividad tiene rúbrica pre-generada, usamos el prompt corto
@@ -435,12 +513,41 @@ REGLA POST-EXPLICACIÓN:
         ? buildOpenEndedVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, hintsSection, expectedLevel)
         : buildStandardVerificationPrompt(agentInstruction, activity, accumulatedResponse, conversationHistory, successCriteria, hintsSection, minCompleteness, expectedLevel)
       ) + explainedClause
-  const verificationPrompt = basePrompt + criticalClause
+  // Evidencia: cada criterio cubierto debe venir con una cita del alumno. El
+  // código descarta los que no la traen o cuya cita no está en lo que escribió
+  // (en EVA-NOTA se marcó «acción concreta si falta» sin que el alumno la dijera).
+  const evidenceClause = `
 
-  try {
+EVIDENCIA OBLIGATORIA: agrega al JSON el campo "evidence", un objeto que asigna a cada número de criteriaMatched una CITA LITERAL corta (de 2 a 12 palabras) copiada de lo que escribió el ESTUDIANTE y que prueba ese criterio. Ejemplo: "evidence": {"1": "puedo faltar 3 sesiones"}. Si el estudiante cubrió un criterio en partes, en mensajes distintos, pon una lista con una cita por parte: "evidence": {"2": ["estaría en amarillo", "una falta más y desaprueba"]}. Si no puedes citar palabras del estudiante para un criterio, ese criterio NO está cubierto: no lo pongas en criteriaMatched. Nunca cites al instructor.`
+  // Material del panel que el verificador necesita completo (spec del panel §8):
+  // los bloques de la actividad marcados `forVerifier` y los que nombra una
+  // regla `quote_from`. Así puede juzgar si el alumno citó la fila, el hecho o
+  // la frase correcta. El código, además, comprueba las citas (quote-check).
+  const reglasDeCitas = successCriteria.quote_from ?? []
+  const idsParaVerificador = new Set([
+    ...(activity.teaching?.blocks ?? []).filter((b) => b.forVerifier).map((b) => b.id),
+    ...reglasDeCitas.map((q) => q.block),
+  ])
+  const bloquesParaVerificador = material.filter((b) => idsParaVerificador.has(b.id))
+  const textoDelMaterial = bloquesParaVerificador
+    .map((b) => `«${b.title}»:\n${textoParaVerificador(b).split(/\s+/).slice(0, 450).join(' ')}`)
+    .join('\n\n')
+  const reglasTexto = reglasDeCitas
+    .map((q) => {
+      const titulo = material.find((b) => b.id === q.block)?.title ?? q.block
+      return `El criterio ${q.criterion} exige ${q.min ?? 1} frase(s) que existan en «${titulo}»: no lo marques cubierto con frases inventadas o que no estén en ese texto.`
+    })
+    .join('\n')
+  const materialClause = bloquesParaVerificador.length
+    ? `\n\nMATERIAL QUE EL ESTUDIANTE TIENE A LA VISTA (puede citarlo; úsalo para comprobar sus datos y frases):\n${textoDelMaterial}${reglasTexto ? `\n${reglasTexto}` : ''}`
+    : ''
+  const verificationPrompt = basePrompt + criticalClause + materialClause + evidenceClause
+
+  // Una consulta al modelo verificador, con el JSON ya parseado.
+  const consultar = async (): Promise<ActivityCompletionResult> => {
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001', // Haiku 4.5 (3.5 fue deprecada). Rápido + económico.
-      max_tokens: 400, // ⚡ OPTIM #1: bajado de 500 (el veredicto JSON cabe holgado)
+      max_tokens: 600, // incluye las citas de evidencia por criterio
       messages: [
         {
           role: 'user',
@@ -448,16 +555,27 @@ REGLA POST-EXPLICACIÓN:
         },
       ],
     })
-
     const content = response.content[0]
     if (content.type !== 'text') {
       throw new Error('Unexpected response type from verification')
     }
-
     // Parsear JSON response (tolera markdown code blocks y prosa alrededor)
-    const result: ActivityCompletionResult = JSON.parse(
-      extractJsonFromMarkdown(content.text)
-    )
+    return JSON.parse(extractJsonFromMarkdown(content.text)) as ActivityCompletionResult
+  }
+
+  try {
+    // Segunda opinión anticipada: cuando hay eliminatorios, la relectura se
+    // pide A LA VEZ que la primera, no después (en serie sumaba ~3 s al turno,
+    // el caso de 13 s medido el 12 oct 2026). Solo se usa si la primera deja
+    // un eliminatorio sin cubrir. Con menos de 4 palabras no se pide: no hay
+    // nada citable; si igual hiciera falta, se consulta en serie como antes.
+    const segundaAnticipada = criticos.length > 0 && userMessage.trim().split(/\s+/).length >= 4
+      ? consultar().catch((e: unknown) => {
+          console.warn('⚠️  verifier.second_opinion_failed', e instanceof Error ? e.message : e)
+          return null
+        })
+      : null
+    const result = await consultar()
 
     // ⚡ El verificador ahora devuelve NÚMEROS (1-based) en criteriaMatched/
     // criteriaMissing para ahorrar tokens de salida. Los expandimos a los
@@ -469,11 +587,73 @@ REGLA POST-EXPLICACIÓN:
         .map((v) => (typeof v === 'number' ? successCriteria.must_include[v - 1] : v))
         .filter((v): v is string => typeof v === 'string' && v.length > 0)
     }
+    // Criterios sin cita verificable pasan a «faltan» (antes de expandir a texto).
+    const textosDelAlumno = [userMessage, ...(conversationHistory ?? []).filter((m) => m.role === 'user').map((m) => m.content)]
+    const sinEvidencia = descartarSinEvidencia(
+      result as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown; evidence?: unknown },
+      successCriteria.must_include,
+      textosDelAlumno,
+    ) + exigirCitasDelBloque(
+      // Un criterio de «frases del fragmento» con frases que no están en él pasa a «falta».
+      result as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown },
+      reglasDeCitas,
+      successCriteria.must_include,
+      material,
+      textosDelAlumno,
+    )
     result.criteriaMatched = expandCriteria(result.criteriaMatched)
     result.criteriaMissing = expandCriteria(result.criteriaMissing)
+    if (sinEvidencia > 0) {
+      const totalCriterios = successCriteria.must_include.length
+      const porCriterios = totalCriterios > 0
+        ? Math.round((result.criteriaMatched.length / totalCriterios) * 100)
+        : 0
+      result.completeness_percentage = Math.min(result.completeness_percentage ?? 0, porCriterios)
+      result.completed = false
+      result.ready_to_advance = false
+      if (result.response_type === 'correct') result.response_type = 'partial'
+    }
 
-    // Eliminatorios: sin ellos no hay «completed», cubra lo que cubra.
-    if (criticos.some((c) => !result.criteriaMatched.includes(c))) {
+    // Eliminatorios: sin ellos no hay «completed», cubra lo que cubra. Tampoco
+    // se avanza (se aplica al final, después de todas las reglas de avance):
+    // la actividad insiste hasta agotar intentos y recién ahí sigue, en inicio.
+    // Segunda opinión: un eliminatorio marcado como faltante bloquea el avance,
+    // y el verificador falla a veces por variación (el mismo mensaje de Mario
+    // salió 50 % una vez y 100 % dos veces). Si la respuesta ya cubre algo y
+    // le falta un eliminatorio, se consulta una vez más y se acepta el
+    // eliminatorio solo si la segunda lectura lo marca CON cita válida.
+    if (criticos.some((c) => !result.criteriaMatched.includes(c)) && result.criteriaMatched.length > 0) {
+      try {
+        const segunda = segundaAnticipada ? await segundaAnticipada : await consultar()
+        if (segunda) {
+          descartarSinEvidencia(
+            segunda as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown; evidence?: unknown },
+            successCriteria.must_include,
+            textosDelAlumno,
+          )
+          exigirCitasDelBloque(
+            segunda as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown },
+            reglasDeCitas,
+            successCriteria.must_include,
+            material,
+            textosDelAlumno,
+          )
+          const matched2 = expandCriteria(segunda.criteriaMatched)
+          for (const c of criticos) {
+            if (!result.criteriaMatched.includes(c) && matched2.includes(c)) {
+              result.criteriaMatched.push(c)
+              result.criteriaMissing = result.criteriaMissing.filter((m) => m !== c)
+              console.warn('ℹ️  verifier.second_opinion_accepted', { criterio: c })
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️  verifier.second_opinion_failed', e instanceof Error ? e.message : e)
+      }
+    }
+
+    const faltaCritico = criticos.some((c) => !result.criteriaMatched.includes(c))
+    if (faltaCritico) {
       result.completed = false
     }
 
@@ -526,8 +706,8 @@ REGLA POST-EXPLICACIÓN:
       result.ready_to_advance = true
     }
 
-    if (isOpenEnded) {
-      // LÓGICA OPEN-ENDED: Si el estudiante muestra reflexión genuina, permitir avanzar
+    if (bajaExigencia) {
+      // LÓGICA OPEN-ENDED (reflexión y cierre): si muestra reflexión genuina, permitir avanzar
       if (result.completeness_percentage >= 40 && result.response_type !== 'off_topic') {
         result.ready_to_advance = true
       }
@@ -558,6 +738,14 @@ REGLA POST-EXPLICACIÓN:
     // del prompt, el nivel nunca pase de Proceso post-explicación.
     if (wasExplained && (result.understanding_level === 'achieved' || result.understanding_level === 'outstanding')) {
       result.understanding_level = 'developing'
+    }
+
+    // Eliminatorio sin cubrir: no se avanza, decidan lo que decidan las reglas
+    // de arriba. El tope de intentos (route) es el único que lo destraba.
+    if (faltaCritico) {
+      result.ready_to_advance = false
+      result.completed = false
+      if (result.response_type === 'correct') result.response_type = 'partial'
     }
 
     // La completitud que se GUARDA se deriva de los criterios, así los dos

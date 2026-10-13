@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { Volume2, Loader2, Pause } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { stripMarkers } from '@/lib/material-markers'
 
 interface PlayAudioButtonProps {
   text: string
@@ -32,7 +33,8 @@ export function PlayAudioButton({ text, className }: PlayAudioButtonProps) {
       const res = await fetch('/api/voice/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        // Los marcadores del panel ([[block:…]]) nunca se leen en voz alta.
+        body: JSON.stringify({ text: stripMarkers(text) }),
       })
       if (!res.ok) throw new Error('TTS failed')
 

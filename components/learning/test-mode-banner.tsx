@@ -125,41 +125,44 @@ export function TestModeBanner({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 sm:px-4">
         <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
           <FlaskConical className="h-4 w-4" />
           Modo Prueba
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
           <Button
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-amber-800 hover:bg-amber-100"
             onClick={handleSkipActivity}
+            aria-label="Saltar actividad"
             disabled={loading !== null}
           >
             {loading === 'skip' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SkipForward className="h-3.5 w-3.5" />}
-            Saltar
+            <span className="hidden sm:inline">Saltar</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-amber-800 hover:bg-amber-100"
             onClick={() => setShowSkipTo(!showSkipTo)}
+            aria-label="Ir a una actividad"
             disabled={loading !== null}
           >
             <ListOrdered className="h-3.5 w-3.5" />
-            Ir a...
+            <span className="hidden sm:inline">Ir a...</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-amber-800 hover:bg-amber-100"
             onClick={handleReset}
+            aria-label="Reiniciar la prueba"
             disabled={loading !== null}
           >
             {loading === 'reset' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-            Reiniciar
+            <span className="hidden sm:inline">Reiniciar</span>
           </Button>
           <div className="mx-1 h-4 w-px bg-amber-300" />
           <Button
@@ -167,9 +170,10 @@ export function TestModeBanner({
             size="sm"
             className="h-7 gap-1 text-xs text-amber-800 hover:bg-amber-100"
             onClick={handleExit}
+            aria-label="Salir de la prueba"
           >
             <X className="h-3.5 w-3.5" />
-            Salir
+            <span className="hidden sm:inline">Salir</span>
           </Button>
         </div>
       </div>

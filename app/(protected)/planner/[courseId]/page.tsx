@@ -4,7 +4,7 @@ import { isOwnerOrSuperadmin } from '@/lib/auth-utils'
 import { esAdminDelCurso } from '@/lib/alcance'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, CalendarDays } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Pencil, Image, ClipboardCheck, Check, CalendarDays, Library } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AgregarSesion } from '@/components/planner/agregar-sesion'
 import { PublishToggle } from '@/components/planner/publish-toggle'
@@ -178,6 +178,14 @@ export default async function CourseOverviewPage({
               </span>
             )}
             {!isSectionInstructor && (
+              <Link href={`/planner/${course.id}/images`}>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Library className="h-3.5 w-3.5" />
+                  Banco de imágenes
+                </Button>
+              </Link>
+            )}
+            {!isSectionInstructor && (
               <CourseConfigPanel
                 courseId={course.id}
                 availableSedes={allSedes}
@@ -230,6 +238,7 @@ export default async function CourseOverviewPage({
               agent_instruction: string
               images?: Array<{ url: string }>
               image?: { url: string }
+              blocks?: Array<{ type: string }>
             }
           }> } | null
           const isDesigned =
@@ -237,7 +246,10 @@ export default async function CourseOverviewPage({
           const hasResources =
             !!lesson.videoUrl ||
             (json?.activities?.some(
-              (a) => (a.teaching?.images && a.teaching.images.length > 0) || a.teaching?.image?.url
+              (a) =>
+                (a.teaching?.images && a.teaching.images.length > 0) ||
+                a.teaching?.image?.url ||
+                (a.teaching?.blocks && a.teaching.blocks.length > 0)
             ) ?? false)
           const allVerified = isDesigned && json!.activities!.every((a) => a.verified === true)
           const isTested = testedLessonIds.has(lesson.id)
@@ -250,7 +262,7 @@ export default async function CourseOverviewPage({
           const badges = [
             { label: 'Diseñada', done: !!isDesigned },
             { label: 'Verificada', done: !!allVerified },
-            { label: 'Recursos', done: hasResources },
+            { label: 'Material', done: hasResources },
             { label: 'Probada', done: isTested },
             { label: isReady ? 'Lista' : 'Borrador', done: isReady, accent: true },
           ]
@@ -369,7 +381,7 @@ export default async function CourseOverviewPage({
                             ) : (
                               <Image className="h-3.5 w-3.5" />
                             )}
-                            Recursos
+                            Material
                           </Button>
                         </Link>
                         <TestLessonButton

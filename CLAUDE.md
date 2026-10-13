@@ -222,7 +222,7 @@ export async function proxy(request: NextRequest) {
 
 ## 🔌 API Endpoints Reference
 
-**Total endpoints activos:** 8 (7 producción + 1 dev-only)
+**Total endpoints documentados:** 10 (9 producción + 1 dev-only)
 
 ### 📊 Quick Reference Table
 
@@ -236,6 +236,8 @@ export async function proxy(request: NextRequest) {
 | `/api/activity/progress` | GET | ✅ | Progreso de actividad actual | activity-progress-header.tsx |
 | `/api/activity/complete` | POST | ✅ | Marcar actividad completada (utility) | Fallback |
 | `/api/dev/reset-lesson` | POST | ✅🔒 | Reiniciar sesión (DEV ONLY) | dev-tools-modal.tsx |
+| `/api/planner/course/[courseId]/images` | GET/POST | ✅ | Banco de imágenes del curso: listar con usos, registrar, adoptar (`{adopt:true}`) | image-bank.tsx, material/image-tools.tsx |
+| `/api/planner/course/[courseId]/images/[imageId]` | PATCH/DELETE | ✅ | Editar o validar (se copia a las lecciones); borrar si ninguna la usa | image-bank.tsx, material/block-form.tsx |
 
 **Convenciones:**
 - ✅ = Requiere autenticación
@@ -513,6 +515,19 @@ Connection: keep-alive
 4. Cascade delete automático: mensajes + actividades
 
 **Usado por:** `components/learning/dev-tools-modal.tsx:36` - Testing y debugging
+
+---
+
+#### 9. Banco de imágenes del curso
+**Rutas:** `app/api/planner/course/[courseId]/images/route.ts` y `.../images/[imageId]/route.ts`
+**Acceso:** rol INSTRUCTOR o más y `cursoEditable()` (`lib/planner/course-access.ts`): dueño, SUPERADMIN o ADMIN de la carrera.
+
+- `GET` → `{ images: [{ ...CourseImage, usos: [{ lessonId, title }] }] }`
+- `POST { url, description?, kind?, source?, license?, tags? }` → registra una imagen ya subida (`/api/upload/image`). Si la url ya está en el curso, devuelve la existente. `POST { adopt: true }` → `{ adopted }`: trae al banco las imágenes que las lecciones ya usan y enlaza sus bloques.
+- `PATCH { description?, kind?, source?, license?, tags?, validated? }` → `{ image, leccionesActualizadas, aviso }`. Validar exige descripción, licencia real y fuente (400 con el motivo). El cambio se copia a los bloques con ese `bankId` en todas las lecciones del curso.
+- `DELETE` → 409 si alguna lección la usa.
+
+**Errores:** 401, 403, 404, 409. **Spec:** `investigacion/panel-de-apoyo-especificacion.md` §9.3.
 
 ---
 
@@ -1679,6 +1694,42 @@ export default function LoginPage() {
 
 ---
 
+### Verificador desfasado de la conversación (5 oct 2026)
+
+**Problema:** con un alumno simulado se vio que el verificador aprobaba actividades que nunca se plantearon. Tres causas en el código, no en las lecciones:
+1. El verificador recibía los últimos 20 mensajes de la sesión entera y acumulaba respuestas de actividades anteriores. La actividad de rúbrica de EVA-NOTA «se cumplió» con el cálculo (mal hecho) de la actividad previa.
+2. La bienvenida hacía una pregunta genérica («¿has visto algún caso…?») y la respuesta se verificaba contra los criterios de la actividad 1. Ese era el embudo de la primera actividad en todas las lecciones (S1 real: 246 de 422 respuestas de ≤5 palabras).
+3. El puntero de actividad avanzaba aunque Sophia siguiera pidiendo algo de la anterior; el código forzaba el avance a los 5 intentos mientras el prompt le decía a Sophia que avanzara al 3.º.
+
+**Solución:**
+- El verificador solo ve los mensajes archivados bajo la actividad actual (`verifierHistory` en `app/api/chat/stream/route.ts`).
+- La bienvenida plantea la actividad 1 (`app/api/chat/welcome/route.ts`); si una lección vieja tiene bienvenida genérica, la primera respuesta es «turno de conexión» y no se verifica.
+- Si el verificador aprueba pero Sophia no planteó la pregunta siguiente, el avance se retiene una vez (`advance_held_back`); el tope de intentos es el mismo en código y prompt (`max_attempts || 3`).
+- Cada criterio cubierto exige una cita literal del alumno (`evidence` en `lib/activity-verification.ts`); sin cita, pasa a «falta».
+- Un criterio eliminatorio sin cubrir frena el avance hasta agotar intentos. En explicación y práctica, un criterio que pide la razón (`RAZON_RE`) cuenta como eliminatorio.
+- (12 oct 2026) Un eliminatorio se cumple también si el alumno APLICA la regla, aunque lo diga repartido en varios mensajes: la evidencia puede ser una lista de citas, una por parte, y cada una debe estar en lo que escribió. Sophia nunca agradece ni se despide antes de la última actividad: si la actividad sigue abierta y su mensaje no termina en pregunta, el código agrega la pendiente (`terminaEnPregunta` en la ruta); si el verificador aprobó y ella cerró sin preguntar, se avanza enseguida con la pregunta siguiente, sin retener.
+- La latencia de cada turno queda en el log como `chat.stream.timing` (db, gate, primer_token, stream, guardado). El piso es el verificador (~4 s); la segunda opinión corre en paralelo con la primera.
+
+**Actividades de dos pasos:** las de explicación y práctica abren con un paso cerrado (`Activity.choice`, alternativas corregidas en código en `lib/choice.ts`, opciones mezcladas por sesión) y siguen con la justificación abierta. La nota la manda la justificación; quien nunca acertó la alternativa no pasa de «en proceso» (`lib/grading.ts`). **Desde el 7 oct 2026 la alternativa es por actividad** (decisión 13 en `investigacion/panel-de-apoyo-especificacion.md` §16.1): se queda donde la actividad es una decisión entre errores reales y como comprobación corta al cierre; lo que tiene material manipulable o legible en el panel conversa sin alternativas, con la acción sobre el panel como ancla. La evidencia que sostiene esto está en §15 de esa especificación.
+
+**Cómo probar una lección:** `scripts/alumno-simulado.mjs` abre la pantalla real en Chrome y recibe los turnos por HTTP; las sesiones son de prueba. Correr siempre con un alumno flojo y uno bueno antes de publicar.
+
+**Decisiones, no cálculos (6 oct 2026):** la primera v2 de EVA-NOTA tenía seis cálculos y se sentía «una clase de matemáticas». La plantilla de tutoría es: un solo cálculo (la fórmula, con lámina y ejemplo resuelto), el resto decisiones en situaciones con los números ya dados, y cada alternativa incorrecta es un error real de los datos (ir enfermo, justificar tarde, «compensar» un TC no entregado, copiar). El chat renderiza tablas GFM y saltos de línea simples como saltos duros (`chat-message.tsx`): Sophia puede mostrar la fórmula o un semáforo en tabla y las opciones una por línea.
+
+**Material de apoyo (panel derecho, 6 oct 2026):** las lecciones declaran bloques tipados en `activity.teaching.blocks` (imagen, comparación, fórmula, tabla, texto, caso, diagrama). Todo lo que muestra o cita material pasa por `lib/support-blocks.ts`: la página, el prompt de texto y el de voz. Las imágenes viejas (`teaching.images`) se leen como bloques sin migrar datos. Sophia recibe solo lo justo para citar (una tabla llega con 3 filas de muestra; un texto, con sus dos primeras líneas) y la regla de no copiar al chat. El video de Sophia y la barra izquierda se eliminaron. Especificación y estado por etapas: `investigacion/panel-de-apoyo-especificacion.md`.
+
+**Mostrar material al citarlo:** un bloque `on_reference` aparece cuando Sophia escribe `[[block:ID]]` (un señalamiento, `[[marker:ID:n]]`). El marcador queda en el mensaje guardado y es la única fuente de verdad: el navegador y el servidor calculan lo mostrado leyendo los mensajes de Sophia (`lib/material-markers.ts`), sin eventos aparte. Todo texto de Sophia que se pinta o se lee en voz pasa por `stripMarkers`; si agregas un lugar nuevo que muestre su texto, también. Las alternativas «A) …» del último mensaje se dibujan como botones, así que no cambies el formato de `renderChoice` sin revisar `splitChoiceOptions`. Si una actividad tiene material en el panel, ningún prompt (bienvenida incluida) debe pedir «presentar el caso con sus datos»: Sophia los recita aunque el alumno ya los vea. Y en el prompt los ids de bloque nunca van entre corchetes al inicio de la línea, porque Sophia los copia al chat.
+
+**Editor de material y banco (etapa 3):** el bloque `image` guarda una COPIA de la foto del banco (`CourseImage`) más su `bankId`; todo cambio en el banco pasa por `propagarALecciones` (`lib/course-images.ts`), si no, una foto validada en el banco seguiría oculta para el alumno. Para guardar parte de una lección, usar `PATCH /api/planner/session/update` (merge); el guardado completo ahora conserva `context`, pero antes lo borraba. Lo que el planner propone como material pasa por `sanitizeGeneratedBlocks`: el modelo se pasa de los límites del esquema (celdas de más de 60 caracteres, nombres largos) y, sin esa limpieza, un solo bloque malo descartaba todas las actividades propuestas.
+
+**Citas del material y diagramas (etapa 4):** un criterio puede exigir con `success_criteria.quote_from` que las frases del alumno existan en un bloque del panel; lo comprueba el código (`lib/quote-check.ts`) después del modelo y solo puede bajar un criterio, nunca subirlo. El verificador recibe el material de la lección (`allLessonBlocks`) como quinto argumento de `verifyActivityCompletion`: si agregas otra llamada, pásaselo. Los diagramas se trazan en `lib/diagram-layout.ts` (funciones puras, probadas en 280 px); el ciclo va en columna con flecha de retorno, no en círculo.
+
+**Ecualizador y comprobación de cierre (etapa 5):** el bloque `simulator` vive en el estado del panel (`material-context.tsx`) y su estado viaja con cada mensaje a `/api/chat/stream` (`materialState`); el servidor lo valida contra la lección (`lib/simulator.ts`) y Sophia lo lee como «ESTADO DEL PANEL». Las notas propias del alumno nunca se guardan. Una actividad que se abre con algo distinto de su pregunta de verificación declara `teaching.first_question`; sin eso, bienvenida y transición terminan con el porqué. La comprobación de cierre (`Activity.checks`) la responde el código con un stream fijo (`streamFijo` en la ruta), sin modelo ni verificador; suma una fila de peso 1 en `notaDeLaSesion`.
+
+**Dos trampas más que salieron en esas pruebas:** el detector de ruido de voz (`lib/hallucination-detector.ts`) marcaba como alucinación un cálculo escrito con muchos dígitos (ahora los dígitos cuentan como contenido), y la bienvenida planteaba siempre la actividad 1 aunque la sesión de prueba empezara desde otra (ahora usa el puntero de la sesión). Las reglas que enseña una lección se verifican contra la fuente antes de probarla: EVA-NOTA enseñó dos reglas falsas hasta que se leyó el Reglamento Interno v03 (copia en `Claude/diseño-ppt-cetemin/01_Insumos/Institucional`).
+
+---
+
 ### Decisión Arquitectural: /learn/ vs /lesson/
 
 **Pregunta:** ¿`/learn/{sessionId}` o `/lesson/{sessionId}`?
@@ -1727,6 +1778,9 @@ export default function LoginPage() {
 
 **Q:** Test User funciona en producción
 **A:** Agregar validación `if (process.env.NODE_ENV !== 'development') return null` en `authorize()`
+
+**Q:** El usuario termina en `/login` a mitad de una lección, con `JWTSessionError` y «Can't reach database server» en el log
+**A:** Neon dejó de responder y una consulta dentro del callback `jwt` lanzó una excepción, lo que hace que NextAuth borre la cookie. Toda consulta a la base en `auth.ts` va en `try/catch` y, si falla, devuelve el token sin cambios (6 oct 2026).
 
 **Q:** `ClientFetchError` en login
 **A:** Verifica que `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` estén en `.env`

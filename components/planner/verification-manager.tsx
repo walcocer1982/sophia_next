@@ -17,6 +17,8 @@ interface Props {
   courseTitle: string
   activities: Activity[]
   keyPoints: string[]
+  /** Bloques del panel de los que un criterio puede exigir frases. */
+  citables?: { id: string; title: string }[]
 }
 
 export function VerificationManager({
@@ -26,6 +28,7 @@ export function VerificationManager({
   courseTitle,
   activities: initialActivities,
   keyPoints,
+  citables = [],
 }: Props) {
   const router = useRouter()
   const [activities, setActivities] = useState<Activity[]>(initialActivities)
@@ -96,6 +99,9 @@ export function VerificationManager({
               }),
               ...(updates.critical !== undefined && {
                 critical: updates.critical,
+              }),
+              ...(updates.quote_from !== undefined && {
+                quote_from: updates.quote_from.length ? updates.quote_from : undefined,
               }),
               ...(updates.understanding_level !== undefined && {
                 understanding_level: normalizeLevel(updates.understanding_level),
@@ -206,6 +212,7 @@ export function VerificationManager({
             position={i + 1}
             total={totalCount}
             keyPoints={keyPoints}
+            citables={citables}
             isApproved={approvedIds.has(activity.id)}
             onApprove={handleApprove}
             onRevoke={handleRevoke}

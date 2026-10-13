@@ -54,17 +54,18 @@ export function Navbar() {
   const inicio = role === 'STUDENT' ? '/lessons' : '/programacion'
 
   return (
-    <header className="h-14 border-b  bg-white flex items-center justify-between px-6 sticky top-0 z-50">
+    <header className="h-14 border-b  bg-white flex items-center justify-between gap-2 px-3 sm:px-6 sticky top-0 z-50">
       {/* Logo */}
-      <Link href={inicio} className="flex items-center gap-6">
+      <Link href={inicio} className="flex shrink-0 items-center gap-6">
         <Image src="/sophia_icon.svg" alt="Sophia Logo" width={32} height={32} />
       </Link>
 
       {/* Navigation Links */}
-      <nav className="flex items-center gap-6">
+      <nav className="flex min-w-0 items-center gap-4 sm:gap-6">
         {role === 'STUDENT' && (
           <Link
             href="/lessons"
+            aria-label="Clases"
             className={`flex items-center gap-2 text-sm font-medium transition-colors ${
               pathname === '/lessons'
                 ? 'text-instructor-600'
@@ -72,13 +73,14 @@ export function Navbar() {
             }`}
           >
             <BookOpen className="h-4 w-4" />
-            Clases
+            <span className="hidden md:inline">Clases</span>
           </Link>
         )}
         {isInstructorOrAbove && (
           <>
             <Link
               href="/planner"
+              aria-label="Diseño"
               className={`flex items-center gap-2 text-sm font-medium transition-colors ${
                 pathname.startsWith('/planner')
                   ? 'text-instructor-600'
@@ -86,10 +88,11 @@ export function Navbar() {
               }`}
             >
               <Sparkles className="h-4 w-4" />
-              Diseño
+              <span className="hidden md:inline">Diseño</span>
             </Link>
             <Link
               href="/programacion"
+              aria-label="Programación"
               className={`flex items-center gap-2 text-sm font-medium transition-colors ${
                 pathname.startsWith('/programacion')
                   ? 'text-instructor-600'
@@ -97,10 +100,11 @@ export function Navbar() {
               }`}
             >
               <CalendarDays className="h-4 w-4" />
-              Programación
+              <span className="hidden md:inline">Programación</span>
             </Link>
             <Link
               href="/dashboard"
+              aria-label="Monitor"
               className={`flex items-center gap-2 text-sm font-medium transition-colors ${
                 pathname.startsWith('/dashboard')
                   ? 'text-instructor-600'
@@ -108,7 +112,7 @@ export function Navbar() {
               }`}
             >
               <LayoutDashboard className="h-4 w-4" />
-              Monitor
+              <span className="hidden md:inline">Monitor</span>
             </Link>
             {/* «Eventos» (kiosko de ferias) se retiró el 14 set 2026: Sophia es
                 para los cursos de carrera. Ver investigacion/mejoras-sophia.md. */}
@@ -117,6 +121,7 @@ export function Navbar() {
         {isSuperadmin && (
           <Link
             href="/admin"
+            aria-label="Config"
             className={`flex items-center gap-2 text-sm font-medium transition-colors ${
               pathname.startsWith('/admin')
                 ? 'text-instructor-600'
@@ -124,12 +129,12 @@ export function Navbar() {
             }`}
           >
             <Shield className="h-4 w-4" />
-            Config
+            <span className="hidden md:inline">Config</span>
           </Link>
         )}
       </nav>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         {/* Solo el superadmin: mirar la app con el alcance de otra persona */}
         {isSuperadmin && <VerComo />}
 
@@ -137,11 +142,11 @@ export function Navbar() {
       {session?.user ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 rounded-xl flex items-center gap-2 px-4 ring-0">
+            <Button variant="ghost" className="relative h-10 rounded-xl flex items-center gap-2 px-2 sm:px-4 ring-0">
               <span className='text-xs hidden sm:block'>{session.user.name || ''}</span>
               <span className='text-xs block sm:hidden'>{nameInitials(session.user.name || '')}</span>
               {role !== 'STUDENT' && (
-                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${roleBadgeClass}`}>
+                <Badge variant="outline" className={`hidden sm:inline-flex text-[10px] px-1.5 py-0 ${roleBadgeClass}`}>
                   {roleLabel}
                 </Badge>
               )}

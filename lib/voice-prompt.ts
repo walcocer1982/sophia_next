@@ -3,20 +3,14 @@
  * KEPT SHORT to avoid content_filter false positives in non-English (Spanish)
  * which truncate responses with status_details.reason="content_filter".
  */
-import type { LessonContent, Activity, LessonContext, TeachingImage } from '@/types/lesson'
+import type { LessonContent, Activity, LessonContext } from '@/types/lesson'
+import { blocksForActivity, buildMaterialVoiceLines } from '@/lib/support-blocks'
 
 interface BuildVoiceInstructionsArgs {
   lessonTitle: string
   lessonObjective: string
   contentJson: LessonContent
   currentActivityId?: string | null
-}
-
-function getActivityImages(activity: Activity | undefined): TeachingImage[] {
-  if (!activity?.teaching) return []
-  const images = activity.teaching.images
-    ?? (activity.teaching.image ? [activity.teaching.image] : [])
-  return images.filter(img => img.description)
 }
 
 export function buildVoiceInstructions({
@@ -61,26 +55,11 @@ export function buildVoiceInstructions({
     parts.push(`Marco normativo: ${ctx.normativa}`)
   }
 
-  // Imágenes visibles en el panel del estudiante: Sophia debe relacionarlas
-  // con lo que dice. Usa SOLO la descripción dada (no interpreta la imagen).
-  const images = getActivityImages(activity)
-  if (images.length > 0) {
-    parts.push(``)
-    parts.push(`IMÁGENES VISIBLES (${images.length}) en el panel del estudiante:`)
-    images.forEach((img, i) => {
-      const when = img.showWhen || 'on_reference'
-      const cue =
-        when === 'on_start'
-          ? 'ya visible'
-          : when === 'on_demand'
-          ? 'solo si el estudiante pide'
-          : 'aparece cuando la menciones'
-      parts.push(`  [${i + 1}] (${cue}) ${img.description}`)
-    })
-    parts.push(`Refiérete a ellas en momentos clave: "Mira la imagen ${images.length === 1 ? '' : '1, '}donde se ve...", "Fíjate en...", "Como muestra la imagen...".`)
-    parts.push(`Conecta cada imagen con el concepto que estás enseñando o con la pregunta que harás.`)
-    parts.push(`Usa SOLO la descripción dada — no inventes detalles que la imagen no muestra.`)
-  }
+  // Material del panel (bloques + imágenes viejas): Sophia lo nombra, nunca lo
+  // lee en voz alta. Usa SOLO la descripción dada (no interpreta la imagen).
+  // Ver lib/support-blocks.ts.
+  const { pinned, current } = blocksForActivity(contentJson, activity?.id)
+  parts.push(...buildMaterialVoiceLines(current, pinned))
 
   return parts.join('\n')
 }

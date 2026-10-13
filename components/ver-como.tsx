@@ -79,14 +79,15 @@ export function VerComo() {
     <div className="relative">
       <button
         onClick={() => setAbierto((v) => !v)}
+        aria-label="Ver como"
         className="flex items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
       >
         <Eye className="h-3.5 w-3.5" />
-        Ver como
+        <span className="hidden sm:inline">Ver como</span>
       </button>
 
       {abierto && (
-        <div className="absolute right-0 top-9 z-50 w-72 rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+        <div className="absolute right-0 top-9 z-50 w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
           <p className="px-3 py-2 text-xs text-gray-500">
             Mirá la app con el alcance de otra persona. Solo lectura.
           </p>

@@ -11,6 +11,8 @@ import { useProgress } from './progress-context'
 import type { ChatMessage, OptimisticMessage } from '@/types/chat'
 import type { PlannerAttachment } from '@/types/planner'
 import { streamChatResponse } from '@/lib/chat-stream'
+import { stripMarkers } from '@/lib/material-markers'
+import { useMaterial } from './material-context'
 import { toast } from 'sonner'
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -65,6 +67,13 @@ export function ChatInterface({
   const addMessage = (msg: OptimisticMessage) => {
     setMessages(prev => [...prev, msg])
   }
+
+  // El panel muestra lo que Sophia citó: se calcula de sus mensajes, también
+  // mientras escribe, para que el bloque aparezca cuando lo nombra.
+  const { reportMessages, getMaterialState } = useMaterial()
+  useEffect(() => {
+    reportMessages(messages.filter((m) => m.role === 'assistant').map((m) => m.content))
+  }, [messages, reportMessages])
 
   // Generate welcome message if chat is empty
   useEffect(() => {
@@ -181,7 +190,7 @@ export function ChatInterface({
 
       if (shouldDeferReveal && fullWelcome.trim()) {
         welcomeAudioPlayedRef.current = true
-        const cleanText = fullWelcome
+        const cleanText = stripMarkers(fullWelcome)
           .replace(/\*\*([^*]+)\*\*/g, '$1')
           .replace(/\*([^*]+)\*/g, '$1')
           .replace(/__([^_]+)__/g, '$1')
@@ -381,7 +390,8 @@ export function ChatInterface({
             })
           }
         },
-        attachments
+        attachments,
+        getMaterialState()
       )
     } catch (error) {
       console.error('Error sending message:', error)
@@ -395,7 +405,9 @@ export function ChatInterface({
   // Render Tutor Mode (avatar-first) or Chat Mode (full conversation)
   if (viewMode === 'tutor') {
     return (
-      <div className="flex flex-col h-full bg-white">
+      // `relative`: el botón «Modo Chat» (absolute) se ancla a este panel; sin
+      // esto se ubicaba contra la página y quedaba debajo del header fijo.
+      <div className="relative flex flex-col h-full bg-white">
         {/* Mode toggle button */}
         <div className="absolute top-3 right-3 z-10 flex gap-1">
           <Button
@@ -478,7 +490,11 @@ export function ChatInterface({
 
       {/* Messages - ocupa espacio restante con scroll interno */}
       <div className="flex-1 overflow-hidden">
-        <ChatMessages messages={messages} isLoading={isLoading || isGeneratingWelcome} />
+        <ChatMessages
+          messages={messages}
+          isLoading={isLoading || isGeneratingWelcome}
+          onChoose={(texto) => handleSendMessage(texto)}
+        />
       </div>
 
       {/* Input - altura fija, siempre visible */}
