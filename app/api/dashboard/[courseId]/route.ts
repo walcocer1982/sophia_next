@@ -7,535 +7,403 @@ import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '
 import { calculateGrade, enriquecerConPlan, type ActividadDelPlan, type ProgresoGuardado } from '@/lib/grading'
 import { normalizeLevel, LEGACY_LABEL } from '@/lib/levels'
 import { logger } from '@/lib/logger'
+import { seccionesVisibles } from '@/lib/alcance'
+import { alcanceEfectivo } from '@/lib/ver-como'
+import { formatDate } from '@/lib/formatters'
+import { ultimaMarcaPorAlumno, resumenDeMarca, type Marca } from '@/lib/seguimiento'
+import {
+  atendido,
+  avisoDeIntentos,
+  cierreDeVentana,
+  estadoDeSesion,
+  pasoDelEmbudo,
+  representativa,
+  type ProgresoEmbudo,
+  type SesionDeEmbudo,
+} from '@/lib/monitor'
 import type { LessonContent } from '@/types/lesson'
+import type {
+  EmbudoLeccion,
+  FilaMonitor,
+  LeccionPendiente,
+  MarcaDTO,
+  PendienteMonitor,
+  RespuestaMonitor,
+} from '@/types/monitor'
 
 export const runtime = 'nodejs'
 
-type ProgresoConEstado = ProgresoGuardado & { status: string }
+/**
+ * Monitor por curso (15 oct 2026).
+ *
+ * - Alcance por SECCIÓN, igual que la matriz y la ficha (`lib/alcance.ts`):
+ *   el instructor ve sus secciones; antes la ruta exigía ADMIN y el rol
+ *   INSTRUCTOR recibía 403 con la pantalla en blanco.
+ * - Un solo estado por sesión, derivado de la ventana (`lib/monitor.ts`).
+ *   Este GET ya no escribe `endedAt`: hacerlo desde una lectura que cada
+ *   pestaña repetía cada 15 s mataba sesiones que el alumno aún podía retomar.
+ * - Las alertas son «pendientes de llamar»: lo que quedó sin terminar o sin
+ *   abrir con la ventana cerrada y sin marca de seguimiento posterior.
+ * - El embudo respeta el filtro de sección y mide el cuello de botella sobre
+ *   los que llegaron a la actividad.
+ */
+
+type ProgresoConEstado = ProgresoGuardado & { status: string; completedAt: Date | null }
 type PlanPorActividad = Map<string, ActividadDelPlan>
 
-/** Actividades completadas, unidas a lo que el plan dice de cada una (tipo,
- *  peso, intentos permitidos, eliminatorios): así el tablero puntúa con los
- *  mismos datos que la nota final. */
+type Evidencia = {
+  attempts?: Array<{
+    analysis?: { criteriaMissing?: string[]; understanding_level?: string }
+  }>
+} | null
+
 function completadasConPlan(activities: ProgresoConEstado[], plan: PlanPorActividad) {
   return activities
     .filter((a) => a.status === 'COMPLETED')
     .map((a) => enriquecerConPlan(a, plan.get(a.activityId)))
 }
 
-// Partial grade from completed activities (shared formula — see lib/grading.ts)
-function calculatePartialGrade(activities: ProgresoConEstado[], plan: PlanPorActividad): number | null {
+function notaParcial(activities: ProgresoConEstado[], plan: PlanPorActividad): number | null {
   const completed = completadasConPlan(activities, plan)
   if (completed.length === 0) return null
   return calculateGrade(completed)
 }
 
-// Calculate rubric levels from session activities
-function calculateSessionRubric(
-  activities: ProgresoConEstado[],
-  plan: PlanPorActividad
-): { lastActivityLevel: RubricLevel | null; overallLevel: RubricLevel | null } {
-  const completed = completadasConPlan(activities, plan)
-  if (completed.length === 0) return { lastActivityLevel: null, overallLevel: null }
-
-  // null = sin evidencia legible (p.ej. verificador caído): no se cuenta.
-  const levels = completed
+function nivelDeSesion(activities: ProgresoConEstado[], plan: PlanPorActividad): RubricLevel | null {
+  const levels = completadasConPlan(activities, plan)
     .map((ap) => calculateRubricLevel(ap))
     .filter((l): l is RubricLevel => l !== null)
-  if (levels.length === 0) return { lastActivityLevel: null, overallLevel: null }
-
-  const lastActivityLevel = levels.at(-1) || null
-  const overallLevel = calculateOverallRubric(levels)
-  return { lastActivityLevel, overallLevel }
+  return levels.length ? calculateOverallRubric(levels) : null
 }
+
+function progresoEmbudo(a: ProgresoConEstado): ProgresoEmbudo {
+  const ultimo = (a.evidenceData as Evidencia)?.attempts?.at(-1)
+  const nivel = ultimo?.analysis?.understanding_level
+  return {
+    status: a.status,
+    attempts: a.attempts,
+    passedCriteria: a.passedCriteria ?? null,
+    nivel: nivel ? LEGACY_LABEL[normalizeLevel(nivel)] : null,
+    faltantes: ultimo?.analysis?.criteriaMissing ?? [],
+  }
+}
+
+function aDTO(m: Marca | null | undefined): MarcaDTO | null {
+  if (!m) return null
+  return { estado: m.estado, texto: resumenDeMarca(m, formatDate), autor: m.autor, fecha: m.fecha.toISOString() }
+}
+
+const ORDEN_ESTADO = { activa: 0, 'en-pausa': 1, 'sin-terminar': 2, terminada: 3 } as const
+
+// Los reportes parciales se generan con el modelo. Este GET los dispara, pero
+// una vez cada cinco minutos por curso e instancia: antes salían en cada
+// sondeo de cada pestaña y dos Monitores abiertos pedían el mismo reporte.
+const ultimoDisparoDeReportes = new Map<string, number>()
+const CADA_MS = 5 * 60_000
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ courseId: string }> }
 ) {
-  const result = await requireRole('ADMIN')
+  const result = await requireRole('INSTRUCTOR')
   if (result instanceof NextResponse) return result
 
   const { courseId } = await params
-  const { searchParams } = new URL(request.url)
-  const filterSectionId = searchParams.get('sectionId')
+  const filterSectionId = new URL(request.url).searchParams.get('sectionId')
+  const ahora = new Date()
 
-  // Check if user is lead/superadmin, career-match admin, or section instructor
-  const courseAccess = await prisma.course.findFirst({
+  const course = await prisma.course.findFirst({
     where: { id: courseId, deletedAt: null },
-    select: { userId: true, careerId: true },
-  })
-  if (!courseAccess) {
-    return NextResponse.json({ error: 'Curso no encontrado' }, { status: 404 })
-  }
-  const isLead = result.user.role === 'SUPERADMIN' || courseAccess.userId === result.user.id
-  const isCareerAdmin = !isLead && result.user.role === 'ADMIN' && !!result.user.careerId && result.user.careerId === courseAccess.careerId
-
-  // Get section instructor's section IDs for filtering
-  let allowedStudentIds: Set<string> | null = null
-  if (!isLead && !isCareerAdmin) {
-    const mySections = await prisma.sectionInstructor.findMany({
-      where: { userId: result.user.id, section: { courseId } },
-      select: { sectionId: true },
-    })
-    if (mySections.length === 0) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
-    }
-    const sectionIds = filterSectionId
-      ? [filterSectionId]
-      : mySections.map(s => s.sectionId)
-    const enrollments = await prisma.enrollment.findMany({
-      where: { sectionId: { in: sectionIds } },
-      select: { userId: true },
-    })
-    allowedStudentIds = new Set(enrollments.map(e => e.userId))
-  } else if (filterSectionId) {
-    // Lead/SUPERADMIN with section filter
-    const enrollments = await prisma.enrollment.findMany({
-      where: { sectionId: filterSectionId },
-      select: { userId: true },
-    })
-    allowedStudentIds = new Set(enrollments.map(e => e.userId))
-  }
-
-  // Get course with all published lessons and their sessions
-  const course = await prisma.course.findUnique({
-    where: { id: courseId },
     select: {
       id: true,
       title: true,
       career: { select: { id: true, name: true } },
       user: { select: { name: true } },
-      lessons: {
-        // Incluir lecciones publicadas O con actividad real (sesiones no-test),
-        // para que el historial muestre cursos publicados por sección o ya cerrados.
-        where: {
-          OR: [
-            { isPublished: true },
-            { sessions: { some: { isTest: false } } },
-          ],
-        },
-        orderBy: { order: 'asc' },
-        select: {
-          id: true,
-          title: true,
-          contentJson: true,
-          availableAt: true,
-          closesAfterHours: true,
-          sessions: {
-            where: { isTest: false },
-            select: {
-              id: true,
-              userId: true,
-              completedAt: true,
-              endedAt: true,
-              passed: true,
-              grade: true,
-              startedAt: true,
-              lastActivityAt: true,
-              activityId: true,
-              progress: true,
-              user: {
-                select: { id: true, name: true, email: true, image: true },
-              },
-              activities: {
-                select: {
-                  activityId: true,
-                  status: true,
-                  attempts: true,
-                  tangentCount: true,
-                  completedAt: true,
-                  evidenceData: true,
-                  passedCriteria: true,
-                },
-              },
-              _count: {
-                select: {
-                  messages: { where: { role: 'user' } },
-                },
-              },
-            },
-          },
-        },
-      },
     },
   })
-
   if (!course) {
-    return NextResponse.json({ error: 'Course not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Curso no encontrado' }, { status: 404 })
   }
 
-  // === REAL-TIME MONITORING ===
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
-  const now = new Date()
-  const allSessionsRaw = course.lessons.flatMap(l => {
-    const closesAt = l.availableAt
-      ? new Date(new Date(l.availableAt).getTime() + l.closesAfterHours * 60 * 60 * 1000)
-      : null
-    const isClosed = closesAt ? now > closesAt : false
-    // Plan de la lección, por actividad: lo necesita la nota y la rúbrica.
-    const content = l.contentJson as LessonContent | null
-    const plan: PlanPorActividad = new Map(
-      (content?.activities || []).map((a) => [a.id, a as ActividadDelPlan])
-    )
-    return l.sessions.map(s => ({ ...s, lessonClosesAt: closesAt, lessonIsClosed: isClosed, plan }))
-  })
-
-  // Filter by section if applicable
-  const allSessions = allowedStudentIds
-    ? allSessionsRaw.filter(s => allowedStudentIds!.has(s.user.id))
-    : allSessionsRaw
-
-  // === MARK ABANDONED SESSIONS (persist + reclassify) ===
-  // Estudiantes sin actividad > 24h -> abandoned.
-  // Solo aplica a sesiones aún no completadas y sin endedAt previo.
-  const ABANDON_THRESHOLD_MS = 24 * 60 * 60 * 1000
-  const nowMs = now.getTime()
-  const toAbandon: { id: string; endedAt: Date }[] = []
-  for (const s of allSessions) {
-    if (s.completedAt || s.endedAt) continue
-    const inactivityMs = nowMs - new Date(s.lastActivityAt).getTime()
-    if (inactivityMs > ABANDON_THRESHOLD_MS) {
-      // Cierra la sesión 30 min después de la última actividad (estimación
-      // razonable: la persona dejó el dispositivo poco después).
-      const closedAt = new Date(new Date(s.lastActivityAt).getTime() + 30 * 60 * 1000)
-      toAbandon.push({ id: s.id, endedAt: closedAt })
-      // Mutar en memoria para que la clasificación siguiente lo vea
-      ;(s as { endedAt: Date | null }).endedAt = closedAt
-    }
-  }
-  if (toAbandon.length > 0) {
-    await prisma.$transaction(
-      toAbandon.map(t =>
-        prisma.lessonSession.update({
-          where: { id: t.id },
-          data: { endedAt: t.endedAt },
-        })
-      )
-    )
-  }
-
-  // Build activity metadata from contentJson (for all lessons)
-  const activityMeta: Record<string, { title: string; lessonTitle: string; index: number; total: number }> = {}
-  for (const lesson of course.lessons) {
-    const content = lesson.contentJson as LessonContent | null
-    if (!content?.activities) continue
-    content.activities.forEach((act, idx) => {
-      activityMeta[act.id] = {
-        title: tituloActividad(act, idx),
-        lessonTitle: lesson.title,
-        index: idx + 1,
-        total: content.activities.length,
-      }
-    })
-  }
-
-  // Active students (session not completed, no endedAt, activity in last 2h)
-  const activeStudents = allSessions
-    .filter(s => !s.completedAt && !s.endedAt && s.lastActivityAt > twoHoursAgo)
-    .map(s => {
-      const meta = s.activityId ? activityMeta[s.activityId] : null
-      const currentActivityProgress = s.activities.find(a => a.activityId === s.activityId)
-      const lastEvidence = currentActivityProgress?.evidenceData as {
-        attempts?: Array<{ analysis?: { criteriaMatched?: string[]; criteriaMissing?: string[] } }>
-      } | null
-      const lastAttempt = lastEvidence?.attempts?.at(-1)
-
-      // Calculate active time in minutes
-      const activeMinutes = Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 1000 / 60)
-
-      return {
-        userId: s.user.id,
-        name: s.user.name,
-        email: s.user.email,
-        image: s.user.image,
-        sessionId: s.id,
-        activityIndex: meta?.index || null,
-        activityTotal: meta?.total || null,
-        activityTitle: meta?.title || null,
-        lessonTitle: meta?.lessonTitle || null,
-        attempts: currentActivityProgress?.attempts || 0,
-        percentage: s.progress || 0,
-        criteriaMatched: lastAttempt?.analysis?.criteriaMatched || [],
-        criteriaMissing: lastAttempt?.analysis?.criteriaMissing || [],
-        startedAt: s.startedAt,
-        lastActivityAt: s.lastActivityAt,
-        activeMinutes,
-        messageCount: s._count.messages,
-        grade: s.grade ?? calculatePartialGrade(s.activities, s.plan),
-        ...calculateSessionRubric(s.activities, s.plan),
-      }
-    })
-
-  // Inactive students (en pausa: no actividad en 2h+, NO abandonada, NO completada)
-  const inactiveStudents = allSessions
-    .filter(s => !s.completedAt && !s.endedAt && s.lastActivityAt <= twoHoursAgo)
-    .map(s => {
-      const meta = s.activityId ? activityMeta[s.activityId] : null
-      const currentActivityProgress = s.activities.find(a => a.activityId === s.activityId)
-      const activeMinutes = Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 1000 / 60)
-
-      return {
-        userId: s.user.id,
-        name: s.user.name,
-        email: s.user.email,
-        image: s.user.image,
-        sessionId: s.id,
-        activityIndex: meta?.index || null,
-        activityTotal: meta?.total || null,
-        activityTitle: meta?.title || null,
-        lessonTitle: meta?.lessonTitle || null,
-        attempts: currentActivityProgress?.attempts || 0,
-        percentage: s.progress || 0,
-        startedAt: s.startedAt,
-        lastActivityAt: s.lastActivityAt,
-        activeMinutes,
-        messageCount: s._count.messages,
-        grade: s.grade ?? calculatePartialGrade(s.activities, s.plan),
-        ...calculateSessionRubric(s.activities, s.plan),
-        hoursInactive: Math.round((Date.now() - s.lastActivityAt.getTime()) / 1000 / 60 / 60),
-      }
-    })
-
-  // Completed students (session completed)
-  const completedStudents = allSessions
-    .filter(s => !!s.completedAt)
-    .map(s => {
-      const activeMinutes = Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 1000 / 60)
-      // Find which lesson this session belongs to
-      const sessionLesson = course.lessons.find(l => l.sessions.some(ls => ls.id === s.id))
-
-      return {
-        userId: s.user.id,
-        name: s.user.name,
-        email: s.user.email,
-        image: s.user.image,
-        sessionId: s.id,
-        activityIndex: null,
-        activityTotal: null,
-        activityTitle: null,
-        lessonTitle: sessionLesson?.title || null,
-        attempts: 0,
-        percentage: 100,
-        criteriaMatched: [] as string[],
-        criteriaMissing: [] as string[],
-        startedAt: s.startedAt,
-        lastActivityAt: s.lastActivityAt,
-        activeMinutes,
-        messageCount: s._count.messages,
-        grade: s.grade ?? calculatePartialGrade(s.activities, s.plan),
-        ...calculateSessionRubric(s.activities, s.plan),
-        completedAt: s.completedAt,
-      }
-    })
-
-  // Abandoned students (endedAt set, not completed): se fueron sin terminar.
-  // Su nota parcial refleja lo que alcanzaron a hacer.
-  const abandonedStudents = allSessions
-    .filter(s => !!s.endedAt && !s.completedAt)
-    .map(s => {
-      const meta = s.activityId ? activityMeta[s.activityId] : null
-      const currentActivityProgress = s.activities.find(a => a.activityId === s.activityId)
-      const activeMinutes = Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 1000 / 60)
-      return {
-        userId: s.user.id,
-        name: s.user.name,
-        email: s.user.email,
-        image: s.user.image,
-        sessionId: s.id,
-        activityIndex: meta?.index || null,
-        activityTotal: meta?.total || null,
-        activityTitle: meta?.title || null,
-        lessonTitle: meta?.lessonTitle || null,
-        attempts: currentActivityProgress?.attempts || 0,
-        percentage: s.progress || 0,
-        startedAt: s.startedAt,
-        lastActivityAt: s.lastActivityAt,
-        endedAt: s.endedAt,
-        activeMinutes,
-        messageCount: s._count.messages,
-        grade: s.grade ?? calculatePartialGrade(s.activities, s.plan),
-        ...calculateSessionRubric(s.activities, s.plan),
-      }
-    })
-
-  // === ACTIVITY FUNNEL (per lesson) ===
-  const lessonFunnels = course.lessons.map(lesson => {
-    const content = lesson.contentJson as LessonContent | null
-    const activities = content?.activities || []
-    const lessonSessions = lesson.sessions
-    const totalStudents = new Set(lessonSessions.map(s => s.userId)).size
-
-    const funnel = activities.map((act, idx) => {
-      // Count completions across all sessions for this activity
-      const completions = lessonSessions.filter(s =>
-        s.activities.some(a => a.activityId === act.id && a.status === 'COMPLETED')
-      )
-
-      // Collect attempts and understanding levels
-      const allAttempts = lessonSessions
-        .map(s => s.activities.find(a => a.activityId === act.id))
-        .filter(Boolean) as typeof lessonSessions[0]['activities']
-
-      const attemptCounts = allAttempts.map(a => a.attempts)
-      const avgAttempts = attemptCounts.length > 0
-        ? +(attemptCounts.reduce((a, b) => a + b, 0) / attemptCounts.length).toFixed(1)
-        : 0
-
-      // Understanding level distribution. Mantenemos las claves LEGADAS en la
-      // salida para no romper el frontend; normalizamos new→old para contar
-      // tanto intentos históricos (memorized…) como nuevos (beginning…).
-      const levels: Record<string, number> = { memorized: 0, understood: 0, applied: 0, analyzed: 0 }
-      for (const ap of allAttempts) {
-        const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { understanding_level?: string } }> } | null
-        const lastAttempt = evidence?.attempts?.at(-1)
-        levels[LEGACY_LABEL[normalizeLevel(lastAttempt?.analysis?.understanding_level)]]++
-      }
-
-      // Most failed criterion
-      const allMissing: string[] = []
-      for (const ap of allAttempts) {
-        const evidence = ap.evidenceData as { attempts?: Array<{ analysis?: { criteriaMissing?: string[] } }> } | null
-        for (const attempt of evidence?.attempts || []) {
-          for (const criterion of attempt.analysis?.criteriaMissing || []) {
-            allMissing.push(criterion)
-          }
-        }
-      }
-      const criteriaFrequency: Record<string, number> = {}
-      for (const c of allMissing) {
-        criteriaFrequency[c] = (criteriaFrequency[c] || 0) + 1
-      }
-      const mostFailedCriterion = Object.entries(criteriaFrequency)
-        .sort((a, b) => b[1] - a[1])[0]?.[0] || null
-
-      return {
-        id: act.id,
-        index: idx + 1,
-        title: tituloActividad(act, idx),
-        completed: completions.length,
-        total: totalStudents,
-        percentage: totalStudents > 0 ? Math.round((completions.length / totalStudents) * 100) : 0,
-        avgAttempts,
-        comprehension: levels,
-        mostFailedCriterion,
-      }
-    })
-
-    return {
-      lessonId: lesson.id,
-      lessonTitle: lesson.title,
-      totalStudents,
-      funnel,
-    }
-  })
-
-  // === STUDENT TABLE ===
-  const uniqueStudents = new Map<string, {
-    id: string
-    name: string | null
-    email: string | null
-    image: string | null
-    sessionsCompleted: number
-    totalSessions: number
-    avgGrade: number | null
-    lastActivity: Date
-    status: 'active' | 'inactive' | 'completed'
-  }>()
-
-  for (const s of allSessions) {
-    const existing = uniqueStudents.get(s.user.id)
-    const isCompleted = !!s.completedAt
-    const isActive = !s.completedAt && s.lastActivityAt > twoHoursAgo
-
-    if (!existing) {
-      uniqueStudents.set(s.user.id, {
-        id: s.user.id,
-        name: s.user.name,
-        email: s.user.email,
-        image: s.user.image,
-        sessionsCompleted: isCompleted ? 1 : 0,
-        totalSessions: 1,
-        avgGrade: s.grade,
-        lastActivity: s.lastActivityAt,
-        status: isActive ? 'active' : isCompleted ? 'completed' : 'inactive',
-      })
-    } else {
-      existing.sessionsCompleted += isCompleted ? 1 : 0
-      existing.totalSessions += 1
-      if (s.grade !== null) {
-        existing.avgGrade = existing.avgGrade !== null
-          ? Math.round((existing.avgGrade + s.grade) / 2)
-          : s.grade
-      }
-      if (s.lastActivityAt > existing.lastActivity) {
-        existing.lastActivity = s.lastActivityAt
-      }
-      if (isActive) existing.status = 'active'
-    }
-  }
-
-  const students = Array.from(uniqueStudents.values())
-    .sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime())
-
-  // === GENERATE PARTIAL REPORTS (async, don't block response) ===
-  // Check for 24h+ inactive sessions without reports
-  checkAndGeneratePartialReports(courseId).then(count => {
-    if (count > 0) {
-      logger.info('dashboard.partial_reports_generated', { courseId, count })
-    }
-  }).catch((err: unknown) => {
-    logger.error('dashboard.partial_reports_failed', { courseId, error: String(err) })
-  })
-
-  // === INACTIVITY ALERTS ===
-  const twentyFourHoursAgoAlert = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  const inactivityAlerts = allSessions
-    .filter(s => !s.completedAt && s.lastActivityAt <= twentyFourHoursAgoAlert)
-    .map(s => {
-      const meta = s.activityId ? activityMeta[s.activityId] : null
-      const hoursInactive = Math.round((Date.now() - s.lastActivityAt.getTime()) / 1000 / 60 / 60)
-      return {
-        userId: s.user.id,
-        name: s.user.name,
-        email: s.user.email,
-        lessonTitle: meta?.lessonTitle || null,
-        activityIndex: meta?.index || null,
-        activityTotal: meta?.total || null,
-        activityTitle: meta?.title || null,
-        hoursInactive,
-        hasReport: !!allSessions.find(sess => sess.user.id === s.user.id && sess.id === s.id),
-      }
-    })
-
-  // === SECTIONS LIST for filter ===
-  const courseSections = await prisma.section.findMany({
-    where: { courseId },
+  const { alcance, viendoComo } = await alcanceEfectivo(result)
+  const filtro = alcance.role === 'SUPERADMIN' ? {} : seccionesVisibles(alcance)
+  const secciones = await prisma.section.findMany({
+    where: { AND: [{ courseId }, { isArchived: false }, filtro] },
     orderBy: [{ period: { name: 'desc' } }, { name: 'asc' }],
     select: {
       id: true,
       name: true,
       period: { select: { name: true } },
-      _count: { select: { enrollments: true } },
+      enrollments: {
+        select: {
+          userId: true,
+          user: { select: { id: true, name: true, email: true, phone: true } },
+        },
+      },
+      schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true } },
     },
   })
+  if (secciones.length === 0 && alcance.role !== 'SUPERADMIN') {
+    return NextResponse.json(
+      { error: 'Ninguna sección de este curso está a tu alcance' },
+      { status: 403 }
+    )
+  }
+  if (filterSectionId && !secciones.some((s) => s.id === filterSectionId)) {
+    return NextResponse.json({ error: 'Esa sección no está a tu alcance' }, { status: 403 })
+  }
+  const activas = filterSectionId ? secciones.filter((s) => s.id === filterSectionId) : secciones
 
-  return NextResponse.json({
+  // Alumno → su sección (la primera que lo tenga) y datos de contacto.
+  const alumnos = new Map<
+    string,
+    { user: { id: string; name: string | null; email: string | null; phone: string | null }; sectionId: string }
+  >()
+  for (const s of activas) {
+    for (const e of s.enrollments) {
+      if (!alumnos.has(e.userId)) alumnos.set(e.userId, { user: e.user, sectionId: s.id })
+    }
+  }
+  const userIds = [...alumnos.keys()]
+
+  // Cierre por (sección, lección). Si la sección no programó la lección, la
+  // clave no existe y se cae al horario de la lección.
+  const cierrePorSeccion = new Map<string, Date | null>()
+  for (const s of activas) {
+    for (const h of s.schedules) {
+      cierrePorSeccion.set(`${s.id}:${h.lessonId}`, cierreDeVentana(h.availableAt, h.closesAfterHours))
+    }
+  }
+  const enVivo = activas.some((s) =>
+    s.schedules.some((h) => {
+      const cierre = cierreDeVentana(h.availableAt, h.closesAfterHours)
+      return !!h.availableAt && !!cierre && h.availableAt <= ahora && ahora < cierre
+    })
+  )
+
+  const lessons = await prisma.lesson.findMany({
+    where: {
+      courseId,
+      OR: [{ isPublished: true }, { sessions: { some: { isTest: false } } }],
+    },
+    orderBy: { order: 'asc' },
+    select: {
+      id: true,
+      title: true,
+      contentJson: true,
+      availableAt: true,
+      closesAfterHours: true,
+      sessions: {
+        where: { isTest: false, userId: { in: userIds } },
+        select: {
+          id: true,
+          userId: true,
+          completedAt: true,
+          grade: true,
+          startedAt: true,
+          lastActivityAt: true,
+          activityId: true,
+          progress: true,
+          activities: {
+            select: {
+              activityId: true,
+              status: true,
+              attempts: true,
+              tangentCount: true,
+              completedAt: true,
+              evidenceData: true,
+              passedCriteria: true,
+            },
+          },
+          _count: { select: { messages: { where: { role: 'user' } } } },
+        },
+      },
+    },
+  })
+  const marcas = await ultimaMarcaPorAlumno(userIds)
+
+  const filas: FilaMonitor[] = []
+  const pendientes = new Map<string, PendienteMonitor>()
+  const funnels: EmbudoLeccion[] = []
+
+  const agregarPendiente = (userId: string, leccion: LeccionPendiente) => {
+    const alumno = alumnos.get(userId)
+    if (!alumno) return
+    let p = pendientes.get(userId)
+    if (!p) {
+      p = {
+        userId,
+        name: alumno.user.name,
+        email: alumno.user.email,
+        phone: alumno.user.phone,
+        seguimiento: aDTO(marcas.get(userId)),
+        lecciones: [],
+      }
+      pendientes.set(userId, p)
+    }
+    p.lecciones.push(leccion)
+  }
+
+  for (const lesson of lessons) {
+    const content = lesson.contentJson as LessonContent | null
+    const actividades = content?.activities ?? []
+    const plan: PlanPorActividad = new Map(actividades.map((a) => [a.id, a as ActividadDelPlan]))
+    const total = actividades.length
+
+    const porAlumno = new Map<string, typeof lesson.sessions>()
+    for (const s of lesson.sessions) {
+      const lista = porAlumno.get(s.userId)
+      if (lista) lista.push(s)
+      else porAlumno.set(s.userId, [s])
+    }
+    const sesionesEmbudo: SesionDeEmbudo[] = []
+
+    for (const [userId, lista] of porAlumno) {
+      const s = representativa(lista)
+      const alumno = alumnos.get(userId)
+      if (!s || !alumno) continue
+      const clave = `${alumno.sectionId}:${lesson.id}`
+      const cierre = cierrePorSeccion.has(clave)
+        ? (cierrePorSeccion.get(clave) ?? null)
+        : cierreDeVentana(lesson.availableAt, lesson.closesAfterHours)
+      const completadas = s.activities.filter((a) => a.status === 'COMPLETED')
+      const { estado, avance } = estadoDeSesion(
+        { completedAt: s.completedAt, lastActivityAt: s.lastActivityAt, completadas: completadas.length },
+        cierre,
+        ahora
+      )
+      const idx = actividades.findIndex((a) => a.id === s.activityId)
+      const actual = s.activities.find((a) => a.activityId === s.activityId)
+      const ultimo = (actual?.evidenceData as Evidencia)?.attempts?.at(-1)
+      const maximo = (s.activityId && plan.get(s.activityId)?.verification?.max_attempts) || 3
+      const porLimite = completadas
+        .filter((a) => a.passedCriteria === false)
+        .sort((a, b) => (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0))[0]
+      const porLimiteIdx = porLimite ? actividades.findIndex((a) => a.id === porLimite.activityId) : -1
+      const marca = marcas.get(userId) ?? null
+
+      filas.push({
+        userId,
+        name: alumno.user.name,
+        email: alumno.user.email,
+        sessionId: s.id,
+        lessonId: lesson.id,
+        lessonTitle: lesson.title,
+        estado,
+        avance,
+        activityIndex: idx >= 0 ? idx + 1 : null,
+        activityTotal: total || null,
+        activityTitle: idx >= 0 ? tituloActividad(actividades[idx], idx) : null,
+        percentage: s.progress ?? 0,
+        startedAt: s.startedAt.toISOString(),
+        lastActivityAt: s.lastActivityAt.toISOString(),
+        cierre: cierre?.toISOString() ?? null,
+        minutos: Math.round((s.lastActivityAt.getTime() - s.startedAt.getTime()) / 60_000),
+        messageCount: s._count.messages,
+        grade: s.grade ?? notaParcial(s.activities, plan),
+        nivel: nivelDeSesion(s.activities, plan),
+        intentos:
+          actual && estado !== 'terminada'
+            ? { actuales: actual.attempts, maximo, aviso: avisoDeIntentos(actual.attempts, maximo) }
+            : null,
+        criterioFaltante: ultimo?.analysis?.criteriaMissing?.[0] ?? null,
+        porLimite:
+          porLimiteIdx >= 0
+            ? { index: porLimiteIdx + 1, title: tituloActividad(actividades[porLimiteIdx], porLimiteIdx) }
+            : null,
+        seguimiento: aDTO(marca),
+      })
+
+      if (estado === 'sin-terminar' && avance && !atendido(marca, s.lastActivityAt)) {
+        agregarPendiente(userId, {
+          lessonId: lesson.id,
+          lessonTitle: lesson.title,
+          estado: avance,
+          fecha: s.lastActivityAt.toISOString(),
+          activityIndex: idx >= 0 ? idx + 1 : null,
+          activityTotal: total || null,
+        })
+      }
+
+      sesionesEmbudo.push({
+        userId,
+        completedAt: s.completedAt,
+        punteroIdx: idx,
+        progresos: new Map(s.activities.map((a) => [a.activityId, progresoEmbudo(a)])),
+      })
+    }
+
+    // «No entró»: matriculado en una sección que programó la lección, ventana
+    // cerrada y ninguna sesión. Es la fila que el Monitor nunca tuvo.
+    for (const [userId, alumno] of alumnos) {
+      if (porAlumno.has(userId)) continue
+      const cierre = cierrePorSeccion.get(`${alumno.sectionId}:${lesson.id}`)
+      if (!cierre || cierre > ahora) continue
+      if (atendido(marcas.get(userId), cierre)) continue
+      agregarPendiente(userId, {
+        lessonId: lesson.id,
+        lessonTitle: lesson.title,
+        estado: 'no-entro',
+        fecha: cierre.toISOString(),
+        activityIndex: null,
+        activityTotal: null,
+      })
+    }
+
+    funnels.push({
+      lessonId: lesson.id,
+      lessonTitle: lesson.title,
+      totalStudents: porAlumno.size,
+      funnel: actividades.map((act, i) => {
+        const paso = pasoDelEmbudo(i, act.id, sesionesEmbudo)
+        return {
+          id: act.id,
+          index: i + 1,
+          title: tituloActividad(act, i),
+          total: porAlumno.size,
+          percentage: porAlumno.size ? Math.round((paso.completadas / porAlumno.size) * 100) : 0,
+          ...paso,
+        }
+      }),
+    })
+  }
+
+  filas.sort(
+    (a, b) =>
+      ORDEN_ESTADO[a.estado] - ORDEN_ESTADO[b.estado] ||
+      b.lastActivityAt.localeCompare(a.lastActivityAt)
+  )
+
+  const ultimo = ultimoDisparoDeReportes.get(courseId) ?? 0
+  if (Date.now() - ultimo > CADA_MS) {
+    ultimoDisparoDeReportes.set(courseId, Date.now())
+    checkAndGeneratePartialReports(courseId)
+      .then((count) => {
+        if (count > 0) logger.info('dashboard.partial_reports_generated', { courseId, count })
+      })
+      .catch((err: unknown) => {
+        logger.error('dashboard.partial_reports_failed', { courseId, error: String(err) })
+      })
+  }
+
+  const respuesta: RespuestaMonitor = {
     course: {
       id: course.id,
       title: course.title,
       career: course.career,
       instructor: course.user?.name || 'Sin instructor',
     },
-    sections: courseSections,
-    monitoring: {
-      active: activeStudents,
-      inactive: inactiveStudents,
-      abandoned: abandonedStudents,
-      completed: completedStudents,
-    },
-    alerts: inactivityAlerts,
-    funnels: lessonFunnels,
-    students,
-  })
+    viendoComo,
+    sections: secciones.map((s) => ({
+      id: s.id,
+      name: s.name,
+      period: s.period,
+      _count: { enrollments: s.enrollments.length },
+    })),
+    enVivo,
+    filas,
+    pendientes: [...pendientes.values()].sort((a, b) => b.lecciones.length - a.lecciones.length),
+    funnels,
+  }
+  return NextResponse.json(respuesta)
 }

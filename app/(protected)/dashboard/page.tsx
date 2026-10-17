@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { seccionesVisibles } from '@/lib/alcance'
 import { alcanceEfectivo } from '@/lib/ver-como'
-import { matrizDelCurso } from '@/lib/asistencia'
+import { matrizDelCurso, pesoDeFila } from '@/lib/asistencia'
+import { formatTime } from '@/lib/formatters'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,9 +65,11 @@ export default async function MonitorPage() {
   const resumenes = await Promise.all(
     cursoIds.map(async (id) => {
       const m = await matrizDelCurso(id, filtro, ahora)
-      const enRiesgo = m.alumnos.filter((a) =>
-        Object.values(a.celdas).some((c) => c.estado === 'no-entro')
-      ).length
+      // La misma regla que ordena la matriz: cuenta lo que quedó con la
+      // ventana cerrada (no entró, abrió sin avanzar, a medias). Antes solo
+      // contaba «no entró», y el que abrió todo sin avanzar nada salía «sin
+      // señales». Los que desertaron no se llaman por una sesión.
+      const enRiesgo = m.alumnos.filter((a) => !a.desertor && pesoDeFila(a) > 0).length
       return { id, matriz: m, enRiesgo }
     })
   )
@@ -101,7 +104,7 @@ export default async function MonitorPage() {
                 : `${abiertas.length} sesiones abiertas ahora`}
             </span>
             <span className="text-sm text-gray-600">
-              cierra {abiertas[0].cierra.toLocaleTimeString('es-PE', { hour: 'numeric', minute: '2-digit', hour12: true })}
+              cierra {formatTime(abiertas[0].cierra)}
             </span>
           </div>
         </div>

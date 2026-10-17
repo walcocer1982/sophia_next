@@ -7,6 +7,9 @@ import { alcanceEfectivo } from '@/lib/ver-como'
 import { tituloActividad } from '@/lib/actividad-titulo'
 import { normalizeLevel } from '@/lib/levels'
 import { otrosCursosDelAlumno } from '@/lib/asistencia'
+import { formatDate, formatDateLong } from '@/lib/formatters'
+import { ESTADOS, MOTIVOS, historialDeSeguimiento } from '@/lib/seguimiento'
+import { SeguimientoForm } from '@/components/monitor/seguimiento-form'
 
 export const dynamic = 'force-dynamic'
 
@@ -148,6 +151,13 @@ export default async function EstudiantePage({
   // Solo cuentan las sesiones que su sección programó: el resto no se le puede
   // reclamar.
   const otros = await otrosCursosDelAlumno(studentId, filtro, courseId, ahora)
+  // Seguimiento manual (lib/seguimiento.ts): la marca vigente es la primera.
+  const historial = await historialDeSeguimiento(studentId)
+  const vigente = historial[0] ?? null
+  const cursosParaMotivo = [
+    { id: curso.id, title: curso.title },
+    ...otros.map((o) => ({ id: o.courseId, title: o.titulo })),
+  ]
 
   const deSuPlan = filas.filter((f) => f.estado !== 'no-programada')
   const hechas = deSuPlan.filter((f) => f.estado === 'terminada').length
@@ -162,7 +172,14 @@ export default async function EstudiantePage({
         >
           ← {curso.title}
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight">{alumno.name ?? alumno.email}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {alumno.name ?? alumno.email}
+          {vigente?.estado === 'DESERTO' && (
+            <span className="ml-3 align-middle rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+              Desertó
+            </span>
+          )}
+        </h1>
         <p className="text-sm text-gray-500">
           {matricula.section.name} · {matricula.section.sede?.code ?? '—'} ·{' '}
           {matricula.section.period.name}
@@ -187,6 +204,45 @@ export default async function EstudiantePage({
           )}
         </p>
       </div>
+
+      <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Seguimiento</h2>
+            <p className="mt-0.5 text-sm text-gray-600">
+              {vigente ? (
+                <>
+                  <span className="font-medium text-gray-900">{ESTADOS[vigente.estado].texto}</span>
+                  {vigente.motivo && <> · {MOTIVOS[vigente.motivo].toLowerCase()}</>}
+                  {vigente.cursoTitulo && <> ({vigente.cursoTitulo})</>}
+                  {' · '}
+                  {vigente.autor} · {formatDate(vigente.fecha)}
+                </>
+              ) : (
+                'Sin marcas. Lo que anotes acá se ve en todos sus cursos.'
+              )}
+            </p>
+            {vigente?.nota && <p className="mt-1 text-sm text-gray-500">«{vigente.nota}»</p>}
+          </div>
+          <SeguimientoForm userId={studentId} cursos={cursosParaMotivo} />
+        </div>
+        {historial.length > 1 && (
+          <ul className="space-y-1 border-t border-gray-100 pt-3 text-xs text-gray-500">
+            {historial.slice(1).map((m) => (
+              <li key={m.id} className="flex gap-3">
+                <span className="w-14 shrink-0 tabular-nums">{formatDate(m.fecha)}</span>
+                <span>
+                  {ESTADOS[m.estado].texto}
+                  {m.motivo && <> · {MOTIVOS[m.motivo].toLowerCase()}</>}
+                  {' · '}
+                  {m.autor}
+                  {m.nota && <> · «{m.nota}»</>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <div className="space-y-3">
         {filas.map(({ leccion, ses, estado, cierre, acts }) => {
@@ -214,10 +270,10 @@ export default async function EstudiantePage({
                   <h2 className="font-semibold text-gray-900">{leccion.title}</h2>
                   <p className="mt-0.5 text-sm text-gray-500">
                     {estado === 'no-entro' &&
-                      `No entró · cerró el ${cierre?.toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}`}
+                      `No entró · cerró el ${cierre ? formatDateLong(cierre) : '—'}`}
                     {estado === 'pendiente' && 'Aún abierta'}
                     {ses &&
-                      `${ses.startedAt.toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · ${minutos} min`}
+                      `${formatDateLong(ses.startedAt)} · ${minutos} min`}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
