@@ -85,3 +85,14 @@ test('la comprobación suma una fila de peso 1: fallarla toda no hunde la nota d
   // Peso 1 frente a práctica (3) + cierre (4): fallar todo baja como mucho un octavo
   assert.ok(todoMal >= Math.floor(sinComprobacion * 7 / 8), JSON.stringify({ sinComprobacion, todoMal }))
 })
+
+test('si el alumno ya movió el ecualizador, la directiva lo dice y pide no repetir la acción', async () => {
+  const { directivaSiYaMovio, presetState } = await import('../lib/simulator')
+  const inicial = initialState(nota)
+  assert.equal(directivaSiYaMovio(nota, inicial), null)
+  const movido = { ...inicial, values: { ...inicial.values, tc2: 0 }, lastChange: { variable: 'tc2', from: 12, to: 0 } }
+  const d = directivaSiYaMovio(nota, movido)
+  assert.ok(d && d.includes('MOVIÓ TC2 DE 12 A 0') && d.includes('NO le pidas'), d ?? 'sin directiva')
+  const conDosCasos = { ...nota, presets: [...nota.presets, { label: 'Semana del TC2', values: { cv: 10, ep: 11, ef: 14, tc1: 14, tc2: 14 } }] }
+  assert.ok(directivaSiYaMovio(conDosCasos, presetState(conDosCasos, 'Semana del TC2'))?.includes('CARGÓ EL CASO «SEMANA DEL TC2»'))
+})

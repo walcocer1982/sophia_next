@@ -326,3 +326,81 @@
   animation: particle-float-fast-4 1.9s ease-in-out infinite;
   animation-delay: 1.2s;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Tema noche de la lección (14 oct 2026): la distribución «Cuaderno» con los
+   colores del kiosko del World Mining Congress — navy y amarillo CETEMIN como
+   único acento. Va sin @layer a propósito: así le gana a las utilidades de
+   Tailwind dentro de `.tema-noche` y los componentes que ya existían (material,
+   ecualizador, alternativas, caja de texto) se ven oscuros sin reescribirlos.
+   Si agregas un componente nuevo a la lección, dale clases propias oscuras en
+   vez de sumar reglas aquí.
+   ════════════════════════════════════════════════════════════════════════ */
+.tema-noche {
+  --noche-fondo: #0a1628;
+  --noche-hoja: #0c1b30;
+  --noche-tarjeta: #0f2238;
+  --noche-tarjeta-2: #132a44;
+  --noche-linea: rgba(255, 255, 255, 0.09);
+  --noche-texto: #e6edf1;
+  --noche-suave: #a9b8c2;
+  --noche-tenue: #7f909b;
+  --noche-amarillo: #fbc50b;
+  --noche-navy: #09222d;
+  background-color: var(--noche-fondo);
+  color: var(--noche-texto);
+  color-scheme: dark;
+}
+/* Superficies */
+.tema-noche .bg-white,
+.tema-noche .bg-gray-50,
+.tema-noche .bg-slate-50 { background-color: var(--noche-tarjeta); }
+.tema-noche .bg-gray-100,
+.tema-noche .bg-slate-100 { background-color: var(--noche-tarjeta-2); }
+.tema-noche .hover\:bg-gray-50:hover,
+.tema-noche .hover\:bg-gray-100:hover { background-color: var(--noche-tarjeta-2); }
+/* Bordes */
+.tema-noche .border-gray-100,
+.tema-noche .border-gray-200,
+.tema-noche .border-gray-300,
+.tema-noche .border-gray-400 { border-color: var(--noche-linea); }
+/* Texto */
+.tema-noche .text-gray-900,
+.tema-noche .text-gray-800,
+.tema-noche .text-\[\#09222d\] { color: var(--noche-texto); }
+.tema-noche .text-gray-700,
+.tema-noche .text-gray-600 { color: var(--noche-suave); }
+.tema-noche .text-gray-500,
+.tema-noche .text-gray-400 { color: var(--noche-tenue); }
+/* Lo navy (botones activos, círculos de letra) pasa a amarillo con texto navy */
+.tema-noche .bg-\[\#09222d\] { background-color: var(--noche-amarillo); }
+.tema-noche .bg-\[\#09222d\].text-white,
+.tema-noche .bg-\[\#09222d\] .text-white { color: var(--noche-navy); }
+.tema-noche .bg-\[\#09222d\].text-\[\#fbc50b\] { color: var(--noche-navy); }
+.tema-noche .border-\[\#09222d\] { border-color: var(--noche-amarillo); }
+.tema-noche .hover\:border-\[\#09222d\]:hover { border-color: var(--noche-amarillo); }
+.tema-noche .accent-\[\#09222d\] { accent-color: var(--noche-amarillo); }
+/* Resaltados de tabla y estados */
+.tema-noche .bg-amber-50 { background-color: rgba(251, 197, 11, 0.08); }
+.tema-noche .bg-amber-100 { background-color: rgba(251, 197, 11, 0.16); }
+.tema-noche .text-amber-900,
+.tema-noche .text-amber-800 { color: #f6d77a; }
+.tema-noche .border-amber-200,
+.tema-noche .border-amber-300 { border-color: rgba(251, 197, 11, 0.3); }
+.tema-noche .bg-green-50 { background-color: rgba(31, 122, 67, 0.22); }
+.tema-noche .text-green-900,
+.tema-noche .text-green-800,
+.tema-noche .text-green-700 { color: #8fe0ad; }
+.tema-noche .bg-red-50 { background-color: rgba(161, 42, 42, 0.25); }
+.tema-noche .text-red-900,
+.tema-noche .text-red-700 { color: #f5a3a3; }
+.tema-noche .border-red-200 { border-color: rgba(245, 163, 163, 0.3); }
+/* La franja del peso del ecualizador, sobre fondo oscuro */
+.tema-noche .bg-\[\#fbc50b\]\/55 { background-color: rgba(251, 197, 11, 0.35); }
+/* Barras de desplazamiento finas y oscuras: la gris del sistema parecía un
+   borde roto sobre el navy (observación de Walther, 14 oct 2026). */
+.tema-noche,
+.tema-noche * { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+.tema-noche ::-webkit-scrollbar { width: 8px; height: 8px; }
+.tema-noche ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 8px; }
+.tema-noche ::-webkit-scrollbar-track { background: transparent; }

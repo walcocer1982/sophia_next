@@ -16,6 +16,7 @@ import {
   FileText,
   GitBranch,
   ImageIcon,
+  Pin,
   SlidersHorizontal,
   Maximize2,
   Sigma,
@@ -86,19 +87,37 @@ export function SupportBlockCard({ block, pinned = false, startCollapsed = false
         enfocado ? 'border-[#fbc50b] ring-2 ring-[#fbc50b]/60' : 'border-gray-200',
       )}
     >
-      <button
-        type="button"
-        onClick={() => setAbierto((v) => !v)}
-        aria-expanded={abierto}
-        className="w-full min-h-11 flex items-center gap-2 px-3.5 py-2.5 bg-gray-50 border-b border-gray-100 text-left"
-      >
-        <Icono className="h-4 w-4 shrink-0 text-[#09222d]" aria-hidden />
-        <span className="flex-1 text-sm font-semibold text-[#09222d] leading-snug">{block.title}</span>
-        {pinned && (
-          <span className="rounded-full bg-[#09222d] px-2 py-0.5 text-[11px] font-bold text-[#fbc50b]">Fija</span>
+      {/* Encabezado: el título pliega; «Ampliar» es un ícono aparte (antes era un
+          botón a todo lo ancho bajo cada bloque y «Fija» un chip que competía
+          con el título; 13 oct 2026). */}
+      <div className="flex items-stretch bg-gray-50 border-b border-gray-100">
+        <button
+          type="button"
+          onClick={() => setAbierto((v) => !v)}
+          aria-expanded={abierto}
+          className="min-w-0 flex-1 min-h-11 flex items-center gap-2 px-3.5 py-2.5 text-left"
+        >
+          <Icono className="h-4 w-4 shrink-0 text-[#09222d]" aria-hidden />
+          <span className="flex-1 text-sm font-semibold text-[#09222d] leading-snug">{block.title}</span>
+          {pinned && (
+            <span className="shrink-0 text-gray-400" title="De una actividad anterior">
+              <Pin className="h-3.5 w-3.5" aria-hidden />
+              <span className="sr-only">De una actividad anterior</span>
+            </span>
+          )}
+          <ChevronDown className={cn('h-4 w-4 shrink-0 text-gray-500 transition-transform', abierto && 'rotate-180')} aria-hidden />
+        </button>
+        {ampliable && (
+          <button
+            type="button"
+            onClick={() => setAmpliado(true)}
+            aria-label={`Ampliar ${block.title}`}
+            className="w-11 shrink-0 flex items-center justify-center border-l border-gray-100 text-gray-500 hover:bg-gray-100 hover:text-[#09222d]"
+          >
+            <Maximize2 className="h-4 w-4" aria-hidden />
+          </button>
         )}
-        <ChevronDown className={cn('h-4 w-4 text-gray-500 transition-transform', abierto && 'rotate-180')} aria-hidden />
-      </button>
+      </div>
 
       {abierto && (
         <div>
@@ -106,17 +125,6 @@ export function SupportBlockCard({ block, pinned = false, startCollapsed = false
             <p className="px-3.5 pt-2 text-xs text-gray-600">Fuente: {block.source}</p>
           )}
           <BlockBody block={block} isTest={isTest} />
-          {ampliable && (
-            <div className="px-3.5 pb-3.5">
-              <button
-                type="button"
-                onClick={() => setAmpliado(true)}
-                className="w-full min-h-11 rounded-lg border border-gray-300 bg-white text-sm text-gray-800 flex items-center justify-center gap-1.5 hover:bg-gray-50"
-              >
-                <Maximize2 className="h-4 w-4" aria-hidden /> Ampliar
-              </button>
-            </div>
-          )}
         </div>
       )}
 

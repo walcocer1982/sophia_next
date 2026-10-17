@@ -1,5 +1,14 @@
 /**
- * EVA-NOTA v4 — «Asistencia y Sistema de Evaluación»: conversar sobre el panel.
+ * EVA-NOTA v5 — «Asistencia y Sistema de Evaluación»: un pedido por actividad.
+ *
+ * v5 (13 oct 2026): en la prueba de Walther la actividad 7 pedía decidir qué
+ * criterio subir Y reescribir una oración; el desglose se gastó en lo primero,
+ * la actividad avanzó por tope y Sophia pidió la reescritura junto con la
+ * pregunta de la 8. Ahora la 7 es la decisión y la 7b la reescritura, y las
+ * preguntas de 2, 3, 5, 6 y 8 piden una sola cosa (ver lib/planner/pedidos.ts).
+ * Respaldo de la v4 en investigacion/eva-nota-v4.backup.2026-10-13.json.
+ *
+ * v4 — conversar sobre el panel.
  *
  * v4 (7 oct 2026, spec del panel §16.5): ninguna actividad pide sumar. La nota
  * se entiende moviendo un ecualizador (actividades 4 y 6); las alternativas
@@ -47,9 +56,13 @@
 import { existsSync, writeFileSync } from 'node:fs'
 import { prisma } from '../lib/prisma'
 import { GeneratedStructureSchema } from '../lib/planner/validation'
+import { avisosDePedidos } from '../lib/planner/pedidos'
+import { avisosDeTitulos } from '../lib/planner/titulos'
 import type { Activity, LessonContent, SupportBlock } from '../types/lesson'
 
 const LESSON_SLUG = 'eva-nota-asistencia-y-sistema-de-evaluacion'
+// Regla de nombres (lib/planner/titulos.ts): el código EVA-NOTA queda en el slug.
+const TITULO = 'Asistencia y sistema de evaluación'
 
 // ─── Material de apoyo (panel derecho). Reemplaza a la lámina SVG subida a
 // Cloudinary: ahora la fórmula, el semáforo y los casos son datos de la
@@ -258,6 +271,8 @@ const activities: Activity[] = [
   {
     id: 'eva-nota-1',
     type: 'explanation',
+    title: 'Desaprobación por inasistencia',
+    subtitle: 'Caso Luis',
     complexity: 'simple',
     keyPointIndex: 0,
     teaching: {
@@ -285,11 +300,13 @@ const activities: Activity[] = [
   {
     id: 'eva-nota-2',
     type: 'practice',
+    title: 'Justificación de inasistencias',
+    subtitle: 'Caso Mario',
     complexity: 'moderate',
     keyPointIndex: 0,
     teaching: {
       agent_instruction:
-        'Confirma que Luis desaprobó por faltas (DPI) y explica la regla de asistencia de context.referencias en dos oraciones: llegar al 30 % de inasistencias desaprueba con nota 00, sin importar el promedio. Señala la tabla «Faltas en un curso de 10 sesiones» del panel, sin copiarla. Presenta el caso Mario (también en el panel) y plantea el paso cerrado. Cuando elija, pide la razón y pregunta qué le pasa a Mario si vuelve a faltar la próxima semana aunque tenga certificado. No le adelantes que justificar no borra la falta.',
+        'Confirma que Luis desaprobó por faltas (DPI) y explica la regla de asistencia de context.referencias en dos oraciones: llegar al 30 % de inasistencias desaprueba con nota 00, sin importar el promedio. Señala la tabla «Faltas en un curso de 10 sesiones» del panel, sin copiarla. Presenta el caso Mario (también en el panel) y plantea el paso cerrado. Cuando elija bien, confirma en una oración el procedimiento (avisar de inmediato por Blackboard y justificar dentro de 3 días) y haz solo la pregunta de qué le pasa a Mario si vuelve a faltar la próxima semana aunque tenga certificado. No le adelantes que justificar no borra la falta: que lo deduzca con la tabla.',
       target_length: '90-130 palabras',
       blocks: [SEMAFORO_10, CASO_MARIO],
     },
@@ -305,13 +322,13 @@ const activities: Activity[] = [
       max_attempts: 2,
     },
     verification: {
-      question: '¿Por qué esa? Y dime qué le pasa a Mario si vuelve a faltar la próxima semana, aunque tenga certificado.',
+      question: 'Mario ya justificó esta falta. Si vuelve a faltar la próxima semana, aunque tenga certificado, ¿qué le pasa?',
       success_criteria: {
         must_include: [
-          'Explica el procedimiento: reporte inmediato al instructor por Blackboard y justificación formal con documento válido dentro de 3 días calendario',
-          'Sabe que justificar no anula la falta: con esta queda en amarillo (2) y con la siguiente llega al 30 % y desaprueba por DPI',
+          'Sabe que la falta justificada sigue contando: justificar no la borra',
+          'Concluye que con la siguiente falta llega a 3 de 10 (30 %) y desaprueba por DPI',
         ],
-        critical: [2],
+        critical: [1],
         min_completeness: 60,
         understanding_level: 'achieved',
       },
@@ -324,11 +341,12 @@ const activities: Activity[] = [
   {
     id: 'eva-nota-3',
     type: 'practice',
+    title: 'Tolerancia y tardanza',
     complexity: 'simple',
     keyPointIndex: 1,
     teaching: {
       agent_instruction:
-        'Plantea la situación de la tardanza con el paso cerrado, sin explicar antes la tolerancia: la regla la tiene que deducir o recordar. Cuando elija, pide la tolerancia exacta (Art. 39 en context.referencias) y la diferencia entre tardanza e inasistencia para el 30 %. Si se equivoca, pregúntale cuántos minutos cree que son de tolerancia.',
+        'Plantea la situación de la tardanza con el paso cerrado, sin explicar antes la tolerancia: la regla la tiene que deducir o recordar. Cuando elija, pregunta solo hasta cuántos minutos es tardanza y desde cuándo cuenta como falta (Art. 39 en context.referencias). Si se equivoca, pregúntale cuántos minutos cree que son de tolerancia.',
       target_length: '50-80 palabras',
     },
     choice: {
@@ -343,11 +361,11 @@ const activities: Activity[] = [
       max_attempts: 2,
     },
     verification: {
-      question: '¿Cuál es la tolerancia exacta y qué diferencia hay entre tardanza e inasistencia para tu 30 %?',
+      question: '¿Hasta cuántos minutos es tardanza y desde cuándo ya cuenta como falta para tu 30 %?',
       success_criteria: {
         must_include: [
           'Tolerancia de 10 minutos en presencial (20 en virtual); pasado ese plazo cuenta como inasistencia',
-          'La tardanza no suma al 30 %; la inasistencia sí, y aun así conviene entrar para no perder la clase',
+          'La tardanza dentro de la tolerancia no suma al 30 %; la inasistencia sí',
         ],
         critical: [1],
         min_completeness: 60,
@@ -362,6 +380,8 @@ const activities: Activity[] = [
   {
     id: 'eva-nota-4',
     type: 'explanation',
+    title: 'Ponderación de la nota final',
+    subtitle: 'Caso Ana',
     complexity: 'moderate',
     keyPointIndex: 2,
     teaching: {
@@ -391,11 +411,13 @@ const activities: Activity[] = [
   {
     id: 'eva-nota-5',
     type: 'practice',
+    title: 'Trabajo colaborativo no entregado',
+    subtitle: 'Caso Rosa',
     complexity: 'moderate',
     keyPointIndex: 2,
     teaching: {
       agent_instruction:
-        'Recuerda en una oración que la fórmula sigue fija en el panel. Presenta el caso Rosa: sus datos y las cuentas ya hechas están en el panel («Caso: Rosa»); no los copies, menciona solo que sin TC2 queda en 10. Plantea el paso cerrado. Cuando elija, pide la razón y qué pasa si no entrega y si copia. No resuelvas nada: los números ya están dados.',
+        'Recuerda en una oración que la fórmula sigue fija en el panel. Presenta el caso Rosa: sus datos y las cuentas ya hechas están en el panel («Caso: Rosa»); no los copies, menciona solo que sin TC2 queda en 10. Plantea el paso cerrado. Cuando elija, pregunta solo por qué esa y no las otras. Si en su razón no aparece lo de no entregar o lo de copiar, pregúntale por esa opción en el turno siguiente. No resuelvas nada: los números ya están dados.',
       target_length: '90-130 palabras',
       blocks: [CASO_ROSA, ANTIPLAGIO],
     },
@@ -411,7 +433,7 @@ const activities: Activity[] = [
       max_attempts: 2,
     },
     verification: {
-      question: '¿Por qué esa? Explica qué pasa con la nota si no entrega y qué pasa si copia.',
+      question: '¿Por qué esa y no las otras?',
       success_criteria: {
         must_include: [
           'Un trabajo no entregado vale 0 y la deja en 10; no se compensa con el EF porque los pesos ya están fijos',
@@ -431,21 +453,27 @@ const activities: Activity[] = [
   {
     id: 'eva-nota-6',
     type: 'practice',
+    title: 'Prioridad entre evaluaciones',
+    subtitle: 'Semana del TC2',
     complexity: 'moderate',
     keyPointIndex: 3,
     teaching: {
       agent_instruction:
-        'Situación: la misma semana tiene el TC2 y el EF y solo alcanza a preparar bien uno. Pídele que cargue el caso «Semana del TC2» en el ecualizador del panel. Que baje el TC2 a 0 (no lo entrega) y diga qué nota ve; que lo devuelva a 14 y baje el EF a 10 (lo rinde con poca preparación) y diga qué nota ve. Pregunta cuál de las dos decisiones lo hace desaprobar y por qué. Luego, qué haría para que el EF no quede abandonado. No decidas por él.',
+        'Situación: la misma semana tiene el TC2 y el EF y solo alcanza a preparar bien uno. Pídele que cargue el caso «Semana del TC2» en el ecualizador del panel. Que baje el TC2 a 0 (no lo entrega) y diga qué nota ve; que lo devuelva a 14 y baje el EF a 10 (lo rinde con poca preparación) y diga qué nota ve. Pregunta cuál de las dos decisiones lo hace desaprobar y por qué. No decidas por él.',
       target_length: '50-90 palabras',
+      // El ecualizador es de la 4 y está fijado: acá se queda abierto; en las
+      // demás se pliega y vuelve al caso de Ana.
+      uses: ['ecualizador-nota'],
       first_question: 'Carga el caso «Semana del TC2» en el ecualizador: si no entregas el TC2, ¿qué crees que pasa con tu nota?',
     },
     verification: {
-      question: '¿Cuál de las dos decisiones te hace desaprobar y por qué? ¿Y qué harías para que el EF no quede abandonado?',
+      question: '¿Cuál de las dos decisiones te hace desaprobar y por qué?',
       success_criteria: {
         must_include: [
-          'Dice que no entregar el TC2 lo hace desaprobar y un EF bajo no, porque el TC2 pesa 25 % y un trabajo no entregado vale 0',
-          'Propone algo concreto para el EF: bloques cortos, repasar los CV, pedir ayuda a un compañero',
+          'Dice que no entregar el TC2 lo hace desaprobar (queda en 10) y un EF bajo no (queda en 13)',
+          'Lo explica por el peso: el TC2 pesa 25 % y un trabajo no entregado vale 0',
         ],
+        critical: [1],
         min_completeness: 60,
         understanding_level: 'achieved',
       },
@@ -454,47 +482,82 @@ const activities: Activity[] = [
     },
     commonMistakes: ['Cree que los exámenes siempre pesan más que los trabajos', 'Decide por el instructor y no por los pesos'],
   },
-  // 7 · Rúbrica: qué criterio subir primero, y reescribir con sustento
+  // 7 · Rúbrica: qué criterio subir primero
+  // (v5: antes también pedía reescribir la oración de la faja; eran dos tareas
+  // en una pregunta y el desglose se gastaba en la primera. Ahora es la 7b.)
   {
     id: 'eva-nota-7',
     type: 'practice',
+    title: 'Mejora según la rúbrica',
     complexity: 'moderate',
     keyPointIndex: 3,
     teaching: {
       agent_instruction:
-        'Explica que la rúbrica del TC tiene cinco criterios iguales de 0 a 4 y que la nota es la suma (13 = tres logrados y dos en proceso), con los datos de context.referencias. Las notas del equipo, los niveles del criterio 2 y el fragmento de la faja están en el panel: cítalos, no los copies. Pídele que mire las notas del equipo y diga qué criterio subiría primero para la segunda entrega y por qué. Si propone Conclusiones u Organización, pregúntale de dónde salen las conclusiones. Después pide que reescriba la oración del fragmento de la faja para que el Desarrollo técnico suba a Destacado. Acepta cualquier norma, parámetro o dato verosímil: lo que importa es que el sustento sea verificable.',
-      target_length: '100-140 palabras',
-      blocks: [RUBRICA_EQUIPO, CRITERIO_DESARROLLO, FRAGMENTO_FAJA],
+        'Explica que la rúbrica del TC tiene cinco criterios iguales de 0 a 4 y que la nota es la suma (13 = tres logrados y dos en proceso), con los datos de context.referencias. Las notas del equipo están en el panel: cítalas, no las copies. Pregunta solo qué criterio subiría primero para la segunda entrega y por qué. Si propone Conclusiones u Organización, pregúntale de dónde salen las conclusiones.',
+      target_length: '70-110 palabras',
+      blocks: [RUBRICA_EQUIPO],
     },
     verification: {
-      question: '¿Qué criterio subirías primero y por qué? Y reescribe esta oración del trabajo para que llegue a Destacado: «La faja transportadora falló porque estaba en mal estado».',
+      question: '¿Qué criterio subirías primero para la segunda entrega y por qué?',
       success_criteria: {
         must_include: [
+          'Elige el Desarrollo técnico (o lo pone antes que las Conclusiones)',
           'Explica que las conclusiones se desprenden del desarrollo: si el desarrollo está incompleto, no suben solas',
-          'Reescribe la oración con un sustento verificable: parámetro con unidades, norma con artículo o fuente del fabricante',
         ],
+        critical: [2],
         min_completeness: 60,
         understanding_level: 'achieved',
       },
       max_attempts: 3,
       open_ended: false,
     },
-    commonMistakes: ['Cree que la nota del TC es un promedio y no la suma', 'Agrega adjetivos («muy mal estado») en vez de un sustento verificable', 'Cree que con 13 exacto no hay riesgo'],
+    commonMistakes: ['Cree que la nota del TC es un promedio y no la suma', 'Cree que con 13 exacto no hay riesgo', 'Sube primero lo que parece más fácil (Organización) sin ver qué depende de qué'],
+  },
+  // 7b · Rúbrica: reescribir con sustento verificable
+  {
+    id: 'eva-nota-7b',
+    type: 'practice',
+    title: 'Sustento técnico verificable',
+    subtitle: 'Informe de la faja',
+    complexity: 'moderate',
+    keyPointIndex: 3,
+    teaching: {
+      agent_instruction:
+        'Los niveles del criterio 2 y el fragmento del TC están en el panel: cítalos, no los copies. Pide que reescriba la primera oración del fragmento para que el Desarrollo técnico llegue a Destacado. Acepta cualquier norma, parámetro o dato verosímil: lo que importa es que el sustento sea verificable. Si solo agrega adjetivos («muy mal estado») o una recomendación, pregúntale cómo lo comprobaría alguien que no estuvo ahí.',
+      target_length: '50-80 palabras',
+      blocks: [CRITERIO_DESARROLLO, FRAGMENTO_FAJA],
+    },
+    verification: {
+      question: 'Reescribe esta oración del trabajo para que el Desarrollo técnico llegue a Destacado: «La faja transportadora falló porque estaba en mal estado».',
+      success_criteria: {
+        must_include: [
+          'Reescribe la oración con un sustento verificable: parámetro con unidades, norma con artículo o dato del fabricante',
+          'Nombra la causa concreta de la falla, no solo un adjetivo («mal estado», «muy desgastada»)',
+        ],
+        critical: [1],
+        min_completeness: 60,
+        understanding_level: 'achieved',
+      },
+      max_attempts: 3,
+      open_ended: false,
+    },
+    commonMistakes: ['Agrega adjetivos («muy mal estado») en vez de un sustento verificable', 'Agrega una recomendación («hay que hacer mantenimiento») en vez de la causa'],
   },
   // 8 · Semáforo de su propio curso
   {
     id: 'eva-nota-8',
     type: 'reflection',
+    title: 'Diagnóstico de tu asistencia',
     complexity: 'simple',
     keyPointIndex: 0,
     teaching: {
       agent_instruction:
-        'Dile que mire el «Semáforo de faltas» del panel (no lo copies en el chat). Pide que ubique su curso actual (si no sabe cuántas sesiones tiene, que lo estime por semanas y días), diga cuántas faltas lleva, en qué color está y qué hace esta semana para no cambiar de color. No le digas el color: que lo lea en la tabla. Nunca digas que una falta se recupera o se borra: las faltas acumuladas no bajan.',
+        'Dile que mire el «Semáforo de faltas» del panel (no lo copies en el chat). Pide que ubique su curso actual en la tabla y diga en qué color está y qué hace esta semana para no pasar al siguiente. Si no dice cuántas sesiones tiene o cuántas faltas lleva, pregúntaselo en el turno siguiente (si no sabe las sesiones, que las estime por semanas y días). No le digas el color: que lo lea en la tabla. Nunca digas que una falta se recupera o se borra: las faltas acumuladas no bajan.',
       target_length: '70-110 palabras',
       blocks: [SEMAFORO],
     },
     verification: {
-      question: 'Mira el semáforo del panel. Tu curso actual: ¿cuántas sesiones tiene, cuántas faltas llevas, en qué color estás y qué haces esta semana para no cambiar de color?',
+      question: 'Ubica tu curso actual en el semáforo del panel: ¿en qué color estás y qué haces esta semana para no pasar al siguiente?',
       success_criteria: {
         must_include: [
           'Ubica su curso en la tabla (sesiones) y dice cuántas faltas lleva',
@@ -512,6 +575,7 @@ const activities: Activity[] = [
   {
     id: 'eva-nota-9',
     type: 'closing',
+    title: 'Procedimiento ante una inasistencia',
     complexity: 'simple',
     keyPointIndex: null,
     teaching: {
@@ -550,6 +614,20 @@ async function main() {
   }
   const conChoice = activities.filter((a) => a.choice).length
   console.log(`✅ ${activities.length} actividades válidas (${conChoice} con paso cerrado, 2 con ecualizador, comprobación de cierre; ningún cálculo)`)
+  // Una actividad = un pedido: esta lección no se guarda si alguna pregunta pide dos cosas.
+  const avisos = avisosDePedidos(activities)
+  if (avisos.length) {
+    for (const a of avisos) console.error(`❌ ${a.activityId} (${a.campo}): ${a.motivo}\n   «${a.texto}»`)
+    process.exit(1)
+  }
+  console.log('✅ cada actividad pide una sola cosa')
+  const avisosNombres = avisosDeTitulos(TITULO, activities)
+  if (avisosNombres.length) {
+    for (const a of avisosNombres) console.error(`❌ ${a.activityId ?? 'lección'}: ${a.motivos.join(' ')}
+   «${a.texto}»`)
+    process.exit(1)
+  }
+  console.log('✅ nombres según la regla')
   if (soloValidar) return
 
   const lesson = await prisma.lesson.findUnique({ where: { slug: LESSON_SLUG }, select: { id: true, title: true, contentJson: true, keyPoints: true } })
@@ -569,12 +647,19 @@ async function main() {
     console.log(`💾 respaldo de la v3 en ${backupV3}`)
   }
 
+  // Respaldo de la v4 antes de pasar a la v5 (una sola vez).
+  const backupV4 = 'investigacion/eva-nota-v4.backup.2026-10-13.json'
+  if (!existsSync(backupV4)) {
+    writeFileSync(backupV4, JSON.stringify({ keyPoints: lesson.keyPoints, contentJson: lesson.contentJson }, null, 2))
+    console.log(`💾 respaldo de la v4 en ${backupV4}`)
+  }
+
   const contentJson: LessonContent = { context, activities }
   await prisma.lesson.update({
     where: { id: lesson.id },
-    data: { contentJson: JSON.parse(JSON.stringify(contentJson)), keyPoints, objective },
+    data: { title: TITULO, contentJson: JSON.parse(JSON.stringify(contentJson)), keyPoints, objective },
   })
-  console.log(`✅ «${lesson.title}» actualizada a v4 (conversación sobre el panel)`)
+  console.log(`✅ «${TITULO}» actualizada a v5 (un pedido por actividad, con nombres)`)
 }
 
 main()

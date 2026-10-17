@@ -75,6 +75,8 @@ export function VerificationManager({
         if (a.id !== activityId) return a
         return {
           ...a,
+          ...(updates.title !== undefined && { title: updates.title || undefined }),
+          ...(updates.subtitle !== undefined && { subtitle: updates.subtitle || undefined }),
           teaching: {
             ...a.teaching,
             ...(updates.agent_instruction !== undefined && {

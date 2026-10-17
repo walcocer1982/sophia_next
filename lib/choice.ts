@@ -117,3 +117,19 @@ export function applyPick(state: ChoiceState, choice: ChoiceStep, pick: number):
   const agotado = !correct && picks.length >= max
   return { ...state, picks, correct, resolved: correct || agotado, revealed: agotado }
 }
+
+/**
+ * ¿El mensaje trae, además de la elección, una razón? «La b, porque entregó
+ * los TC y rindió el examen» sí. El texto de la opción tal cual (el alumno
+ * tocó el botón) no, aunque sea largo: el 14 oct 2026 «D) Ya cuenta como
+ * inasistencia, pero entras y te quedas toda la sesión…» (16 palabras) se tomó
+ * por razón, se verificó el texto del botón contra los criterios y la
+ * actividad se cerró sin que el alumno explicara nada.
+ */
+export function esEleccionConRazon(message: string, opcion: string | undefined): boolean {
+  const propias = new Set(normalize(opcion ?? '').split(' ').filter(Boolean))
+  const extra = normalize(message)
+    .split(' ')
+    .filter((w) => w && !propias.has(w) && !/^[a-e]$/.test(w))
+  return extra.length >= 6
+}

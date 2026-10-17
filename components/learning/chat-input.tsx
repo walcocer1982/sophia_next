@@ -10,9 +10,10 @@ import {
   ChangeEvent,
   ClipboardEvent
 } from 'react'
-import { ArrowUp, Square, Paperclip, X } from 'lucide-react'
+import { ArrowUp, Square, Paperclip, X, Mic } from 'lucide-react'
 import { toast } from 'sonner'
 import type { PlannerAttachment } from '@/types/planner'
+import { useDictado } from '@/hooks/use-dictado'
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: PlannerAttachment[]) => void
@@ -39,6 +40,12 @@ interface ChatInputProps {
    * focus ring, send button and kbd hints to the dark theme.
    */
   variant?: 'light' | 'dark'
+  /**
+   * Micrófono dentro de la caja, junto a enviar: dicta con el reconocimiento de
+   * voz del navegador (hooks/use-dictado.ts) y el texto queda en la caja para
+   * revisarlo. Si el navegador no lo soporta, no se muestra.
+   */
+  dictado?: boolean
 }
 
 // Imágenes y PDF (bloques nativos de Claude). Word/Excel quedan deshabilitados
@@ -65,12 +72,19 @@ export interface ChatInputRef {
 }
 
 export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
-  ({ onSend, onStop, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming, isSpeaking, allowPaste, allowAttachments, variant = 'light' }, ref) => {
+  ({ onSend, onStop, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming, isSpeaking, allowPaste, allowAttachments, variant = 'light', dictado = false }, ref) => {
   const isDark = variant === 'dark'
   const [message, setMessage] = useState('')
   const [attachments, setAttachments] = useState<PlannerAttachment[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Lo dictado se suma a lo que ya hay en la caja.
+  const voz = useDictado({
+    onTexto: (dicho) => setMessage((prev) => (prev.trim() ? `${prev.trimEnd()} ${dicho}` : dicho)),
+    onError: (motivo) => toast.error(motivo),
+  })
+  const conMicrofono = dictado && voz.soportado
 
   // Expose focus method via ref
   useImperativeHandle(ref, () => ({
@@ -92,6 +106,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
   }, [disabled])
 
   const handleSend = () => {
+    if (voz.escuchando) voz.detener()
     if ((message.trim() || attachments.length > 0) && !disabled) {
       onSend(message.trim(), attachments.length > 0 ? attachments : undefined)
       setMessage('')
@@ -180,6 +195,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
     ? 'Sophia está pensando...'
     : isStreaming
     ? 'Sophia está escribiendo...'
+    : voz.escuchando
+    ? 'Te escucho… habla y luego revisa el texto'
     : placeholder || 'Escribe tu mensaje...'
 
   const hasContent = message.trim() || attachments.length > 0
@@ -223,9 +240,9 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
             placeholder={effectivePlaceholder}
             className={`w-full px-5 py-4 font-sans pr-16 border rounded-2xl focus:outline-none resize-none text-base leading-relaxed transition-all ${
               isDark
-                ? 'bg-white/5 backdrop-blur text-white border-white/10 placeholder:text-slate-500 focus:ring-2 focus:ring-cyan-400/40 focus:border-cyan-400/50 disabled:opacity-60'
+                ? 'bg-white/5 backdrop-blur text-white border-white/10 placeholder:text-slate-500 focus:ring-2 focus:ring-[#fbc50b]/40 focus:border-[#fbc50b]/50 disabled:opacity-60'
                 : 'bg-white border-slate-300 focus:ring-2 focus:ring-slate-600 focus:border-transparent'
-            } ${allowAttachments ? 'pl-14' : ''}`}
+            } ${allowAttachments ? 'pl-14' : ''} ${conMicrofono ? 'pr-28' : ''}`}
             style={{
               minHeight: isDark ? '92px' : '80px',
               maxHeight: isDark ? '180px' : '120px',
@@ -262,13 +279,32 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
             </>
           )}
 
-          <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-transparent">
+          <div className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-transparent">
+            {conMicrofono && (
+              <button
+                type="button"
+                onClick={() => (voz.escuchando ? voz.detener() : voz.iniciar())}
+                disabled={disabled && !voz.escuchando}
+                aria-pressed={voz.escuchando}
+                className={`relative p-2.5 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                  voz.escuchando
+                    ? 'bg-red-500 text-white'
+                    : isDark
+                      ? 'text-[#e6edf1] border border-white/20 hover:bg-white/10'
+                      : 'text-slate-700 border border-slate-300 hover:bg-slate-100'
+                }`}
+                title={voz.escuchando ? 'Dejar de escuchar' : 'Dictar tu respuesta'}
+              >
+                {voz.escuchando && <span aria-hidden className="absolute inset-0 rounded-full bg-red-500/60 animate-ping" />}
+                <Mic className="relative h-5 w-5" />
+              </button>
+            )}
             {isStreaming && onStop ? (
               <button
                 onClick={onStop}
                 className={`p-2.5 rounded-full transition-all ${
                   isDark
-                    ? 'bg-cyan-500 text-white hover:bg-cyan-400 shadow-lg shadow-cyan-500/30'
+                    ? 'bg-[#fbc50b] text-[#09222d] hover:bg-[#ffd43d]'
                     : 'bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md'
                 }`}
                 title="Detener generación"
@@ -283,7 +319,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                 className={`p-2.5 rounded-full transition-all ${
                   canSend
                     ? isDark
-                      ? 'bg-cyan-500 text-white hover:bg-cyan-400 shadow-lg shadow-cyan-500/30 hover:shadow-cyan-400/50'
+                      ? 'bg-[#fbc50b] text-[#09222d] hover:bg-[#ffd43d] shadow-lg shadow-[#fbc50b]/20'
                       : 'bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md'
                     : isDark
                       ? 'bg-white/10 text-slate-500 cursor-not-allowed'
@@ -298,7 +334,12 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
           </div>
         </div>
 
-        <div className={`mt-2 flex items-center justify-between text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+        {voz.escuchando && voz.parcial && (
+          <p className={`mt-1.5 text-sm italic ${isDark ? 'text-[#a9b8c2]' : 'text-slate-500'}`} aria-live="polite">{voz.parcial}…</p>
+        )}
+
+        {/* Atajos de teclado: en pantallas táctiles no hay Shift ni Enter que valgan. */}
+        <div className={`mt-2 flex items-center justify-between text-xs [@media(pointer:coarse)]:hidden ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
           <span>
             <kbd className={`px-1.5 py-0.5 rounded border font-mono text-[10px] ${
               isDark ? 'bg-white/10 border-white/15 text-slate-300' : 'bg-slate-200 border-slate-400'

@@ -11,9 +11,11 @@ import { detectHallucination } from '@/lib/hallucination-detector'
 import { logger, logChatMessage, logError } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { verifyActivityCompletion, verifyStepCompletion } from '@/lib/activity-verification'
-import { applyPick, newChoiceState, parseChoicePick, renderChoice, type ChoiceState } from '@/lib/choice'
+import { applyPick, esEleccionConRazon, newChoiceState, parseChoicePick, renderChoice, type ChoiceState } from '@/lib/choice'
 import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/support-blocks'
 import { citedFromTexts, createMarkerFilter, stripMarkers, type MarkerCheck } from '@/lib/material-markers'
+import { crearCorrectorDeVoseo } from '@/lib/voseo'
+import { planteaLaPregunta } from '@/lib/planteo'
 import type { ChoiceTurn } from '@/lib/prompt-builder'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
 import { classifyIntent } from '@/lib/services/intent-classification'
@@ -24,7 +26,7 @@ import type { LessonContent, ModerationResult, IntentClassification, ActivityCom
 import type { Message, Prisma } from '@prisma/client'
 import type Anthropic from '@anthropic-ai/sdk'
 import { checkReply, checksIntro, newChecksState, readCheck, type ChecksState, type CheckTurn } from '@/lib/checks'
-import { describeStateForPrompt, initialState, sanitizeState, type MaterialState, type SimState } from '@/lib/simulator'
+import { describeStateForPrompt, directivaSiYaMovio, initialState, sanitizeState, type MaterialState, type SimState } from '@/lib/simulator'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -48,20 +50,6 @@ function extractProjectBrief(text: string): { brief: unknown | null; cleaned: st
   }
 }
 
-/**
- * ¿La respuesta de Sophia plantea la pregunta de la actividad siguiente?
- * Sophia parafrasea, así que no se exige el texto literal: basta con que
- * aparezca al menos un tercio de las palabras con contenido de la pregunta.
- */
-function planteaLaPregunta(respuesta: string, pregunta: string): boolean {
-  const normalizar = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ')
-  const palabras = [...new Set(normalizar(pregunta).split(/\s+/).filter((w) => w.length >= 5))]
-  if (palabras.length === 0) return true
-  const texto = normalizar(respuesta)
-  const presentes = palabras.filter((w) => texto.includes(w)).length
-  return presentes / palabras.length >= 1 / 3
-}
 
 export async function POST(request: Request) {
   const session = await getAuthOrGuest()
@@ -100,12 +88,15 @@ export async function POST(request: Request) {
     message,
     attachments,
     materialState,
+    comoEstudiante,
   } = (await request.json()) as {
     sessionId: string
     message: string
     attachments?: Array<{ name: string; mimeType: string; dataBase64: string }>
     /** Estado de los ecualizadores del panel (spec del panel §16.3). Se valida contra la lección. */
     materialState?: MaterialState
+    /** «Probar como estudiante»: el material sin validar se oculta, como para el alumno. */
+    comoEstudiante?: boolean
   }
 
   // Cronómetro por fase; se registra al final (chat.stream.timing). Sirve para
@@ -156,6 +147,8 @@ export async function POST(request: Request) {
   if (!lessonSession) {
     return new Response('Session not found', { status: 404 })
   }
+  // Material sin validar: solo en la prueba vista como instructor (lib/vista-estudiante.ts).
+  const verSinValidar = lessonSession.isTest && comoEstudiante !== true
 
   const contentJsonRaw = await getLessonContent(lessonSession.lesson.id)
   marcar('db')
@@ -309,8 +302,10 @@ export async function POST(request: Request) {
   }
   // «La b, porque entregó los TC y rindió el examen»: eligió bien Y ya justificó.
   // No se le vuelve a preguntar: el mismo mensaje pasa al paso 2 y se verifica.
+  // El texto de la opción tal cual (el alumno tocó el botón) no es una razón,
+  // aunque sea largo: ver esEleccionConRazon (lib/choice.ts).
   const pickWithReason =
-    choiceTurn === 'pick_correct' && message.trim().split(/\s+/).length >= 8
+    choiceTurn === 'pick_correct' && esEleccionConRazon(message, choice?.options[choiceState?.picks.at(-1) ?? -1])
   if (pickWithReason) {
     logger.info('chat.stream.choice_pick_with_reason', { sessionId, activityId: currentActivity.id })
     choiceTurn = undefined
@@ -464,7 +459,7 @@ export async function POST(request: Request) {
       // CODE: verificación binaria (¿completó el paso?). REFLECTIVE: socrática.
       : (lessonSession.lesson.course?.methodology === 'CODE'
           ? verifyStepCompletion(message, currentActivity, verifierHistory)
-          : verifyActivityCompletion(message, currentActivity, verifierHistory, wasExplained, allLessonBlocks(contentJson, lessonSession.isTest)))
+          : verifyActivityCompletion(message, currentActivity, verifierHistory, wasExplained, allLessonBlocks(contentJson, verSinValidar)))
   ])
   marcar('gate')
 
@@ -479,7 +474,7 @@ export async function POST(request: Request) {
     !currentActivity.choice &&
     !currentActivity.checks &&
     (getActivityBlocks(currentActivity).length > 0 ||
-      blocksForActivity(contentJson, currentActivity.id, lessonSession.isTest).pinned.some((b) => b.type === 'simulator'))
+      blocksForActivity(contentJson, currentActivity.id, verSinValidar).pinned.some((b) => b.type === 'simulator'))
   const willExplainThisTurn =
     !wasExplained &&
     attempts <= 1 &&
@@ -606,7 +601,7 @@ export async function POST(request: Request) {
   const materialCitado = citedFromTexts(
     sessionWithMessages.messages.filter((m) => m.role === 'assistant').map((m) => m.content),
   )
-  const idsDeLaLeccion = new Set(allLessonBlocks(contentJson, lessonSession.isTest).map((b) => b.id))
+  const idsDeLaLeccion = new Set(allLessonBlocks(contentJson, verSinValidar).map((b) => b.id))
   const bloquesActuales = getActivityBlocks(currentActivity)
   // Un bloque se puede mostrar si existe en la lección. Un señalamiento, solo si
   // es de una imagen de ESTA actividad: así una escena de la actividad siguiente
@@ -622,15 +617,18 @@ export async function POST(request: Request) {
   // nada, se describe el caso con que abre. Las notas propias («Mis notas»)
   // llegan a Sophia en este turno pero no se guardan (decisión 14).
   const simuladoresVisibles = [
-    ...blocksForActivity(contentJson, currentActivity.id, lessonSession.isTest).pinned,
+    ...blocksForActivity(contentJson, currentActivity.id, verSinValidar).pinned,
     ...bloquesActuales,
   ].filter((b): b is Extract<typeof b, { type: 'simulator' }> => b.type === 'simulator')
-  const estadosDelPanel: { id: string; state: SimState; texto: string }[] = simuladoresVisibles.map((b) => {
+  const estadosDelPanel: { id: string; state: SimState; texto: string; directiva: string | null }[] = simuladoresVisibles.map((b) => {
     const state = sanitizeState(b, materialState?.[b.id]) ?? initialState(b)
-    return { id: b.id, state, texto: describeStateForPrompt(b, state) }
+    return { id: b.id, state, texto: describeStateForPrompt(b, state), directiva: directivaSiYaMovio(b, state) }
   })
+  // Si ya movió, la directiva va primero: el guion de la actividad («baja el
+  // TC2 y dime qué ves») le ganaba al estado y Sophia pedía lo ya hecho (14 oct 2026).
+  const directivas = estadosDelPanel.map((e) => e.directiva).filter((d): d is string => !!d)
   const estadoPanelClause = estadosDelPanel.length
-    ? `\n\nESTADO DEL PANEL (lo que el estudiante ve AHORA; reacciona a esto, no a lo que él crea que vio):\n${estadosDelPanel.map((e) => `- ${e.texto}`).join('\n')}`
+    ? `\n\n${directivas.map((d) => `⚠️ ${d}\n`).join('')}ESTADO DEL ECUALIZADOR (lo que el estudiante ve AHORA; reacciona a esto, no a lo que él crea que vio):\n${estadosDelPanel.map((e) => `- ${e.texto}`).join('\n')}`
     : ''
   const panelGuardable = Object.fromEntries(estadosDelPanel.filter((e) => !e.state.own).map((e) => [e.id, e.state]))
   // Va dentro de la evidencia que escriba este turno (antes se leía y
@@ -654,8 +652,8 @@ export async function POST(request: Request) {
     sessionSeed,
     choiceState,
     choiceTurn,
-    pinnedBlocks: blocksForActivity(contentJson, currentActivity.id, lessonSession.isTest).pinned,
-    isTest: lessonSession.isTest,
+    pinnedBlocks: blocksForActivity(contentJson, currentActivity.id, verSinValidar).pinned,
+    isTest: verSinValidar,
     cited: materialCitado,
   })
 
@@ -745,12 +743,14 @@ CÓMO RESPONDER (máximo 90 palabras):
         // Marcadores del panel: los inválidos se quitan antes de enviar y guardar;
         // uno partido entre trozos se retiene hasta saber si vale.
         const filtroMarcadores = createMarkerFilter(marcadorValido)
+        // Voseo corregido en el código (lib/voseo.ts): «Mirá» → «Mira».
+        const correctorVoseo = crearCorrectorDeVoseo()
 
         for await (const event of claudeStream) {
           if (event.type === 'content_block_delta') {
             if (event.delta.type === 'text_delta') {
               if (marcas.primer_token === undefined) marcar('primer_token')
-              const text = filtroMarcadores.push(event.delta.text)
+              const text = correctorVoseo.push(filtroMarcadores.push(event.delta.text))
               if (!text) continue
               fullResponse += text
               if (suppressFurther) continue
@@ -781,7 +781,7 @@ CÓMO RESPONDER (máximo 90 palabras):
         marcar('stream')
 
         // Lo que retuvo el filtro de marcadores al final del texto.
-        const restoMarcadores = filtroMarcadores.flush()
+        const restoMarcadores = correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()
         if (restoMarcadores) {
           fullResponse += restoMarcadores
           if (!suppressFurther) unsent += restoMarcadores
@@ -1481,12 +1481,16 @@ const allActivities = await prisma.activityProgress.findMany({
 
 /**
  * ¿El mensaje de Sophia deja algo que responder? Mira el último párrafo, sin
- * marcadores del panel: una pregunta o alternativas «A) …» al final.
+ * marcadores del panel: una pregunta, alternativas «A) …», o un pedido sin
+ * signo de pregunta («Reescribe esta oración…», «Mueve el TC2 a 0…»). Lo
+ * último faltaba: el 13 oct «reescribe…» se tomó por cierre y se le pegó
+ * debajo la pregunta de la actividad siguiente.
  */
+const PEDIDO_IMPERATIVO = /(^|[.:;!]\s+)(reescribe|redacta|escribe|explica|describe|dime|cuéntame|indica|menciona|calcula|propón|elige|compara|identifica|señala|completa|resume|mueve|baja|sube|carga|prueba|lee|mira|ubica|justifica)\b/i
 function terminaEnPregunta(texto: string): boolean {
   const lineas = stripMarkers(texto).split('\n').map((l) => l.trim()).filter(Boolean)
   const ultima = lineas.at(-1) ?? ''
-  return ultima.includes('?') || /^[A-E]\)\s/.test(ultima)
+  return ultima.includes('?') || /^[A-E]\)\s/.test(ultima) || PEDIDO_IMPERATIVO.test(ultima)
 }
 
 /** Una respuesta escrita por el código, con la forma de los eventos de Claude. */

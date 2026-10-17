@@ -46,6 +46,12 @@ test('separa las alternativas del final del mensaje', () => {
   assert.equal(conCola.options.length, 2)
   assert.equal(conCola.tail, '¿Cuál es tu respuesta?')
 
+  // Opciones como párrafos (una línea en blanco entre ellas), con cola
+  const separadas = splitChoiceOptions('Mario tiene fiebre. ¿Qué hace?\n\nA) Falta sin avisar\n\nB) Va a clase igual\n\nC) Falta y avisa\n\n¿Cuál opción elige?')
+  assert.deepEqual(separadas.options.map((o) => o.letter), ['A', 'B', 'C'])
+  assert.equal(separadas.body, 'Mario tiene fiebre. ¿Qué hace?')
+  assert.equal(separadas.tail, '¿Cuál opción elige?')
+
   assert.equal(splitChoiceOptions('Solo texto, sin opciones.').options.length, 0)
   assert.equal(splitChoiceOptions('B) suelta\nC) sin la A').options.length, 0)
 })

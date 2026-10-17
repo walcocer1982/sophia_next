@@ -47,6 +47,8 @@ interface MaterialContextValue {
   /** Estado de cada ecualizador, por id de bloque. Lo que el alumno movió. */
   simStates: MaterialState
   setSimState: (blockId: string, state: SimState) => void
+  /** Vuelve un ecualizador a su caso inicial (al dejar la actividad que lo usa). */
+  resetSimState: (blockId: string) => void
   /** Lo que el chat manda al servidor con cada mensaje (spec §16.3). */
   getMaterialState: () => MaterialState
 }
@@ -158,11 +160,18 @@ export function MaterialProvider({
     simRef.current = { ...simRef.current, [blockId]: state }
     setSimStates(simRef.current)
   }, [])
+  const resetSimState = useCallback((blockId: string) => {
+    if (!(blockId in simRef.current)) return
+    const resto = { ...simRef.current }
+    delete resto[blockId]
+    simRef.current = resto
+    setSimStates(resto)
+  }, [])
   const getMaterialState = useCallback(() => simRef.current, [])
 
   const value = useMemo(
-    () => ({ cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, hasProvider: true, simStates, setSimState, getMaterialState }),
-    [cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, simStates, setSimState, getMaterialState],
+    () => ({ cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, hasProvider: true, simStates, setSimState, resetSimState, getMaterialState }),
+    [cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, simStates, setSimState, resetSimState, getMaterialState],
   )
   return <MaterialContext.Provider value={value}>{children}</MaterialContext.Provider>
 }
@@ -180,6 +189,7 @@ const SIN_PROVEEDOR: MaterialContextValue = {
   hasProvider: false,
   simStates: {},
   setSimState: () => {},
+  resetSimState: () => {},
   getMaterialState: () => ({}),
 }
 

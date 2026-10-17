@@ -110,3 +110,14 @@ test('el validador acepta los siete tipos y rechaza lo que no cumple', () => {
   })
   assert.equal(dibujoEquipo.success, false)
 })
+
+
+test('lo fijado se abre solo donde la actividad lo usa; en reflexión y cierre se pliega', async () => {
+  const { pinnedStaysOpen } = await import('../lib/support-blocks')
+  assert.equal(pinnedStaysOpen({ type: 'practice', uses: ['ecualizador-nota'], hasBlocks: false }, 'ecualizador-nota'), true)
+  assert.equal(pinnedStaysOpen({ type: 'practice', uses: ['ecualizador-nota'], hasBlocks: false }, 'formula-nota'), false)
+  assert.equal(pinnedStaysOpen({ type: 'practice', hasBlocks: false }, 'manual'), true)
+  assert.equal(pinnedStaysOpen({ type: 'practice', hasBlocks: true }, 'manual'), false)
+  assert.equal(pinnedStaysOpen({ type: 'closing', hasBlocks: false }, 'ecualizador-nota'), false)
+  assert.equal(pinnedStaysOpen(undefined, 'manual'), true)
+})

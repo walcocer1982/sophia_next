@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { FlaskConical, SkipForward, ListOrdered, RotateCcw, X, Loader2 } from 'lucide-react'
+import { FlaskConical, SkipForward, ListOrdered, RotateCcw, X, Loader2, GraduationCap, PenTool } from 'lucide-react'
 import { toast } from 'sonner'
+import { urlDeLaPrueba } from '@/lib/vista-estudiante'
 
 type Activity = {
   id: string
@@ -16,10 +16,13 @@ export function TestModeBanner({
   sessionId,
   courseId,
   activities,
+  comoEstudiante = false,
 }: {
   sessionId: string
   courseId: string
   activities: Activity[]
+  /** «Probar como estudiante» (lib/vista-estudiante.ts): franja fina, solo íconos. */
+  comoEstudiante?: boolean
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState<string | null>(null)
@@ -123,85 +126,67 @@ export function TestModeBanner({
     closing: 'Cierre',
   }
 
+  // Cambiar de vista recarga la página: la vista decide qué material llega del
+  // servidor y qué permisos tiene la caja de texto.
+  const cambiarVista = () => {
+    window.location.href = urlDeLaPrueba(sessionId, !comoEstudiante)
+  }
+
+  // Controles de la prueba EN LÍNEA, dentro de la barra de la lección (14 oct
+  // 2026): antes eran una franja amarilla aparte, una tercera barra arriba.
+  const boton = 'h-8 w-8 inline-flex items-center justify-center rounded-full text-[#f6d77a] hover:bg-[#fbc50b]/15 hover:text-[#fbc50b] disabled:opacity-40'
   return (
-    <>
-      <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 sm:px-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
-          <FlaskConical className="h-4 w-4" />
-          Modo Prueba
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 text-xs text-amber-800 hover:bg-amber-100"
-            onClick={handleSkipActivity}
-            aria-label="Saltar actividad"
-            disabled={loading !== null}
-          >
-            {loading === 'skip' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SkipForward className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">Saltar</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 text-xs text-amber-800 hover:bg-amber-100"
-            onClick={() => setShowSkipTo(!showSkipTo)}
-            aria-label="Ir a una actividad"
-            disabled={loading !== null}
-          >
-            <ListOrdered className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Ir a...</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 text-xs text-amber-800 hover:bg-amber-100"
-            onClick={handleReset}
-            aria-label="Reiniciar la prueba"
-            disabled={loading !== null}
-          >
-            {loading === 'reset' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">Reiniciar</span>
-          </Button>
-          <div className="mx-1 h-4 w-px bg-amber-300" />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 text-xs text-amber-800 hover:bg-amber-100"
-            onClick={handleExit}
-            aria-label="Salir de la prueba"
-          >
-            <X className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Salir</span>
-          </Button>
-        </div>
+    <div className="relative">
+      <div className="flex h-9 items-center gap-0.5 rounded-full border border-[#fbc50b]/30 bg-[#fbc50b]/10 pl-2.5 pr-1">
+        <FlaskConical className="h-3.5 w-3.5 shrink-0 text-[#f6d77a]" aria-hidden />
+        <span className="mr-1 hidden whitespace-nowrap text-xs font-semibold text-[#f6d77a] xl:inline">
+          {comoEstudiante ? 'Prueba · estudiante' : 'Prueba'}
+        </span>
+        <button
+          type="button"
+          className={boton}
+          onClick={cambiarVista}
+          aria-label={comoEstudiante ? 'Ver como instructor' : 'Ver como estudiante'}
+          title={comoEstudiante ? 'Volver a la vista de instructor' : 'Ver la lección como la ve un alumno'}
+        >
+          {comoEstudiante ? <PenTool className="h-3.5 w-3.5" /> : <GraduationCap className="h-3.5 w-3.5" />}
+        </button>
+        <button type="button" className={boton} onClick={handleSkipActivity} aria-label="Saltar actividad" title="Saltar actividad" disabled={loading !== null}>
+          {loading === 'skip' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SkipForward className="h-3.5 w-3.5" />}
+        </button>
+        <button type="button" className={boton} onClick={() => setShowSkipTo(!showSkipTo)} aria-label="Ir a una actividad" title="Ir a una actividad" aria-expanded={showSkipTo} disabled={loading !== null}>
+          <ListOrdered className="h-3.5 w-3.5" />
+        </button>
+        <button type="button" className={boton} onClick={handleReset} aria-label="Reiniciar la prueba" title="Reiniciar la prueba" disabled={loading !== null}>
+          {loading === 'reset' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+        </button>
+        <button type="button" className={boton} onClick={handleExit} aria-label="Salir de la prueba" title="Salir de la prueba">
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      {/* Skip to activity dropdown */}
+      {/* Ir a una actividad */}
       {showSkipTo && (
-        <div className="border-b border-amber-200 bg-amber-50/50 px-4 py-2">
-          <div className="flex flex-wrap gap-1.5">
-            {activities.map((activity, idx) => (
-              <Button
-                key={activity.id}
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 text-xs"
-                onClick={() => handleSkipTo(activity.id)}
-                disabled={loading !== null}
-              >
-                {loading === activity.id ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <span className="font-semibold">{idx + 1}.</span>
-                )}
-                {typeLabel[activity.type] || activity.type}: {activity.title.slice(0, 30)}{activity.title.length > 30 ? '...' : ''}
-              </Button>
-            ))}
-          </div>
+        <div className="absolute right-0 top-full z-50 mt-2 max-h-[60vh] w-[min(340px,90vw)] overflow-y-auto rounded-xl border border-white/10 bg-[#0d1f3c] p-1.5 shadow-2xl">
+          {activities.map((activity, idx) => (
+            <button
+              key={activity.id}
+              type="button"
+              onClick={() => handleSkipTo(activity.id)}
+              disabled={loading !== null}
+              className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-[#e6edf1] hover:bg-white/5 disabled:opacity-50"
+            >
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold">
+                {loading === activity.id ? <Loader2 className="h-3 w-3 animate-spin" /> : idx + 1}
+              </span>
+              <span className="min-w-0">
+                <span className="block leading-snug">{activity.title}</span>
+                <span className="block text-[11px] text-[#7f909b]">{typeLabel[activity.type] || activity.type}</span>
+              </span>
+            </button>
+          ))}
         </div>
       )}
-    </>
+    </div>
   )
 }

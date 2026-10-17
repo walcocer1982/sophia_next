@@ -267,6 +267,7 @@ const TeachingSchema = z.object({
   context: z.string().optional(),
   image_suggestions: z.array(z.string()).optional(),
   first_question: z.string().min(10).max(300).optional(),
+  uses: z.array(z.string().min(1)).max(6).optional(),
   image: TeachingImageSchema.optional(),
   images: z.array(TeachingImageSchema).optional(),
   blocks: z.array(SupportBlockSchema).max(6).optional(),
@@ -282,6 +283,10 @@ const ActivitySchema = z.object({
   // Mínimo 1: con weight 0 en todas las actividades (S0 de tutoría, ago 2026)
   // la nota salía 0. Para que una actividad no cuente: is_evaluative=false.
   weight: z.number().min(1).max(10).optional(),
+  // Regla de nombres (lib/planner/titulos.ts): el detector avisa en el planner;
+  // acá solo el largo, para no descartar actividades propuestas por un nombre.
+  title: z.string().min(3).max(60).optional(),
+  subtitle: z.string().min(2).max(50).optional(),
   teaching: TeachingSchema,
   choice: ChoiceStepSchema.optional(),
   // Comprobación de cierre (spec del panel §16.1): solo en closing y sin choice.
@@ -307,6 +312,16 @@ export const GeneratedStructureSchema = z.object({
       }
       vistos.add(b.id)
     })
+  })
+  // `uses` nombra bloques fijados de actividades ANTERIORES (el panel los deja abiertos).
+  const previos = new Set<string>()
+  s.activities.forEach((a, i) => {
+    a.teaching.uses?.forEach((id, j) => {
+      if (!previos.has(id)) {
+        ctx.addIssue({ code: 'custom', message: `uses: «${id}» no es un bloque de una actividad anterior`, path: ['activities', i, 'teaching', 'uses', j] })
+      }
+    })
+    a.teaching.blocks?.forEach((b) => previos.add(b.id))
   })
   // La comprobación de cierre va solo en el cierre y reemplaza al paso cerrado.
   s.activities.forEach((a, i) => {

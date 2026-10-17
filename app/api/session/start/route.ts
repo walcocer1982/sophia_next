@@ -47,26 +47,26 @@ export async function POST(request: Request) {
   }
 
   // 3. Parse body
-  const { lessonId, isTest, startFromActivity } = await request.json() as {
+  const { lessonId, isTest: pidePrueba, startFromActivity } = await request.json() as {
     lessonId: string
     isTest?: boolean
     startFromActivity?: string // activityId to start from
   }
 
-  // 3b. Test mode: only ADMIN/SUPERADMIN can create test sessions
-  if (isTest) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true },
-    })
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPERADMIN')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+  // 3b. Test mode: only ADMIN/SUPERADMIN can ask for a test session (Probar:
+  // lecciones sin publicar, desde cualquier actividad).
+  const role = session.user.role || 'STUDENT'
+  if (pidePrueba && role !== 'ADMIN' && role !== 'SUPERADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  // El personal nunca abre una sesión real: si llega por la vía del alumno (un
+  // enlace a una lección publicada), se crea como prueba. Hasta el 14 oct 2026
+  // había 19 sesiones reales de personal que el Monitor contaba como de alumnos.
+  const isTest = pidePrueba === true || role !== 'STUDENT'
 
-  // 4. Check if lesson exists (test mode: allow unpublished)
+  // 4. Check if lesson exists (Probar: allow unpublished)
   const lesson = await prisma.lesson.findUnique({
-    where: { id: lessonId, ...(isTest ? {} : { isPublished: true }) },
+    where: { id: lessonId, ...(pidePrueba ? {} : { isPublished: true }) },
     select: {
       id: true,
       title: true,
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
   const activities = contentJson?.activities || []
   let startActivityId = firstActivity.activityId
 
-  if (isTest && startFromActivity) {
+  if (pidePrueba && startFromActivity) {
     const targetIdx = activities.findIndex((a) => a.id === startFromActivity)
     if (targetIdx >= 0) {
       startActivityId = startFromActivity
@@ -170,6 +170,15 @@ export async function POST(request: Request) {
         isTest: true,
       },
     })
+    // Convertida por rol (no la pidió con Probar): se retoma la que ya tenía,
+    // como haría un alumno. Probar, en cambio, siempre empieza de cero.
+    if (existingTest && !pidePrueba && !existingTest.endedAt) {
+      return NextResponse.json({
+        sessionId: existingTest.id,
+        isTest: true,
+        lesson: { title: lesson.title, courseTitle: lesson.course.title },
+      })
+    }
     if (existingTest) {
       await prisma.lessonSession.delete({ where: { id: existingTest.id } })
     }
@@ -188,7 +197,7 @@ export async function POST(request: Request) {
     })
 
     // If starting from a later activity, mark previous ones as completed
-    if (startFromActivity) {
+    if (pidePrueba && startFromActivity) {
       const targetIdx = activities.findIndex((a) => a.id === startFromActivity)
       if (targetIdx > 0) {
         const previousActivities = activities.slice(0, targetIdx)
@@ -208,6 +217,8 @@ export async function POST(request: Request) {
       userId: session.user.id,
       lessonId,
       activityId: startActivityId,
+      // false: la pidió por la vía del alumno y se convirtió en prueba por su rol.
+      pedida: pidePrueba === true,
     })
 
     return NextResponse.json({

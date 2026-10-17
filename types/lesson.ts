@@ -59,6 +59,14 @@ export interface Teaching {
    * panel §16.4). La usan la bienvenida, la transición y la retención del avance.
    */
   first_question?: string
+  /**
+   * Bloques fijados (`pinned`) de actividades anteriores que ESTA actividad usa
+   * (la 6 de EVA-NOTA conversa sobre el ecualizador de la 4). En el panel se
+   * quedan abiertos; el resto de lo fijado se pliega. Sin este campo, lo fijado
+   * queda abierto solo si la actividad no trae material propio y no es de
+   * reflexión ni cierre (`pinnedStaysOpen` en lib/support-blocks.ts).
+   */
+  uses?: string[]
   image?: TeachingImage         // DEPRECATED: backward compat — usar blocks
   images?: TeachingImage[]      // DEPRECATED: backward compat — usar blocks
   blocks?: SupportBlock[]       // Material de apoyo del panel (investigacion/panel-de-apoyo-especificacion.md)
@@ -268,6 +276,15 @@ export interface ChoiceStep {
 export interface Activity {
   id: string
   type: ActivityType                   // Tipo de actividad (define template del prompt)
+  /**
+   * Nombre de la actividad para el alumno (riel de avance y encabezado de la
+   * sección). Regla de nombres (14 oct 2026, lib/planner/titulos.ts): nombra
+   * lo que se aprende, en tono de sílabo, sin personajes ni preguntas
+   * («Justificación de inasistencias», no «Mario con fiebre»).
+   */
+  title?: string
+  /** El caso o la situación, en chico bajo el título («Caso Mario»). Solo dentro de la hoja. */
+  subtitle?: string
   /**
    * Paso 1 (opcional): pregunta cerrada que se corrige en el código. Si existe,
    * la pregunta abierta de `verification` es el paso 2 («¿por qué esa?»).

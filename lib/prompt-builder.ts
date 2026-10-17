@@ -463,11 +463,11 @@ VERIFICACIÓN FLEXIBLE:
   const esConversacionDePanel = !activity.choice && !activity.checks && (activityBlocks.length > 0 || hayEcualizador)
   const conversacionPanel = esConversacionDePanel
     ? `
-CONVERSACIÓN SOBRE EL PANEL (esta actividad no tiene alternativas):
-- El ancla es una acción del estudiante sobre el panel. Pide UNA acción concreta por turno.${hayEcualizador ? `
-- Con el ecualizador, en este orden: 1) pide una predicción («¿qué crees que pasa si…?»); 2) pide que mueva una barra y cuente qué número ve; 3) pide una segunda acción que contraste; 4) pregunta el porqué; 5) cierra la idea en dos oraciones.
-- Verás el estado real del ecualizador en «ESTADO DEL PANEL». Reacciona a lo que pasó de verdad; si el estudiante dice un número distinto, señálaselo con amabilidad.
-- No digas el resultado antes de que el estudiante mueva: él lo lee en el panel. Nunca le pidas que calcule.` : ''}
+CONVERSACIÓN SOBRE LA PIZARRA (esta actividad no tiene alternativas):
+- El ancla es una acción del estudiante sobre la pizarra. Pide UNA acción concreta por turno.${hayEcualizador ? `
+- Con el ecualizador, en este orden: 1) pide una predicción («¿qué crees que pasa si…?»); 2) pide que mueva una barra y cuente qué número ve; 3) pide una segunda acción que contraste; 4) pregunta el porqué; 5) cierra la idea en dos oraciones. Si el ESTADO DEL ECUALIZADOR muestra que ya hizo un paso, sáltalo: nunca pidas lo que ya hizo.
+- Verás el estado real del ecualizador en «ESTADO DEL ECUALIZADOR». Reacciona a lo que pasó de verdad; si el estudiante dice un número distinto, señálaselo con amabilidad.
+- No digas el resultado antes de que el estudiante mueva: él lo lee en el ecualizador. Nunca le pidas que calcule.` : ''}
 - Si responde «no sé» o una sola palabra, NO le des la respuesta ni le preguntes otra cosa abstracta: pídele la acción («mueve…», «mira la fila…», «lee la línea…») y que te cuente qué ve.`
     : ''
 
@@ -545,7 +545,7 @@ CÓMO RESPONDER (50-70 palabras MÁXIMO):
 - Promocionar nada ni sugerir otros cursos
 - Cualquier frase de cierre que no sea literalmente "Gracias por participar"
 
-Si el estudiante responde después de tu cierre, agradece en 1 oración corta y NO continúes el diálogo.`
+Si el estudiante escribe DESPUÉS de tu cierre: si pregunta algo de la lección, respóndele en 2-3 oraciones, sin hacerle preguntas; si solo agradece o se despide, contesta en 1 oración. No reabras la evaluación ni propongas actividades nuevas.`
       } else if (nextActivity && nextActivity.checks?.length) {
         // El cierre empieza con una comprobación que el código agrega al final
         // de este mensaje (route.ts, checksIntro): Sophia solo hace la transición.
@@ -584,7 +584,7 @@ Instrucción: ${nextTeaching}${(() => {
           const ocultos = material.filter((b) => b.showWhen === 'on_reference' && !cited?.blocks.has(b.id))
           return [
             visibles.length ? `
-Material que aparece en el panel al pasar (cítalo por su título, no lo copies): ${visibles.map((b) => `«${b.title}»`).join(', ')}` : '',
+Material que aparece en la pizarra al pasar (cítalo por su título, no lo copies): ${visibles.map((b) => `«${b.title}»`).join(', ')}` : '',
             ocultos.length ? `
 Material oculto de la siguiente actividad: muéstralo al presentarlo escribiendo su marcador al final de la oración: ${ocultos.map((b) => `«${b.title}» [[block:${b.id}]]`).join(', ')}` : '',
           ].join('')
@@ -595,6 +595,7 @@ ${nextChoiceText}
 ⛔ La opción correcta es «${nextCorrect}». En la introducción NO la uses, no la parafrasees ni describas lo que la distingue de las otras: el estudiante tiene que llegar solo. Introduce el tema en general.` : `Pregunta: "${nextQuestion}"`}
 
 ⛔ PROHIBIDO en transiciones:
+- Pedir algo más de la actividad que se cierra (reescribir, calcular, explicar otra parte): el sistema ya la dio por cerrada y esa respuesta no se evaluaría. Tu único pedido es el de la siguiente actividad.
 - Listar lo que "aprendimos" o "cubrimos" (ya lo sabe, lo acaba de hacer)
 - Repetir felicitaciones ("Excelente trabajo", "Has demostrado...")
 - Dar resúmenes antes de avanzar
@@ -782,12 +783,12 @@ ESTADO DEL PASO 1: ya resuelto (${choiceState.correct ? 'acertó' : `no acertó;
     const shouldExplain = studentHasNoBase && firstTime && !wasExplained && !pideAccion
 
     if (pideAccion) {
-      dynamicPrompt += `\n\n📍 EL ESTUDIANTE NO SABE — PIDE UNA ACCIÓN SOBRE EL PANEL
+      dynamicPrompt += `\n\n📍 EL ESTUDIANTE NO SABE — PIDE UNA ACCIÓN SOBRE LA PIZARRA
 
 NO expliques el concepto ni des la respuesta: todavía no miró ni movió nada.
 CÓMO RESPONDER (máximo 50 palabras):
-1. Una frase que lo tranquilice, sin validar («Tranquilo, lo vemos en el panel»).
-2. Pídele UNA acción concreta sobre el panel (mover una barra, cargar un caso, mirar una fila) y que te diga el número o el dato que ve.
+1. Una frase que lo tranquilice, sin validar («Tranquilo, lo vemos en la pizarra»).
+2. Pídele UNA acción concreta sobre la pizarra (mover una barra, cargar un caso, mirar una fila) y que te diga el número o el dato que ve.
 ⛔ PROHIBIDO decir pesos, porcentajes, resultados o la razón: eso lo va a descubrir él al mover.`
     }
 

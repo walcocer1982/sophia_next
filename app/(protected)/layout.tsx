@@ -1,4 +1,5 @@
-import { Navbar } from "@/components/navbar";
+import { Suspense } from "react";
+import { Navbar, NavbarConVista } from "@/components/navbar";
 
 export default function RootLayout({
   children,
@@ -7,8 +8,12 @@ export default function RootLayout({
 }>) {
   return (
     <>
-          <Navbar />
-          {children}
-      </>
+      {/* La barra lee `?vista=estudiante` (useSearchParams): sin Suspense, las
+          páginas estáticas no compilan. Mientras tanto, la barra normal. */}
+      <Suspense fallback={<Navbar />}>
+        <NavbarConVista />
+      </Suspense>
+      {children}
+    </>
   );
 }

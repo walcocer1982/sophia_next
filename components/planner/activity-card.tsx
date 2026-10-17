@@ -8,9 +8,11 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, ChevronUp, Check, RotateCcw, Pencil, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Check, RotateCcw, Pencil, X, TriangleAlert } from 'lucide-react'
 import type { Activity } from '@/types/lesson'
 import { normalizeLevel, LEVEL_LABEL_ES } from '@/lib/levels'
+import { revisarPedidos } from '@/lib/planner/pedidos'
+import { revisarTitulo } from '@/lib/planner/titulos'
 
 interface ActivityCardProps {
   activity: Activity
@@ -25,6 +27,9 @@ interface ActivityCardProps {
 }
 
 export interface ActivityEdits {
+  /** Nombre para el alumno (regla de nombres, lib/planner/titulos.ts). */
+  title: string
+  subtitle: string
   agent_instruction: string
   question: string
   must_include: string[]
@@ -57,6 +62,8 @@ function reglasDeCitas(a: Activity): ReglaCita[] {
 export function ActivityCard({ activity, position, total, keyPoints, isApproved, onApprove, onRevoke, onEdit, citables = [] }: ActivityCardProps) {
   const [isExpanded, setIsExpanded] = useState(!isApproved)
   const [isEditing, setIsEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState(activity.title ?? '')
+  const [editSubtitle, setEditSubtitle] = useState(activity.subtitle ?? '')
   const [editInstruction, setEditInstruction] = useState(activity.teaching.agent_instruction)
   const [editQuestion, setEditQuestion] = useState(activity.verification.question)
   const [editCriteria, setEditCriteria] = useState(criteriosATexto(activity))
@@ -65,6 +72,11 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
   const [editUnderstandingLevel, setEditUnderstandingLevel] = useState<string>(normalizeLevel(activity.verification.success_criteria?.understanding_level))
   const [editCitas, setEditCitas] = useState<ReglaCita[]>(reglasDeCitas(activity))
   const lineasCriterios = editCriteria.split('\n').map((c) => c.trim().replace(/^!\s*/, '')).filter(Boolean)
+  // Regla «una actividad = un pedido» (lib/planner/pedidos.ts): avisa, no bloquea.
+  const avisoPedidos = revisarPedidos(isEditing ? editQuestion : activity.verification.question)
+  // Regla de nombres (lib/planner/titulos.ts): también avisa, no bloquea.
+  const tituloActual = isEditing ? editTitle : activity.title ?? ''
+  const avisosTitulo = tituloActual.trim() ? revisarTitulo(tituloActual) : ['Sin nombre: el alumno verá «Actividad N».']
   const tituloDe = (id: string) => citables.find((c) => c.id === id)?.title ?? id
   const keyPoint = activity.keyPointIndex !== null
     ? (keyPoints[activity.keyPointIndex] || `Punto ${activity.keyPointIndex + 1}`)
@@ -110,6 +122,40 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
 
       {isExpanded && (
         <CardContent className="space-y-4 border-t pt-4">
+          {/* Nombre que ve el alumno (riel de avance y encabezado de la sección) */}
+          <div>
+            <h4 className="mb-1 text-sm font-semibold">Nombre para el alumno</h4>
+            {isEditing ? (
+              <div className="grid gap-2 sm:grid-cols-[2fr_1fr]">
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  maxLength={60}
+                  placeholder="Tema: «Justificación de inasistencias»"
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+                <input
+                  value={editSubtitle}
+                  onChange={(e) => setEditSubtitle(e.target.value)}
+                  maxLength={50}
+                  placeholder="Caso (opcional): «Caso Mario»"
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+            ) : (
+              <p className="text-sm">
+                {activity.title ? <span className="font-medium">{activity.title}</span> : <span className="text-muted-foreground">Actividad {position}</span>}
+                {activity.subtitle && <span className="text-muted-foreground"> · {activity.subtitle}</span>}
+              </p>
+            )}
+            {avisosTitulo.length > 0 && (
+              <p className="mt-1.5 flex items-start gap-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span>{avisosTitulo.join(' ')} El nombre dice lo que se aprende, en tono de sílabo; el caso va aparte.</span>
+              </p>
+            )}
+          </div>
+
           {/* Instrucción al AI */}
           <div>
             <h4 className="mb-1 text-sm font-semibold">Instrucción al AI</h4>
@@ -139,6 +185,12 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
               />
             ) : (
               <p className="text-sm italic text-blue-900">&quot;{activity.verification.question}&quot;</p>
+            )}
+            {avisoPedidos && (
+              <p className="mt-2 flex items-start gap-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span><strong>Pide más de una cosa.</strong> {avisoPedidos} Con dos tareas en una pregunta, el desglose se gasta en la primera y la segunda se pierde.</span>
+              </p>
             )}
           </div>
 
@@ -321,6 +373,8 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                         .map((r) => ({ criterion: criteria.indexOf(r.criterio) + 1, block: r.block, ...(r.min > 1 ? { min: r.min } : {}) }))
                         .filter((q) => q.criterion > 0)
                       onEdit?.(activity.id, {
+                        title: editTitle.trim(),
+                        subtitle: editSubtitle.trim(),
                         agent_instruction: editInstruction.trim(),
                         question: editQuestion.trim(),
                         must_include: criteria,
@@ -341,6 +395,8 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation()
+                      setEditTitle(activity.title ?? '')
+                      setEditSubtitle(activity.subtitle ?? '')
                       setEditInstruction(activity.teaching.agent_instruction)
                       setEditQuestion(activity.verification.question)
                       setEditCriteria(criteriosATexto(activity))

@@ -39,7 +39,9 @@ export async function streamChatResponse(
   onActivityCompleted?: (data: ActivityProgressEvent) => void,
   attachments?: PlannerAttachment[],
   /** Estado de los ecualizadores del panel: Sophia lee lo que el alumno movió (spec §16.3). */
-  materialState?: Record<string, unknown>
+  materialState?: Record<string, unknown>,
+  /** «Probar como estudiante»: el servidor oculta el material sin validar (lib/vista-estudiante.ts). */
+  comoEstudiante?: boolean
 ) {
   try {
     const response = await fetch('/api/chat/stream', {
@@ -50,6 +52,7 @@ export async function streamChatResponse(
         message,
         ...(attachments && attachments.length > 0 ? { attachments } : {}),
         ...(materialState && Object.keys(materialState).length > 0 ? { materialState } : {}),
+        ...(comoEstudiante ? { comoEstudiante: true } : {}),
       }),
       credentials: 'include',
     })

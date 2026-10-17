@@ -242,8 +242,11 @@ export function CourseConfigPanel({
           </div>
 
           <div className="space-y-1 border-t border-gray-100 pt-2">
+            {/* Desde el 14 oct 2026 es la voz del navegador (sin costo). El
+                micrófono para dictar está siempre disponible; esto solo decide
+                si Sophia lee sus mensajes sola. */}
             <ToggleRow
-              label="Voz de Sophia"
+              label="Sophia lee sus mensajes en voz alta"
               checked={config.voiceEnabled}
               loading={isPending('voiceEnabled')}
               onChange={(v) => patch({ voiceEnabled: v }, 'voiceEnabled')}

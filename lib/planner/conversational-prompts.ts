@@ -267,6 +267,22 @@ Evalúa COMPRENSIÓN del concepto, no palabras exactas.
 - Cuando open_ended es true, los must_include son GUÍAS de evaluación (aspectos a observar), no respuestas exactas.
 - Cuando open_ended es false, los must_include son criterios concretos que el estudiante debe mencionar.
 
+UNA ACTIVIDAD = UN PEDIDO (13 oct 2026):
+- "question" pide UNA sola cosa que el estudiante responde en un mensaje corto: una decisión con su porqué,
+  una predicción, un diagnóstico. NUNCA dos preguntas ("¿…? ¿Y…?"), ni la pregunta más otra tarea
+  ("¿…? Y reescribe/explica/calcula…"), ni un caso nuevo agregado al final ("y dime qué pasa si…").
+- Si quieres pedir dos cosas (decidir y luego redactar), son DOS actividades. Con dos tareas en una, el
+  desglose se gasta en la primera y la segunda se pierde.
+- Los must_include de una actividad evalúan lo que esa única respuesta tiene que contener, no otra tarea.
+
+NOMBRES (14 oct 2026) — vale para el título de la sesión y el "title" de cada actividad:
+- Nombran LO QUE SE APRENDE, en tono de sílabo: sustantivo o tema, de 2 a 8 palabras. Ej.: «Justificación
+  de inasistencias», «Ponderación de la nota final», «Sustento técnico verificable».
+- NUNCA: personajes o situaciones («Mario con fiebre»), preguntas («¿Cómo se arma tu nota?»), órdenes
+  («Justifica tu falta»), frases de motivación («Gana el TC»), códigos internos («EVA-NOTA ·», «S1 —»).
+- El caso va en "subtitle", corto: «Caso Mario», «Informe de la faja». Opcional.
+- Mayúscula solo al inicio y en nombres propios (norma del español); sin punto final.
+
 ALTERNATIVAS: SOLO DONDE SON EL CONTENIDO (decisión del 7 oct 2026):
 - PASO CERRADO ("choice") solo cuando la actividad es una DECISIÓN entre errores reales: el estudiante elige
   entre lo que de verdad haría (ir enfermo, justificar tarde, copiar, no entregar) y después explica por qué
@@ -294,6 +310,8 @@ FORMATO DE ACTIVIDAD:
 {
   "id": "string",
   "type": "explanation|practice|reflection|closing",
+  "title": "string",     // nombre de la actividad (ver «NOMBRES»), ≤60
+  "subtitle": "string",  // opcional: el caso, ≤50
   "complexity": "simple|moderate|complex",
   "keyPointIndex": 0,  // número (0-indexed) o null para closing,
   "teaching": { "agent_instruction": "string", "target_length": "string", "image_suggestions": ["string"], "blocks": [ /* material de apoyo, opcional */ ] },

@@ -124,11 +124,23 @@ export function splitChoiceOptions(text: string): { body: string; options: Choic
     end--
     while (end >= 0 && !lines[end].trim()) end--
   }
-  let start = end
-  while (start >= 0 && OPCION_RE.test(lines[start])) start--
-  start++
-  const opts = lines.slice(start, end + 1).map((l) => {
-    const m = l.match(OPCION_RE)!
+  // Las opciones pueden venir separadas por líneas en blanco (Sophia las
+  // escribe como párrafos a veces; 14 oct 2026: salían como texto, sin botones).
+  const indices: number[] = []
+  let i = end
+  while (i >= 0) {
+    if (OPCION_RE.test(lines[i])) {
+      indices.unshift(i)
+      i--
+    } else if (!lines[i].trim() && i > 0 && OPCION_RE.test(lines[i - 1])) {
+      i--
+    } else {
+      break
+    }
+  }
+  const start = indices[0] ?? end + 1
+  const opts = indices.map((k) => {
+    const m = lines[k].match(OPCION_RE)!
     return { letter: m[1], text: m[2].replace(/\*\*/g, '') }
   })
   const enOrden = opts.length >= 2 && opts.every((o, i) => o.letter === 'ABCDE'[i])

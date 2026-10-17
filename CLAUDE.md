@@ -222,7 +222,7 @@ export async function proxy(request: NextRequest) {
 
 ## 🔌 API Endpoints Reference
 
-**Total endpoints documentados:** 10 (9 producción + 1 dev-only)
+**Total endpoints documentados:** 12 (11 producción + 1 dev-only)
 
 ### 📊 Quick Reference Table
 
@@ -238,6 +238,8 @@ export async function proxy(request: NextRequest) {
 | `/api/dev/reset-lesson` | POST | ✅🔒 | Reiniciar sesión (DEV ONLY) | dev-tools-modal.tsx |
 | `/api/planner/course/[courseId]/images` | GET/POST | ✅ | Banco de imágenes del curso: listar con usos, registrar, adoptar (`{adopt:true}`) | image-bank.tsx, material/image-tools.tsx |
 | `/api/planner/course/[courseId]/images/[imageId]` | PATCH/DELETE | ✅ | Editar o validar (se copia a las lecciones); borrar si ninguna la usa | image-bank.tsx, material/block-form.tsx |
+| `/api/dashboard/[courseId]` | GET | ✅ | Monitor por curso: filas por sesión con estado derivado de la ventana, pendientes de llamar, embudo | dashboard/[courseId]/page.tsx |
+| `/api/seguimiento/[userId]` | GET/POST | ✅ | Seguimiento manual del alumno (no responde / justificado / desertó / retomó) con historial | monitor/seguimiento-form.tsx |
 
 **Convenciones:**
 - ✅ = Requiere autenticación
@@ -528,6 +530,28 @@ Connection: keep-alive
 - `DELETE` → 409 si alguna lección la usa.
 
 **Errores:** 401, 403, 404, 409. **Spec:** `investigacion/panel-de-apoyo-especificacion.md` §9.3.
+
+---
+
+#### 10. Monitor por curso
+**Ruta:** `GET /api/dashboard/[courseId]?sectionId=`
+**Archivo:** `app/api/dashboard/[courseId]/route.ts` · tipos en `types/monitor.ts` · reglas puras en `lib/monitor.ts`
+**Acceso:** rol INSTRUCTOR o más; alcance por sección (`lib/alcance.ts`), igual que la matriz y la ficha. 403 si ninguna sección del curso está al alcance.
+
+- `filas[]`: una por alumno y lección (la sesión representativa), con `estado` activa · en-pausa · sin-terminar · terminada, `avance` a-medias / sin-avanzar, intentos con aviso a uno del tope, `porLimite` y la marca de seguimiento.
+- `pendientes[]`: alumnos con sesiones cerradas sin terminar o sin abrir («no entró») y sin marca de seguimiento posterior al evento.
+- `funnels[]`: por lección; el cuello de botella se mide sobre los que llegaron a la actividad y «por límite» no cuenta como superada.
+- No escribe nada. Dispara los reportes parciales como mucho una vez cada 5 min por curso.
+
+---
+
+#### 11. Seguimiento manual del alumno
+**Ruta:** `GET | POST /api/seguimiento/[userId]`
+**Archivo:** `app/api/seguimiento/[userId]/route.ts` · modelo `SeguimientoAlumno` · helpers en `lib/seguimiento.ts`
+
+**Request (POST):** `{ estado: SIN_NOVEDAD|NO_RESPONDE|JUSTIFICADO|DESERTO|RETOMO, motivo?: HORARIO|CONEXION|NO_ENTENDIO|PERSONAL, courseId?: string, nota?: string }`. `JUSTIFICADO` exige motivo. **Response:** `{ marca }`. **GET:** `{ historial: Marca[] }`, la vigente primero.
+
+**Reglas:** la marca es del alumno, no del curso. `DESERTO` lo saca de los conteos de todos sus cursos y lo manda al final de la matriz. La autoría es la cuenta real aunque el superadmin esté «viendo como» otra persona. **Errores:** 400, 401, 403 (alumno fuera del alcance), 404.
 
 ---
 
@@ -1708,6 +1732,14 @@ export default function LoginPage() {
 - Cada criterio cubierto exige una cita literal del alumno (`evidence` en `lib/activity-verification.ts`); sin cita, pasa a «falta».
 - Un criterio eliminatorio sin cubrir frena el avance hasta agotar intentos. En explicación y práctica, un criterio que pide la razón (`RAZON_RE`) cuenta como eliminatorio.
 - (12 oct 2026) Un eliminatorio se cumple también si el alumno APLICA la regla, aunque lo diga repartido en varios mensajes: la evidencia puede ser una lista de citas, una por parte, y cada una debe estar en lo que escribió. Sophia nunca agradece ni se despide antes de la última actividad: si la actividad sigue abierta y su mensaje no termina en pregunta, el código agrega la pendiente (`terminaEnPregunta` en la ruta); si el verificador aprobó y ella cerró sin preguntar, se avanza enseguida con la pregunta siguiente, sin retener.
+- **Una actividad = un pedido (13 oct 2026).** La pregunta de una actividad pide UNA cosa que se responde en un mensaje: una decisión con su porqué, una predicción, un diagnóstico. Con dos tareas («¿qué criterio subirías? Y reescribe…»), el desglose se gasta en la primera, el tope avanza la actividad y la segunda se pierde o Sophia la pide junto con la actividad siguiente. Detector en `lib/planner/pedidos.ts` (avisa en la tarjeta de actividad del planner, no bloquea); auditoría de toda la base con `scripts/auditar-pedidos.ts`. El guion de una lección (como `scripts/eva-nota-v2.ts`) no se guarda si alguna pregunta pide dos cosas.
+- **Pantalla de la lección (etapa 6, 13 oct 2026):** la lección terminada se reconoce por `progress.completedAt` (de la sesión, no de la actividad): tarjeta de cierre, caja cerrada, barra al 100 %. Lo fijado del panel va después del material de la actividad y plegado, salvo lo que la actividad declara en `teaching.uses` (`pinnedStaysOpen`); al dejar la actividad, el ecualizador vuelve a su caso inicial (`resetSimState`). El título que ve el alumno pasa por `tituloParaAlumno` (sin el código «EVA-NOTA ·»). Si agregas un control al chat, recuerda que la vista Tutor es la que abre por defecto: la encuesta estuvo meses solo en la vista Chat.
+- **Probar como estudiante (13 oct 2026):** `/learn/<id>?vista=estudiante`, solo en sesiones de prueba (`lib/vista-estudiante.ts`). La barra se dibuja con rol de alumno, el material sin validar se oculta (página, bienvenida y chat reciben `comoEstudiante` y usan `verSinValidar` en vez de `isTest`), pegar texto sigue la regla del curso y no hay herramientas de desarrollo. Si agregas otro uso de `isTest` para decidir qué ve el alumno, usa `verSinValidar`. La barra lee el parámetro con `useSearchParams`, por eso va dentro de un `Suspense` en `app/(protected)/layout.tsx`.
+- **Regla de nombres (14 oct 2026):** el título de la lección y el `title` de cada actividad nombran LO QUE SE APRENDE, en tono de sílabo: «Justificación de inasistencias», no «Mario con fiebre», ni «¿Cómo…?», ni «Gana el TC», ni «EVA-NOTA ·» (el código vive en el slug). El caso va en `subtitle` («Caso Mario»). Mayúscula solo al inicio y en nombres propios. Detector en `lib/planner/titulos.ts` (avisa en el planner, no bloquea), auditoría con `scripts/auditar-titulos.ts`; sin título, el alumno ve «Actividad N».
+- **Vista Cuaderno + Pizarra (14 oct 2026):** /learn tiene una sola vista: el Cuaderno (`components/learning/cuaderno.tsx`, riel de avance + conversación por secciones + caja) y la Pizarra (`pizarra.tsx`, el material de apoyo: columna derecha en escritorio, pestaña «Conversación | Pizarra» en celular), con los colores del kiosko del WMC (`.tema-noche` en `app/globals.css`). Se probó el material DENTRO de la hoja y se descartó: aparecía después de la pregunta, se iba con el scroll y alejaba la pregunta de la caja. No hay vistas Tutor/Chat. Los mensajes se agrupan por `activityId` (`lib/cuaderno.ts`); en vivo, la respuesta que cierra una actividad pasa a la siguiente, como en el servidor. Cada mensaje que cita material lleva «Ver en la pizarra». Si agregas un componente a la lección, dale clases oscuras propias: `.tema-noche` solo traduce las utilidades que ya usaban el material y la caja. Las alternativas «A) …» pueden venir separadas por líneas en blanco (`splitChoiceOptions` lo tolera).
+- **Sin OpenAI (14 oct 2026, decisión de Walther: no gastar más en OpenAI):** se retiró toda la voz de OpenAI (`/api/voice/*`, `use-voice-chat`, `voice-button`). Leer en voz alta usa `speechSynthesis` (`hooks/use-lectura.ts`, voz elegida en `lib/voz.ts`) y dictar usa el reconocimiento de voz del navegador (`hooks/use-dictado.ts`): gratis, en Chrome/Edge/Safari; en Firefox el micrófono no se muestra. El micrófono va DENTRO de la caja de respuesta y lo dictado queda en la caja para revisarlo: pasa por el mismo camino que un mensaje escrito. `Course.voiceEnabled` ahora solo decide si Sophia lee sola sus mensajes. No vuelvas a agregar llamadas a OpenAI sin preguntar.
+- **En /learn no hay barra global:** la lección tiene una barra única navy (`lesson-bar.tsx`, con logo, segmentos de avance, controles de prueba en línea y `UserMenu`). El voseo que se le escapa al modelo se corrige en el código (`lib/voseo.ts`, en la bienvenida y el chat), y los prompts dicen «la pizarra», nunca «el panel» ni «abajo» (el material está a la derecha o en una pestaña, no debajo del mensaje).
+- **Dos trampas del paso cerrado (14 oct 2026):** el texto del botón de una alternativa no es «elección con razón» aunque sea largo (`esEleccionConRazon` en `lib/choice.ts`: cuenta solo las palabras que no están en la opción). Y «¿Sophia planteó la pregunta siguiente?» (`lib/planteo.ts`) exige al menos dos palabras clave en común: con una sola, un seguimiento de la actividad anterior pasaba por transición, el puntero avanzaba y en el Cuaderno el mensaje aparecía bajo el título de la actividad siguiente.
 - La latencia de cada turno queda en el log como `chat.stream.timing` (db, gate, primer_token, stream, guardado). El piso es el verificador (~4 s); la segunda opinión corre en paralelo con la primera.
 
 **Actividades de dos pasos:** las de explicación y práctica abren con un paso cerrado (`Activity.choice`, alternativas corregidas en código en `lib/choice.ts`, opciones mezcladas por sesión) y siguen con la justificación abierta. La nota la manda la justificación; quien nunca acertó la alternativa no pasa de «en proceso» (`lib/grading.ts`). **Desde el 7 oct 2026 la alternativa es por actividad** (decisión 13 en `investigacion/panel-de-apoyo-especificacion.md` §16.1): se queda donde la actividad es una decisión entre errores reales y como comprobación corta al cierre; lo que tiene material manipulable o legible en el panel conversa sin alternativas, con la acción sobre el panel como ancla. La evidencia que sostiene esto está en §15 de esa especificación.
@@ -1727,6 +1759,40 @@ export default function LoginPage() {
 **Ecualizador y comprobación de cierre (etapa 5):** el bloque `simulator` vive en el estado del panel (`material-context.tsx`) y su estado viaja con cada mensaje a `/api/chat/stream` (`materialState`); el servidor lo valida contra la lección (`lib/simulator.ts`) y Sophia lo lee como «ESTADO DEL PANEL». Las notas propias del alumno nunca se guardan. Una actividad que se abre con algo distinto de su pregunta de verificación declara `teaching.first_question`; sin eso, bienvenida y transición terminan con el porqué. La comprobación de cierre (`Activity.checks`) la responde el código con un stream fijo (`streamFijo` en la ruta), sin modelo ni verificador; suma una fila de peso 1 en `notaDeLaSesion`.
 
 **Dos trampas más que salieron en esas pruebas:** el detector de ruido de voz (`lib/hallucination-detector.ts`) marcaba como alucinación un cálculo escrito con muchos dígitos (ahora los dígitos cuentan como contenido), y la bienvenida planteaba siempre la actividad 1 aunque la sesión de prueba empezara desde otra (ahora usa el puntero de la sesión). Las reglas que enseña una lección se verifican contra la fuente antes de probarla: EVA-NOTA enseñó dos reglas falsas hasta que se leyó el Reglamento Interno v03 (copia en `Claude/diseño-ppt-cetemin/01_Insumos/Institucional`).
+
+---
+
+### Monitor del instructor: una sola definición de estado (15 oct 2026)
+
+**Problema:** el Monitor tenía tres definiciones de «va mal» que no coincidían (portada, matriz, curso), la API por curso exigía ADMIN y el rol INSTRUCTOR veía la pantalla en blanco, la alerta de 24 h duplicaba la fila «abandonado» y nunca se apagaba, y ese mismo GET escribía `endedAt` cada 15 s desde cada pestaña abierta: un alumno «abandonaba» solo si alguien miraba el Monitor, y si volvía dentro de la ventana su sesión ya estaba muerta.
+
+**Reglas (en `lib/monitor.ts`, con pruebas en `tests/monitor.test.ts`):**
+- La **ventana de la sección** manda. Abierta: activa (menos de 2 h) o en pausa. Cerrada: sin terminar, a medias o sin avanzar (los nombres de la matriz). Sin horario, y solo ahí, 24 h de silencio la cierran.
+- **Nadie escribe `endedAt` por inactividad.** El estado se deriva. `/learn/[sessionId]` muestra «Esta sesión ya se cerró» cuando la ventana pasó.
+- **Alerta = pendiente de llamar:** sesión cerrada sin terminar o sin abrir, sin marca de seguimiento posterior al evento. «Desertó» atiende todo.
+- **Seguimiento manual** (`SeguimientoAlumno`, diseño del 1 oct): por alumno, con autor, fecha e historial. Se anota desde la ficha; la matriz y el Monitor lo muestran.
+- **Embudo:** respeta el filtro de sección y el alcance; cuello de botella = menos de la mitad de los que **llegaron** la superó (mínimo 3); «avanzó por límite» no cuenta como superada; el criterio más fallado cuenta alumnos, no intentos.
+- **Señales de la fila:** aviso a uno del tope de intentos (al tope el código ya avanzó al alumno) y «avanzó por límite» visible después.
+- **Fechas:** `lib/formatters.ts` fija `America/Lima`. Las páginas de servidor formateaban con la zona del proceso y en Vercel eso es UTC.
+- `pesoDeFila` en `lib/asistencia.ts` es la única cuenta de «¿a quién llamo?»: solo celdas con la ventana cerrada; la usan la portada y el orden de la matriz.
+
+---
+
+### Sesiones de curso con Sophia: enseñar primero, sin alternativas, caso corto (15 oct 2026)
+
+**Contexto:** en los cursos de CETEMIN (primero SI-ALTORIESGO), Sophia es el **primer bloque de 45 min de la clase virtual** de 3 horas pedagógicas. Después el instructor aclara unos 15 min con el Monitor delante y los equipos resuelven el caso de la sesión en sala. La plantilla de tutoría (alternativas + justificación) no sirve aquí: con un alumno simulado se vio que Sophia preguntaba el 85 % del tiempo a alumnos que recién estaban aprendiendo. Walther fijó estas reglas, que valen **cada vez que se diseñe una sesión de curso** (manual, cargador o planner):
+
+1. **La rutina de entrada se corre tal cual.** Veo · Pienso · Me pregunto son tres actividades `reflection` sin nota (`is_evaluative: false`, `max_attempts: 1`), una pregunta por paso, con las preguntas **que trae la imagen** (el mural de S1 traía otras que el guion) en un bloque `consigna` más la foto, fijados y abiertos con `teaching.uses`.
+2. **Enseñar primero, preguntar después.** Cada punto clave es una actividad `practice` (no `explanation`: ese modo abre con una pregunta exploratoria) cuya instrucción empieza con «Enseña primero…» y trae un **ejemplo resuelto propio** que Sophia resuelve antes de preguntar. La lámina y el texto de la norma van en la pizarra **en el orden en que se enseñan** (imagen, texto, láminas de apoyo `on_reference`). Recién después, **una** pregunta abierta sobre una situación propia, con un reintento (`max_attempts: 2`) para que todo quepa en 45 min.
+3. **Sin alternativas en el chat.** Ni `choice` ni `checks` en estas sesiones: la comprobación son los 15 min del instructor, que ve en el Monitor el criterio más fallado y las respuestas. El cargador falla si una actividad trae alternativas.
+4. **Los casos de la sesión no entran en Sophia.** Son el producto del equipo; si Sophia los resuelve, le quita el trabajo al equipo, y si los pregunta, lo duplica. La aplicación individual es un **caso corto gemelo** (mismo rubro y estructura, otra situación, una sola decisión) con su solución en `must_include`. Los ejemplos resueltos tampoco salen de los casos de la sesión.
+5. **El cierre alimenta al instructor.** Última actividad `closing` sin nota: «¿qué punto de hoy te quedó menos claro?». La reflexión «Antes pensaba… ahora pienso» queda al final de la clase, con el instructor.
+6. **Sophia no ve imágenes.** La `description` de cada imagen lleva **el texto escrito en ella** (preguntas, valores de una tabla, rótulos): se mira la imagen antes de describirla. El cargador actualiza la ficha del banco aunque la imagen ya exista.
+7. **Fuente de datos:** solo `05_Base-de-datos` del proyecto diseño-ppt-cetemin (solo lectura). Lo que falta se pide allá, no se saca de los guiones: casos cortos con solución, texto visible de las imágenes, rutinas con sus preguntas, recurso autónomo por sesión.
+
+8. **Canal único de carga (decisión de Walther, 15 oct 2026: «todas las cargas van a ser por este medio»):** `scripts/cetemin/` (ver su `README.md`). Una sesión es un archivo de datos (`cursos/<curso>/s<n>.ts`); las actividades las arman las plantillas (`plantillas.ts`, la forma vive una sola vez), `validar.ts` bloquea lo que no cumple estas reglas, `cargar.ts` escribe sin publicar y `auditar-sesion.ts` revisa la transcripción de la prueba (no califica en pasos sin nota, ejemplo antes de la pregunta, sin casos del equipo, cabe en 16 turnos). Se publica cuando las pruebas con alumno flojo y bueno pasan la auditoría. Lo que la plantilla no pueda arreglar es código y lo decide Walther.
+
+Referencia: `scripts/cetemin/cursos/si-altoriesgo/s1.ts` (S1, 9 actividades: 3 de rutina, 4 de adquisición, 1 caso corto, 1 cierre).
 
 ---
 

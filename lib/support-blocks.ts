@@ -84,6 +84,36 @@ export function allLessonBlocks(content: LessonContent | null | undefined, isTes
   )
 }
 
+/** Lo que la pizarra necesita saber de cada actividad para plegar lo fijado. */
+export interface ActivityPanelInfo {
+  type: string
+  uses?: string[]
+  hasBlocks: boolean
+}
+
+export function panelInfo(content: LessonContent | null | undefined): Record<string, ActivityPanelInfo> {
+  return Object.fromEntries(
+    (content?.activities ?? []).map((a) => [
+      a.id,
+      { type: a.type, uses: a.teaching?.uses, hasBlocks: getActivityBlocks(a).length > 0 },
+    ]),
+  )
+}
+
+/**
+ * ¿Un bloque fijado de una actividad anterior se muestra ABIERTO en esta?
+ * Sí cuando la actividad lo declara en `teaching.uses`. Sin ese campo: abierto
+ * solo si la actividad no trae material propio y no es de reflexión ni cierre.
+ * (13 oct 2026: en el cierre de EVA-NOTA el ecualizador quedaba abierto con
+ * «10 desaprueba» en rojo, de la actividad 6, mientras el alumno reflexionaba.)
+ */
+export function pinnedStaysOpen(info: ActivityPanelInfo | undefined, blockId: string): boolean {
+  if (!info) return true
+  if (info.uses) return info.uses.includes(blockId)
+  if (info.type === 'reflection' || info.type === 'closing') return false
+  return !info.hasBlocks
+}
+
 const TIPO: Record<SupportBlock['type'], string> = {
   image: 'IMAGEN',
   compare: 'COMPARACIÓN',
@@ -137,7 +167,7 @@ export function serializeBlockForPrompt(b: SupportBlock, cited?: Cited): string 
       return `${b.items.map((it) => `«${it.caption}»: ${it.description}`).join(' | ')}. No digas cuál es cuál hasta que el estudiante responda.`
     case 'formula': {
       const terminos = b.terms?.length ? ` Términos: ${b.terms.map((t) => `${t.symbol} = ${t.meaning}${t.value ? ` (${t.value})` : ''}`).join('; ')}.` : ''
-      const ejemplo = b.example ? ` Ejemplo resuelto en el panel: ${b.example.label}, total ${b.example.total}.` : ''
+      const ejemplo = b.example ? ` Ejemplo resuelto en el material: ${b.example.label}, total ${b.example.total}.` : ''
       return `${b.expression}.${terminos}${ejemplo}`
     }
     case 'table': {
@@ -149,13 +179,13 @@ export function serializeBlockForPrompt(b: SupportBlock, cited?: Cited): string 
     case 'text': {
       const lineas = b.body.split('\n').map((l) => l.trim()).filter(Boolean)
       const inicio = lineas.slice(0, 2).join(' ').slice(0, 220)
-      return `${palabras(b.body)} palabras${b.source ? `, fuente ${b.source}` : ''}. Empieza: «${inicio}…». No lo copies: di «lee el texto del panel» y cita la línea que necesites.`
+      return `${palabras(b.body)} palabras${b.source ? `, fuente ${b.source}` : ''}. Empieza: «${inicio}…». No lo copies: di «lee el texto en la pizarra» y cita la línea que necesites.`
     }
     case 'case':
       // En la bienvenida de EVA-NOTA (6 oct) Sophia recitó los datos de Luis
       // que el alumno ya tenía en el panel: los datos se le dan para razonar,
       // no para repetirlos.
-      return `${b.name}: ${b.facts.join(' · ')}.${b.question ? ` Pregunta: ${b.question}` : ''} Estos datos ya están en el panel: no los enumeres en el chat; di «mira el caso de ${b.name} en el panel» y nombra como mucho el dato que importa para la pregunta.`
+      return `${b.name}: ${b.facts.join(' · ')}.${b.question ? ` Pregunta: ${b.question}` : ''} Estos datos ya están en la pizarra, a la vista del estudiante: no los enumeres; di «mira el caso de ${b.name} en la pizarra» y nombra como mucho el dato que importa para la pregunta.`
     case 'diagram': {
       const nombre = new Map(b.nodes.map((n) => [n.id, n.label]))
       if (b.kind === 'hierarchy') {
@@ -200,28 +230,17 @@ export function buildMaterialPrompt(blocks: SupportBlock[], pinned: SupportBlock
   const hayOcultos = [...blocks].some((b) => estado(b, cited) !== 'YA VISIBLE')
   const haySenales = blocks.some((b) => b.type === 'image' && b.markers?.some((m) => !isMarkerVisible(m, b, cited)))
   return `
-MATERIAL DE APOYO en el panel del estudiante (cítalo por su título; NO lo reescribas en el chat):
+MATERIAL DE APOYO (el estudiante lo ve en su PIZARRA, al lado de la conversación; cítalo por su título y NO lo reescribas):
 ${lineas.join('\n')}
 
 REGLAS DEL MATERIAL:
+- El material está en la PIZARRA del estudiante (en computadora, a la derecha; en celular, una pestaña). Llámalo «la pizarra» o por su título («el ecualizador de la pizarra»); NUNCA digas «el panel» ni «abajo», aunque la instrucción de la actividad lo diga.
 - Refiérete al material por su título y a la fila, línea o número exacto: «mira la fila de 10 sesiones del "Semáforo de faltas"».
 - El estudiante no conoce los ids internos: nunca los escribas sueltos ni entre corchetes. Un id solo va dentro de un marcador [[block:ID]] o [[marker:ID:n]].
-- NUNCA copies en el chat una tabla, una fórmula, un fragmento o los datos de un caso que ya están en el panel. El estudiante los está viendo.
-- Si el estudiante pregunta algo que está en el panel, señálaselo antes de responder.
+- NUNCA copies en el chat una tabla, una fórmula, un fragmento o los datos de un caso que ya están en el material. El estudiante los está viendo.
+- Si el estudiante pregunta algo que está en el material, señálaselo antes de responder.
 - Usa solo lo que dice cada bloque. No inventes filas, valores, pasos ni detalles de una imagen.${hayOcultos ? `
-- Para mostrar un bloque oculto escribe su marcador [[block:ID]] UNA sola vez, al final de la oración donde lo presentas. El estudiante no ve el marcador: ve el bloque aparecer en el panel.` : ''}${haySenales ? `
+- Para mostrar un bloque oculto escribe su marcador [[block:ID]] UNA sola vez, al final de la oración donde lo presentas. El estudiante no ve el marcador: ve el bloque aparecer en la pizarra.` : ''}${haySenales ? `
 - Para mostrar un señalamiento de una imagen escribe [[marker:ID:n]] al final de la oración donde lo nombras. En una escena de caso, SOLO después de que el estudiante haya respondido qué ve; nunca al presentar la escena.` : ''}`
 }
 
-/** Versión corta para el prompt de voz: Sophia no puede leer una tabla en voz alta. */
-export function buildMaterialVoiceLines(blocks: SupportBlock[], pinned: SupportBlock[] = []): string[] {
-  const todos = [...pinned, ...blocks]
-  if (todos.length === 0) return []
-  return [
-    '',
-    `MATERIAL EN EL PANEL DEL ESTUDIANTE (${todos.length}):`,
-    ...todos.map((b, i) => `  [${i + 1}] ${TIPO[b.type]} «${b.title}»: ${serializeBlockForPrompt(b)}`),
-    'Nunca leas en voz alta una tabla, una fórmula ni un fragmento: di «mira la tabla del panel» y nombra solo la fila o el dato que importa.',
-    'Usa SOLO lo que dice cada bloque; no inventes detalles.',
-  ]
-}

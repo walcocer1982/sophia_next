@@ -63,3 +63,11 @@ test('resuelve al acertar y revela al agotar los intentos', () => {
   assert.equal(ok.correct, true)
   assert.equal(ok.revealed, false)
 })
+
+test('el texto del botón no es una razón; una justificación propia sí', async () => {
+  const { esEleccionConRazon } = await import('../lib/choice')
+  const opcion = 'Ya cuenta como inasistencia, pero entras y te quedas toda la sesión para no perder la clase'
+  assert.equal(esEleccionConRazon(`D) ${opcion}`, opcion), false)
+  assert.equal(esEleccionConRazon('la d', opcion), false)
+  assert.equal(esEleccionConRazon('La D, porque aunque ya sea falta igual necesito la clase para el examen', opcion), true)
+})

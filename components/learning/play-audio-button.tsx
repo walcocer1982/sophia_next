@@ -1,9 +1,13 @@
 'use client'
 
-import { useRef, useState } from 'react'
-import { Volume2, Loader2, Pause } from 'lucide-react'
+/**
+ * «Escuchar»: lee un mensaje de Sophia con la voz del navegador. Empieza al
+ * tocar (antes pedía el audio completo a OpenAI y había que esperar varios
+ * segundos con el ícono girando). Sin voz en español en el equipo, no se muestra.
+ */
+import { Volume2, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { stripMarkers } from '@/lib/material-markers'
+import { useLectura } from '@/hooks/use-lectura'
 
 interface PlayAudioButtonProps {
   text: string
@@ -11,69 +15,20 @@ interface PlayAudioButtonProps {
 }
 
 export function PlayAudioButton({ text, className }: PlayAudioButtonProps) {
-  const [state, setState] = useState<'idle' | 'loading' | 'playing'>('idle')
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-
-  const stop = () => {
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current.currentTime = 0
-    }
-    setState('idle')
-  }
-
-  const play = async () => {
-    if (state === 'playing') {
-      stop()
-      return
-    }
-
-    setState('loading')
-    try {
-      const res = await fetch('/api/voice/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Los marcadores del panel ([[block:…]]) nunca se leen en voz alta.
-        body: JSON.stringify({ text: stripMarkers(text) }),
-      })
-      if (!res.ok) throw new Error('TTS failed')
-
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      audioRef.current = audio
-      audio.onended = () => {
-        setState('idle')
-        URL.revokeObjectURL(url)
-      }
-      audio.onerror = () => {
-        setState('idle')
-        URL.revokeObjectURL(url)
-      }
-      await audio.play()
-      setState('playing')
-    } catch (e) {
-      console.error('Play audio error:', e)
-      setState('idle')
-    }
-  }
-
+  const { soportado, leyendo, leer, detener } = useLectura()
+  if (!soportado) return null
+  const activo = leyendo !== null
   return (
     <Button
       type="button"
-      onClick={play}
+      onClick={() => (activo ? detener() : leer(text))}
       variant="ghost"
       size="sm"
-      className={`h-7 gap-1 text-xs text-gray-500 hover:text-gray-700 ${className ?? ''}`}
+      className={`h-7 gap-1 text-xs ${className ?? 'text-gray-500 hover:text-gray-700'}`}
+      aria-pressed={activo}
     >
-      {state === 'loading' ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
-      ) : state === 'playing' ? (
-        <Pause className="h-3 w-3" />
-      ) : (
-        <Volume2 className="h-3 w-3" />
-      )}
-      {state === 'playing' ? 'Pausar' : 'Escuchar'}
+      {activo ? <Square className="h-3 w-3 fill-current" /> : <Volume2 className="h-3 w-3" />}
+      {activo ? 'Detener' : 'Escuchar'}
     </Button>
   )
 }

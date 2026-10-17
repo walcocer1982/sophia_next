@@ -94,6 +94,30 @@ export function describeStateForPrompt(b: SimulatorBlock, s: SimState): string {
   return `Ecualizador «${b.title}» (${origen}): ${valores} → resultado ${fmt(shown)} (${estado}).${cambio}${privado}`
 }
 
+/**
+ * Si el alumno ya movió el ecualizador, la instrucción que va ARRIBA del
+ * estado. Prueba del 14 oct 2026: el alumno bajó el TC2 a 0, vio 10 y lo
+ * dijo; Sophia siguió el guion («baja el TC2 y dime qué ves») y le dijo que
+ * la nota «está en 13». El estado le había llegado; lo ignoró por el guion.
+ */
+export function directivaSiYaMovio(b: SimulatorBlock, s: SimState): string | null {
+  const inicial = initialState(b)
+  const cambioDeCaso = !!s.preset && s.preset !== inicial.preset
+  const movio = !!s.lastChange || s.own || cambioDeCaso || b.variables.some((v) => s.values[v.id] !== inicial.values[v.id])
+  if (!movio) return null
+  const { shown, pass } = computeResult(b, s.values)
+  const estado = pass ? b.labels?.pass ?? 'aprueba' : b.labels?.fail ?? 'desaprueba'
+  const etiqueta = (id: string) => b.variables.find((v) => v.id === id)?.label ?? id
+  const que = s.lastChange
+    ? `movió ${etiqueta(s.lastChange.variable)} de ${fmt(s.lastChange.from)} a ${fmt(s.lastChange.to)}`
+    : s.own
+      ? 'cargó sus propias notas'
+      : cambioDeCaso
+        ? `cargó el caso «${s.preset}»`
+        : 'cambió los valores'
+  return `EL ESTUDIANTE YA ${que.toUpperCase()} en el ecualizador «${b.title}» y ahora ve ${fmt(shown)} (${estado}). NO le pidas que haga ese cambio ni le digas que la nota «está en» el valor del caso: reacciona al ${fmt(shown)} que tiene delante y pasa al siguiente paso (el contraste o el porqué).`
+}
+
 /** Lo que Sophia sabe del bloque (sin estado): variables, pesos y casos. */
 export function serializeSimulatorForPrompt(b: SimulatorBlock): string {
   const vars = b.variables.map((v) => `${v.label} ${fmt(v.weight)} %`).join(', ')
@@ -103,5 +127,5 @@ export function serializeSimulatorForPrompt(b: SimulatorBlock): string {
       return `${p.label}: ${b.variables.map((v) => `${v.label} ${fmt(p.values[v.id] ?? 0)}`).join(', ')} → ${fmt(r.shown)}`
     })
     .join(' | ')
-  return `Ecualizador: el estudiante mueve una barra por nota y ve el resultado al instante. Pesos: ${vars}. Escala ${b.scale.min}–${b.scale.max}, aprueba con ${b.scale.pass}.${casos ? ` Casos: ${casos}.` : ''}${b.allowOwnValues ? ' Puede cargar sus propias notas («Mis notas»).' : ''} Pide primero una predicción, luego una acción («baja el TC2 a 0 y cuéntame qué pasó») y después el porqué. No digas el resultado antes de que el estudiante mueva: él lo lee en el panel.`
+  return `Ecualizador: el estudiante mueve una barra por nota y ve el resultado al instante. Pesos: ${vars}. Escala ${b.scale.min}–${b.scale.max}, aprueba con ${b.scale.pass}.${casos ? ` Casos: ${casos}.` : ''}${b.allowOwnValues ? ' Puede cargar sus propias notas («Mis notas»).' : ''} Guion: predicción → acción («baja el TC2 a 0 y cuéntame qué pasó») → contraste → porqué. Antes de pedir una acción MIRA el ESTADO DEL ECUALIZADOR: si el estudiante ya la hizo, no la pidas; reacciona al resultado que ve. No digas el resultado antes de que mueva: él lo lee en la pizarra.`
 }

@@ -83,8 +83,11 @@ export function ProgressProvider({
           lessonTitle: data.lessonTitle || prev.lessonTitle,
           lastCompletedId: data.lastCompleted?.activityId || null,
           lastCompletedAt: data.lastCompleted?.completedAt || null,
-          completedAt: data.completedAt || null,
-          passed: data.passed ?? null,
+          // Una sesión no se «descompleta»: si el evento de la última actividad
+          // ya la marcó y este sondeo llegó antes de que el servidor guardara
+          // completedAt, se conserva (si no, la tarjeta de cierre parpadeaba).
+          completedAt: data.completedAt || prev.completedAt,
+          passed: data.passed ?? prev.passed,
         }))
       } catch {
         // Silently fail — progress will just be stale
