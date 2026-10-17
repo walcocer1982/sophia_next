@@ -1,6 +1,7 @@
 import { requireRole } from '@/lib/auth-utils'
 import { anthropic, DEFAULT_MODEL } from '@/lib/anthropic'
 import { PlannerChatRequestSchema, GeneratedStructureSchema } from '@/lib/planner/validation'
+import { sanitizeGeneratedBlocks } from '@/lib/material-editor'
 import { buildPlannerSystemPrompt } from '@/lib/planner/conversational-prompts'
 import { processPlannerAttachments, type PlannerContentBlock } from '@/lib/planner/attachments'
 import { PLANNER_STEPS } from '@/types/planner'
@@ -234,8 +235,12 @@ export async function POST(request: Request) {
         for (const update of updates) {
           // Validar actividades si es el campo activities
           if (update.field === 'activities') {
+            // Un bloque de material mal formado se descarta solo él; antes
+            // invalidaba toda la estructura propuesta.
+            const limpio = sanitizeGeneratedBlocks(update.value)
+            if (limpio.dropped) console.warn('[PLANNER] Bloques de material descartados:', limpio.reasons)
             const validation = GeneratedStructureSchema.safeParse({
-              activities: update.value,
+              activities: limpio.activities,
             })
             if (!validation.success) {
               console.error('[PLANNER] Activity validation FAILED:', JSON.stringify(validation.error.flatten()))

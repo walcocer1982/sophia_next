@@ -1,37 +1,24 @@
 import { auth } from '@/auth'
-import { tituloActividad } from '@/lib/actividad-titulo'
 import { prisma } from '@/lib/prisma'
 import { ChatInterface } from '@/components/learning/chat-interface'
 import { LearningLayout } from '@/components/learning/learning-layout'
 import { redirect } from 'next/navigation'
 import { notFound } from 'next/navigation'
 import type { LessonContent } from '@/types/lesson'
+import { allLessonBlocks, panelInfo } from '@/lib/support-blocks'
+import { PARAM_VISTA, esVistaEstudiante } from '@/lib/vista-estudiante'
+import { nombreDeActividad } from '@/lib/planner/titulos'
+import { cierreDeVentana } from '@/lib/monitor'
+import { formatDateLong, formatTime } from '@/lib/formatters'
+import Link from 'next/link'
 
-/**
- * Extrae el nombre del instructor del texto de personalidad
- * Ej: "Eres el Ingeniero Carlos, un experto..." → "Ingeniero Carlos"
- */
-function extractInstructorName(instructorText: string): string {
-  const patterns = [
-    /Eres (?:el |la )?([^,.\n]+)/i,  // "Eres el Ingeniero Carlos"
-    /Soy (?:el |la )?([^,.\n]+)/i,   // "Soy el Ingeniero Carlos"
-    /^([A-Z][a-záéíóú]+ [A-Z][a-záéíóú]+)/,  // "Ingeniero Carlos" al inicio
-  ]
-
-  for (const pattern of patterns) {
-    const match = instructorText.match(pattern)
-    if (match && match[1]) {
-      return match[1].trim()
-    }
-  }
-
-  return 'Instructor AI'
-}
 
 export default async function ChatPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ sessionId: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -73,6 +60,56 @@ export default async function ChatPage({
     notFound()
   }
 
+  // Ventana cerrada (15 oct 2026). Antes el Monitor marcaba `endedAt` a las
+  // 24 h sin actividad y el chat devolvía 404 sin explicación; ahora nadie
+  // cierra sesiones por inactividad y es la ventana de la sección la que
+  // decide, como en la lista de clases y en /api/session/start.
+  if (!lessonSession.isTest && !lessonSession.completedAt) {
+    const matricula = await prisma.enrollment.findFirst({
+      where: { userId: session.user.id, section: { courseId: lessonSession.lesson.courseId } },
+      select: {
+        section: {
+          select: {
+            schedules: {
+              where: { lessonId: lessonSession.lessonId },
+              select: { availableAt: true, closesAfterHours: true },
+            },
+          },
+        },
+      },
+    })
+    const horario = matricula?.section.schedules[0]
+    const cierre = horario
+      ? cierreDeVentana(horario.availableAt, horario.closesAfterHours)
+      : cierreDeVentana(lessonSession.lesson.availableAt, lessonSession.lesson.closesAfterHours)
+    if (cierre && cierre < new Date()) {
+      return (
+        <div className="mx-auto max-w-lg p-8">
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+            <p className="text-sm font-medium text-gray-900">Esta sesión ya se cerró</p>
+            <p className="mx-auto mt-2 max-w-sm text-sm text-gray-500">
+              «{lessonSession.lesson.title}» cerró el {formatDateLong(cierre)} a las {formatTime(cierre)}.
+              Lo que avanzaste quedó guardado.
+            </p>
+            <Link
+              href="/lessons"
+              className="mt-5 inline-flex h-10 items-center rounded-md bg-gray-900 px-4 text-sm font-medium text-white hover:bg-gray-800"
+            >
+              Volver a mis clases
+            </Link>
+          </div>
+        </div>
+      )
+    }
+  }
+
+  // «Probar como estudiante» (lib/vista-estudiante.ts): solo en sesiones de
+  // prueba. Con esto, la pantalla sigue las reglas del curso y no las del
+  // instructor: material sin validar oculto, pegar texto según el curso, sin
+  // herramientas de desarrollo y con la franja de prueba reducida.
+  const comoEstudiante = lessonSession.isTest && esVistaEstudiante((await searchParams)[PARAM_VISTA])
+  const verSinValidar = lessonSession.isTest && !comoEstudiante
+
   // Parse lesson content
   const contentJson = lessonSession.lesson.contentJson as LessonContent | null
   const totalActivities = contentJson?.activities?.length || 1
@@ -87,33 +124,24 @@ export default async function ChatPage({
     role: msg.role as 'user' | 'assistant',
     content: msg.content,
     createdAt: msg.timestamp,
+    activityId: msg.activityId,
   }))
 
-  // Extract per-activity images from contentJson (supports images[] and legacy image)
-  const allImages = (contentJson?.activities || []).flatMap((a) => {
-    const imgs = a.teaching?.images || (a.teaching?.image ? [a.teaching.image] : [])
-    return imgs.filter((img) => img.url).map((img) => ({
-      activityId: a.id,
-      url: img.url,
-      description: img.description,
-      showWhen: img.showWhen || ('on_reference' as const),
-    }))
-  })
+  // Material de apoyo de toda la lección (bloques + imágenes viejas convertidas).
+  // Las imágenes sin validar solo se ven en sesiones de prueba.
+  const allBlocks = allLessonBlocks(contentJson, verSinValidar)
+  const activityOrder = (contentJson?.activities || []).map((a) => a.id)
   const keyPoints = lessonSession.lesson.keyPoints || []
-
-  // Extraer nombre del instructor del texto completo
-  const instructorName = extractInstructorName(
-    lessonSession.lesson.course?.instructor || ''
-  )
 
   // Build test mode props if this is a test session
   const testMode = lessonSession.isTest && lessonSession.lesson.course
     ? {
         courseId: lessonSession.lesson.course.id,
+        comoEstudiante,
         activities: (contentJson?.activities || []).map((a, i) => ({
           id: a.id,
           type: a.type,
-          title: tituloActividad(a, i),
+          title: nombreDeActividad(a, i),
         })),
       }
     : undefined
@@ -121,16 +149,19 @@ export default async function ChatPage({
   return (
     <LearningLayout
       sessionId={lessonSession.id}
-      instructorName={instructorName}
       lessonTitle={lessonSession.lesson.title}
       objective={lessonSession.lesson.objective || ''}
       keyPoints={keyPoints}
-      allImages={allImages}
-      videoUrl={lessonSession.lesson.videoUrl}
+      allBlocks={allBlocks}
+      activityOrder={activityOrder}
+      activityInfo={panelInfo(contentJson)}
+      isTest={verSinValidar}
+      initialActivityId={lessonSession.activityId ?? activityOrder[0] ?? null}
       initialProgress={{
         current: completedCount + 1,
         total: totalActivities,
         percentage: Math.round((completedCount / totalActivities) * 100),
+        completedAt: lessonSession.completedAt?.toISOString() ?? null,
       }}
       testMode={testMode}
     >
@@ -138,14 +169,25 @@ export default async function ChatPage({
         sessionId={lessonSession.id}
         initialMessages={transformedMessages}
         lessonTitle={lessonSession.lesson.title}
+        objective={lessonSession.lesson.objective || ''}
+        keyPoints={keyPoints}
+        actividades={(contentJson?.activities || []).map((a, i) => ({
+          id: a.id,
+          titulo: nombreDeActividad(a, i),
+          subtitulo: a.subtitle,
+        }))}
+        exitHref={testMode ? `/planner/${testMode.courseId}` : '/lessons'}
+        exitLabel={testMode ? 'Volver al curso' : 'Volver a mis lecciones'}
         voiceEnabled={lessonSession.lesson.course?.voiceEnabled ?? true}
         allowPaste={
-          session.user.role === 'ADMIN' ||
-          session.user.role === 'SUPERADMIN' ||
-          session.user.role === 'INSTRUCTOR' ||
-          lessonSession.isTest === true ||
-          lessonSession.lesson.course?.allowPaste === true
+          lessonSession.lesson.course?.allowPaste === true ||
+          (!comoEstudiante &&
+            (session.user.role === 'ADMIN' ||
+              session.user.role === 'SUPERADMIN' ||
+              session.user.role === 'INSTRUCTOR' ||
+              lessonSession.isTest === true))
         }
+        comoEstudiante={comoEstudiante}
         allowAttachments={lessonSession.lesson.course?.allowImagePaste === true}
       />
     </LearningLayout>

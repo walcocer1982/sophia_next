@@ -52,9 +52,139 @@ export interface Teaching {
   target_length?: string        // Extensión esperada: "150-300 palabras"
   context?: string              // Contexto adicional: "Sector: X. País: Y"
   image_suggestions?: string[]  // Sugerencias de IA: qué imágenes necesita esta actividad
-  image?: TeachingImage         // DEPRECATED: backward compat — usar images[]
-  images?: TeachingImage[]      // Múltiples imágenes por actividad (ordenadas)
+  /**
+   * Pregunta con que se ABRE la actividad cuando no es la de verificación.
+   * En una actividad con ecualizador se abre con la predicción («¿qué crees que
+   * pasa si…?») y el porqué de `verification.question` llega al final (spec del
+   * panel §16.4). La usan la bienvenida, la transición y la retención del avance.
+   */
+  first_question?: string
+  /**
+   * Bloques fijados (`pinned`) de actividades anteriores que ESTA actividad usa
+   * (la 6 de EVA-NOTA conversa sobre el ecualizador de la 4). En el panel se
+   * quedan abiertos; el resto de lo fijado se pliega. Sin este campo, lo fijado
+   * queda abierto solo si la actividad no trae material propio y no es de
+   * reflexión ni cierre (`pinnedStaysOpen` en lib/support-blocks.ts).
+   */
+  uses?: string[]
+  image?: TeachingImage         // DEPRECATED: backward compat — usar blocks
+  images?: TeachingImage[]      // DEPRECATED: backward compat — usar blocks
+  blocks?: SupportBlock[]       // Material de apoyo del panel (investigacion/panel-de-apoyo-especificacion.md)
 }
+
+// ============================================
+// MATERIAL DE APOYO (panel derecho de /learn)
+// ============================================
+// La lección declara bloques tipados; Sophia los cita por su título y no los
+// reescribe en el chat; el alumno los tiene a la vista mientras responde.
+// Especificación: investigacion/panel-de-apoyo-especificacion.md
+
+export type SupportBlockType = 'image' | 'compare' | 'formula' | 'table' | 'text' | 'case' | 'diagram' | 'simulator'
+export type ShowWhen = 'on_start' | 'on_reference' | 'on_demand'
+
+export interface SupportBlockBase {
+  id: string                 // único en la lección, estable: Sophia lo usa para citarlo
+  type: SupportBlockType
+  title: string              // lo que Sophia dice: «mira la tabla "Semáforo de faltas"»
+  showWhen?: ShowWhen        // default on_start
+  pinned?: boolean           // sigue visible en las actividades siguientes
+  forVerifier?: boolean      // el verificador recibe el contenido completo
+  source?: string            // procedencia: «Reglamento Interno v03, Art. 40»
+}
+
+export interface ImageMarker {
+  n: number                  // número que se dibuja (1, 2, 3…)
+  x: number                  // 0–100, porcentaje del ancho de la imagen
+  y: number                  // 0–100, porcentaje del alto
+  label: string              // qué explica el señalamiento
+  showWhen?: ShowWhen        // on_reference: aparece cuando Sophia lo cita
+}
+
+export interface ImageBlock extends SupportBlockBase {
+  type: 'image'
+  url: string
+  description: string        // lo único que Sophia "ve" de la imagen
+  /** scene: escena de caso (no señala el peligro) · term: palabra técnica · equipment: equipo o cosa física · diagram: esquema subido */
+  kind: 'scene' | 'term' | 'equipment' | 'diagram'
+  license: string
+  validated: boolean         // solo las validadas se muestran al alumno
+  markers?: ImageMarker[]
+  bankId?: string
+}
+
+export interface CompareBlock extends SupportBlockBase {
+  type: 'compare'
+  /** 2 o 3 imágenes; los pies son neutros («Trabajador 1»): no revelan la respuesta */
+  items: { url: string; description: string; caption: string; license: string }[]
+}
+
+export interface FormulaBlock extends SupportBlockBase {
+  type: 'formula'
+  expression: string         // texto plano: «nota final = CV × 10 % + …»
+  terms?: { symbol: string; meaning: string; value?: string }[]
+  example?: {
+    label: string            // «Pedro»
+    rows: { term: string; value: string; weight: string; result: string }[]
+    total: string            // «13,65 → 14»
+  }
+}
+
+export interface TableBlock extends SupportBlockBase {
+  type: 'table'
+  columns: string[]
+  rows: string[][]
+  highlight?: { rows?: number[]; cols?: number[] }
+  legend?: string
+}
+
+export interface TextBlock extends SupportBlockBase {
+  type: 'text'
+  body: string               // Markdown simple (negrita, listas numeradas)
+  kind?: 'fragment' | 'consigna' | 'norma' | 'rubrica'
+}
+
+export interface CaseBlock extends SupportBlockBase {
+  type: 'case'
+  name: string               // «Rosa»
+  facts: string[]            // datos fijos, uno por línea
+  question?: string
+}
+
+/**
+ * Ecualizador (spec del panel §16.2): una barra por variable, el peso visible,
+ * el resultado en vivo. El alumno mueve y cuenta qué pasó; no calcula.
+ */
+export interface SimulatorBlock extends SupportBlockBase {
+  type: 'simulator'
+  kind: 'weighted_sum'
+  /** Variables en el orden en que se dibujan. `weight` en porcentaje; suman 100. */
+  variables: { id: string; label: string; weight: number; min?: number; max?: number; step?: number }[]
+  /** Escala del resultado: 0–20, aprueba con 13, 12,5 redondea a 13. */
+  scale: { min: number; max: number; pass: number; round?: 'half_up' | 'none' }
+  /** Casos precargados («Ana», «Rosa»). El primero es el que abre. */
+  presets: { label: string; values: Record<string, number> }[]
+  /** Botón «Mis notas»: el alumno escribe las suyas. No se guardan (decisión 14). */
+  allowOwnValues?: boolean
+  labels?: { pass: string; fail: string }
+}
+
+export interface DiagramBlock extends SupportBlockBase {
+  type: 'diagram'
+  kind: 'flow' | 'cycle' | 'hierarchy' | 'timeline'
+  nodes: { id: string; label: string; note?: string }[]
+  edges?: { from: string; to: string; label?: string }[]
+  parent?: Record<string, string>
+}
+
+export type SupportBlock =
+  | ImageBlock
+  | CompareBlock
+  | FormulaBlock
+  | TableBlock
+  | TextBlock
+  | CaseBlock
+  | DiagramBlock
+  | SimulatorBlock
 
 /**
  * Hints opcionales para guiar la verificación
@@ -82,6 +212,13 @@ export interface SuccessCriteria {
    * Pensado para lo que en campo no admite error (seguridad, norma).
    */
   critical?: number[]
+  /**
+   * Criterios cuyas frases deben salir de un bloque del panel (spec del panel §8):
+   * «lista cuatro frases del fragmento» exige que existan en el fragmento.
+   * `criterion` 1-based en must_include; `block` id del bloque; `min` cuántas
+   * frases distintas del bloque (por defecto 1). Ver lib/quote-check.ts.
+   */
+  quote_from?: { criterion: number; block: string; min?: number }[]
 }
 
 /**
@@ -121,11 +258,45 @@ export interface Verification {
 }
 
 /**
+ * Paso cerrado de una actividad (alternativas). Se presenta ANTES de la
+ * pregunta abierta de `verification` y se corrige en el código, sin modelo:
+ * baja el embudo de la primera respuesta («sí, estoy listo», «tú dime») y da
+ * una nota confiable. Las opciones se mezclan por sesión (ver lib/choice.ts).
+ */
+export interface ChoiceStep {
+  prompt: string          // Enunciado de la pregunta cerrada
+  options: string[]       // 2 a 5 opciones, sin letra
+  answer: number          // Índice 0-based de la opción correcta
+  max_attempts?: number   // Intentos antes de revelar la correcta (default 2)
+}
+
+/**
  * Actividad de aprendizaje
  */
 export interface Activity {
   id: string
   type: ActivityType                   // Tipo de actividad (define template del prompt)
+  /**
+   * Nombre de la actividad para el alumno (riel de avance y encabezado de la
+   * sección). Regla de nombres (14 oct 2026, lib/planner/titulos.ts): nombra
+   * lo que se aprende, en tono de sílabo, sin personajes ni preguntas
+   * («Justificación de inasistencias», no «Mario con fiebre»).
+   */
+  title?: string
+  /** El caso o la situación, en chico bajo el título («Caso Mario»). Solo dentro de la hoja. */
+  subtitle?: string
+  /**
+   * Paso 1 (opcional): pregunta cerrada que se corrige en el código. Si existe,
+   * la pregunta abierta de `verification` es el paso 2 («¿por qué esa?»).
+   */
+  choice?: ChoiceStep
+  /**
+   * Comprobación de cierre (spec del panel §16.1, decisión 15): 2 a 4 preguntas
+   * cerradas sin porqué, corregidas en código, antes de la reflexión. Solo en
+   * `closing`; una actividad con `checks` no lleva `choice`. Cuenta como una
+   * fila propia de peso 1 en la nota (lib/grading.ts).
+   */
+  checks?: ChoiceStep[]
   complexity?: ActivityComplexity      // Controla maxTokens: simple=600, moderate=850, complex=1100
   keyPointIndex: number | null          // Índice del keyPoint en lesson.keyPoints[] (0-indexed, null for closing)
   /**

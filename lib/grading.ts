@@ -63,6 +63,11 @@ export type ScorableActivity = {
    * ningún intento, la actividad queda en «En inicio».
    */
   criticalCriteria?: string[] | null
+  /**
+   * Nota ya calculada (0-100), sin intentos de por medio. La usa la fila de la
+   * comprobación de cierre: aciertos / preguntas (spec del panel §16.1).
+   */
+  fixedScore?: number | null
 }
 
 /** Peso default por tipo de actividad en el promedio ponderado de la lección.
@@ -117,6 +122,7 @@ function intentosDe(ap: ScorableActivity): IntentoGuardado[] {
  * 5) × penalidad por intentos, relativa a los permitidos.
  */
 export function activityScore(ap: ScorableActivity): number | null {
+  if (ap.fixedScore !== undefined) return ap.fixedScore
   const attempts = intentosDe(ap)
   if (attempts.length === 0) return null
 
@@ -176,6 +182,14 @@ export function activityScore(ap: ScorableActivity): number | null {
     if (criticos.some((c) => !cubiertos.has(c))) {
       score = Math.min(score, COMPREHENSION_SCORES.beginning)
     }
+  }
+
+  // Paso cerrado (alternativas): la justificación manda, el acierto acompaña.
+  // Quien nunca acertó la alternativa (ni con reintentos) no pasa de «en proceso»
+  // aunque la justificación posterior esté bien: justificó la que le revelaron.
+  const choice = (ap.evidenceData as { choice?: { resolved?: boolean; correct?: boolean } } | null)?.choice
+  if (choice?.resolved && choice.correct === false) {
+    score = Math.min(score, COMPREHENSION_SCORES.developing)
   }
 
   return Math.round(score * attemptPenalty(ap, puntajes, maxScore))
@@ -267,6 +281,8 @@ export type ActividadDelPlan = {
   id: string
   type?: string
   weight?: number | null
+  /** Comprobación de cierre: suma una fila de peso 1 a la nota. */
+  checks?: unknown[]
   verification?: {
     is_evaluative?: boolean
     max_attempts?: number
@@ -363,6 +379,22 @@ export function notaDeLaSesion(
       activityType: a.type as ScorableActivity['activityType'],
       weight: a.weight,
     }))
+  // Comprobación de cierre (decisión 15): una fila propia de peso 1, nota =
+  // aciertos / preguntas. Cuenta poco y no puede hundir la de la lección.
+  const conComprobacion = actividadesDelPlan.filter((a) => a.checks?.length && a.verification?.is_evaluative !== false)
+  for (const a of conComprobacion) {
+    esperadas.push({ attempts: 0, evidenceData: null, weight: 1 })
+    const estado = (progreso.find((p) => p.activityId === a.id)?.evidenceData as { checks?: { done?: boolean; correct?: number } } | null)?.checks
+    if (estado?.done) {
+      enriquecidas.push({
+        attempts: 0,
+        evidenceData: null,
+        weight: 1,
+        fixedScore: Math.round(((estado.correct ?? 0) / a.checks!.length) * 100),
+      })
+    }
+  }
+
   const { total: denominador } = sumaDePesos(esperadas)
 
   return calculateGrade(enriquecidas, denominador)

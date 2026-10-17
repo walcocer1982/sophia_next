@@ -3,8 +3,26 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Play, Loader2 } from 'lucide-react'
+import { Play, Loader2, GraduationCap } from 'lucide-react'
 import { toast } from 'sonner'
+import { urlDeLaPrueba } from '@/lib/vista-estudiante'
+
+// Recuerda en este navegador si el instructor prueba como estudiante.
+const CLAVE_VISTA = 'sophia:probar-como-estudiante'
+function leerPreferencia(): boolean {
+  try {
+    return window.localStorage.getItem(CLAVE_VISTA) === '1'
+  } catch {
+    return false
+  }
+}
+function guardarPreferencia(v: boolean) {
+  try {
+    window.localStorage.setItem(CLAVE_VISTA, v ? '1' : '0')
+  } catch {
+    // Sin almacenamiento: vale solo para esta vez.
+  }
+}
 
 type Activity = {
   id: string
@@ -23,6 +41,12 @@ export function TestLessonButton({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [comoEstudiante, setComoEstudiante] = useState(false)
+
+  const abrir = () => {
+    setComoEstudiante(leerPreferencia())
+    setOpen(true)
+  }
 
   const handleStart = async (startFromActivity?: string) => {
     setLoading(true)
@@ -39,7 +63,7 @@ export function TestLessonButton({
 
       const data = await res.json()
       if (res.ok) {
-        router.push(`/learn/${data.sessionId}`)
+        router.push(urlDeLaPrueba(data.sessionId, comoEstudiante))
       } else {
         toast.error(data.error || 'Error al iniciar prueba')
       }
@@ -63,7 +87,7 @@ export function TestLessonButton({
         variant="outline"
         size="sm"
         className="gap-1.5"
-        onClick={() => setOpen(true)}
+        onClick={abrir}
         disabled={activities.length === 0}
         title={activities.length === 0 ? 'Diseña la sesión primero' : undefined}
       >
@@ -118,6 +142,26 @@ export function TestLessonButton({
             )
           })}
         </div>
+
+        <label className="mb-4 flex cursor-pointer items-start gap-2.5 rounded-md border border-gray-200 p-3 text-sm hover:bg-gray-50">
+          <input
+            type="checkbox"
+            checked={comoEstudiante}
+            onChange={(e) => {
+              setComoEstudiante(e.target.checked)
+              guardarPreferencia(e.target.checked)
+            }}
+            className="mt-0.5 h-4 w-4 accent-[#09222d]"
+          />
+          <span>
+            <span className="flex items-center gap-1.5 font-medium text-gray-800">
+              <GraduationCap className="h-4 w-4" aria-hidden /> Verla como estudiante
+            </span>
+            <span className="text-xs text-gray-500">
+              Sin el menú de instructor, sin imágenes sin validar y con las reglas del curso. Se puede cambiar durante la prueba.
+            </span>
+          </span>
+        </label>
 
         <div className="flex gap-2">
           <Button

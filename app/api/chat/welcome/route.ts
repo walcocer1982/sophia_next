@@ -1,10 +1,14 @@
 import { getAuthOrGuest } from '@/lib/auth-or-guest'
+import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/support-blocks'
+import { createMarkerFilter } from '@/lib/material-markers'
+import { crearCorrectorDeVoseo } from '@/lib/voseo'
 import { prisma } from '@/lib/prisma'
 import { anthropic, TUTOR_MODEL } from '@/lib/anthropic'
 import { logger } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { getFirstActivity, getCurrentActivity, getLessonContext } from '@/lib/lesson-parser'
 import { buildSystemPrompt } from '@/lib/prompt-builder'
+import { choiceOrder, renderChoice } from '@/lib/choice'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -20,7 +24,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { sessionId } = await request.json()
+    const { sessionId, comoEstudiante } = (await request.json()) as { sessionId?: string; comoEstudiante?: boolean }
 
     if (!sessionId) {
       return new Response('Missing sessionId', { status: 400 })
@@ -53,6 +57,9 @@ export async function POST(request: Request) {
     if (!lessonSession) {
       return new Response('Session not found', { status: 404 })
     }
+    // Material sin validar: solo en la prueba vista como instructor. En «Probar
+    // como estudiante» (lib/vista-estudiante.ts) se oculta, como para el alumno.
+    const verSinValidar = lessonSession.isTest && comoEstudiante !== true
 
     // El saludo con nombre era del kiosko (registro del visitante). En /learn
     // Sophia no personaliza el saludo.
@@ -71,8 +78,11 @@ export async function POST(request: Request) {
     const lessonObjective = lessonSession.lesson.objective || ''
     const lessonKeyPoints = lessonSession.lesson.keyPoints || []
 
-    // Obtener primera actividad
-    const firstActivity = getFirstActivity(contentJson)
+    // Actividad con la que arranca la sesión: la que marca el puntero (modo
+    // prueba puede empezar desde una intermedia) o, si no hay, la primera.
+    const firstActivity = lessonSession.activityId
+      ? { activityId: lessonSession.activityId }
+      : getFirstActivity(contentJson)
 
     if (!firstActivity) {
       return new Response('No activities found in lesson', { status: 500 })
@@ -105,7 +115,36 @@ export async function POST(request: Request) {
       tangentCount: 0,
       lessonContext,
       methodology,
+      sessionSeed: lessonSession.id,
+      pinnedBlocks: blocksForActivity(contentJson, firstActivity.activityId, verSinValidar).pinned,
+      isTest: verSinValidar,
     })
+
+    // La bienvenida PLANTEA la actividad 1 (decisión del 5 oct 2026). Antes
+    // hacía una pregunta genérica de experiencia previa, y la respuesta a esa
+    // pregunta se verificaba contra los criterios de la actividad 1: ese era
+    // el embudo de la primera actividad en todas las lecciones.
+    const primera = firstActivityContext.activity
+    const primeraInstruccion = primera.teaching?.agent_instruction ||
+      (primera as { agent_instruction?: string }).agent_instruction || ''
+    const primerChoice = primera.choice
+    const primerChoiceText = primerChoice
+      ? renderChoice(primerChoice, choiceOrder(`${lessonSession.id}:${primera.id}`, primerChoice.options.length))
+      : null
+    // Si el caso o el material de la primera actividad está en el panel, la
+    // bienvenida remite a él y no lo recita: en EVA-NOTA (6 oct) copiaba al
+    // chat los cinco datos de Luis que el alumno ya tenía a la vista.
+    const materialEnPanel = getActivityBlocks(primera).length > 0
+    const presentarMaterial = materialEnPanel
+      ? 'El caso y el material están en la PIZARRA del estudiante (ver MATERIAL DE APOYO): remite a ellos por su título («mira el caso de … en la pizarra»), NUNCA digas «el panel» ni «abajo», y NO copies sus datos en el mensaje'
+      : 'Presenta el caso o material que haga falta'
+    const cierreDeBienvenida = isCodeMethodology
+      ? '3. Anticipa que es una guía paso a paso y pregunta si está listo para empezar el primer paso (1 oración)'
+      : primerChoiceText
+        ? `3. Entra DIRECTO a la primera actividad siguiendo esta instrucción: "${primeraInstruccion}". ${presentarMaterial} y termina con esta PREGUNTA CERRADA, copiada tal cual (opciones con letra, una por línea), pidiendo que elija una letra. NO hagas la pregunta abierta todavía.
+PREGUNTA CERRADA:
+${primerChoiceText}`
+        : `3. Entra DIRECTO a la primera actividad siguiendo esta instrucción: "${primeraInstruccion}". ${presentarMaterial} y termina con esta pregunta, reformulada en tus palabras pero sin cambiar lo que pide: "${primera.teaching?.first_question ?? primera.verification.question}"${primera.teaching?.first_question ? '. NO hagas todavía la pregunta del porqué: llega después, cuando el estudiante haya movido o mirado la pizarra' : ''}`
 
     // Instrucción para mensaje de bienvenida - Presenta el tema e invita a aprender
     const greetingLine = participantFirstName
@@ -154,20 +193,29 @@ EJEMPLO INCORRECTO #1 (DEMASIADO VAGO — perdió el objetivo):
 EJEMPLO INCORRECTO #2 (SPOILEA respuestas):
 "...las cinco fases son perforación, voladura, ventilación, sostenimiento y limpieza..." ← listó los nombres antes de preguntarle
 
-LARGO TOTAL: 3-5 oraciones. NO más.
+LARGO TOTAL: saludo y objetivo en 2 oraciones; después la primera actividad en lo que necesite (máximo 120 palabras en total).
 
-ESTRUCTURA NATURAL:
+ESTRUCTURA:
 1. Saludo + presentación (1 oración) — di ${greetingLine}
-2. Menciona el TEMA y parafrasea el OBJETIVO de la lección de forma genérica (1-2 oraciones, sin spoiler de respuestas)
-${isCodeMethodology
-  ? '3. Anticipa que es una guía paso a paso y pregunta si está listo para empezar el primer paso (1 oración)'
-  : '3. Pregunta sobre experiencia previa para conectar (1 oración)'}
+2. Parafrasea el OBJETIVO de la lección de forma genérica (1 oración, sin spoiler de respuestas)
+${cierreDeBienvenida}
 
-REGLA FINAL OBLIGATORIA: el mensaje DEBE terminar con UNA pregunta dirigida al estudiante. NUNCA con un statement neutro — eso deja al estudiante sin saber si tiene que responder.
+${materialEnPanel
+  ? 'DATOS DEL CASO: están en la pizarra, a la vista del estudiante. No los enumeres: nombra el caso por su título y, como mucho, el dato que necesita la pregunta.'
+  : 'DATOS DEL CASO: si la instrucción de la primera actividad dice presentar un caso con sus datos (notas, faltas, entregas, horas), inclúyelos TODOS y textuales. No son spoilers: sin ellos el estudiante no puede responder ni justificar. La regla de "no spoilear" aplica solo a las RESPUESTAS de la lección, nunca a los datos de un caso.'}
+
+REGLA FINAL OBLIGATORIA: el mensaje DEBE terminar con la pregunta de la primera actividad. NO preguntes si está listo, NO preguntes por experiencia previa: eso retrasa la clase y la respuesta no se puede evaluar.
+EXCEPCIÓN DE FORMATO: si hay PREGUNTA CERRADA, sus opciones SÍ van una por línea con su letra (A), B), C)…), aunque el resto sea texto plano.
 
 NO asumas el género del estudiante. Usa formas neutras.
 
 Genera el mensaje ahora, sin formato, conversacional.`
+
+    // Marcadores del panel en la bienvenida: un bloque de la lección se puede
+    // mostrar; un señalamiento nunca (el alumno todavía no respondió nada).
+    const idsDeLaLeccion = new Set(allLessonBlocks(contentJson, verSinValidar).map((b) => b.id))
+    const filtroMarcadores = createMarkerFilter((kind, id) => kind === 'block' && idsDeLaLeccion.has(id))
+    const correctorVoseo = crearCorrectorDeVoseo()
 
     // Stream response from Claude con bloques cacheables
     const stream = await anthropic.messages.stream({
@@ -193,10 +241,17 @@ Genera el mensaje ahora, sin formato, conversacional.`
               chunk.type === 'content_block_delta' &&
               chunk.delta.type === 'text_delta'
             ) {
-              const text = chunk.delta.text
+              // Voseo corregido en el código (lib/voseo.ts): «Mirá» → «Mira».
+              const text = correctorVoseo.push(filtroMarcadores.push(chunk.delta.text))
+              if (!text) continue
               fullContent += text
               controller.enqueue(encoder.encode(text))
             }
+          }
+          const restoMarcadores = correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()
+          if (restoMarcadores) {
+            fullContent += restoMarcadores
+            controller.enqueue(encoder.encode(restoMarcadores))
           }
 
           // Get final message data

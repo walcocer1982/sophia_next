@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
+import { ventanaCerrada } from '@/lib/monitor'
+import { ultimaMarcaPorAlumno, type Marca } from '@/lib/seguimiento'
 
 /**
  * «No entró» — el dato que Monitor nunca tuvo.
@@ -30,6 +32,11 @@ export type Celda = {
   grade: number | null
   minutos: number | null
   completedAt: Date | null
+  /**
+   * La ventana ya cerró y lo que quedó, quedó. Una «a medias» con la ventana
+   * abierta es alguien trabajando, no un problema; solo las cerradas pesan.
+   */
+  cerrada: boolean
 }
 
 export type FilaAlumno = {
@@ -39,6 +46,25 @@ export type FilaAlumno = {
   telefono: string | null
   seccion: string
   celdas: Record<string, Celda> // lessonId -> celda
+  /** Marca vigente del seguimiento manual (lib/seguimiento.ts), si la hay. */
+  seguimiento: Marca | null
+  /** «Desertó»: sale de los conteos y va al final, tachado. */
+  desertor: boolean
+}
+
+/**
+ * Cuánto pesa un alumno en «¿a quién llamo?». Solo cuentan las celdas con la
+ * ventana cerrada: no entró y abrió sin avanzar pesan doble; a medias, uno.
+ * Es la misma regla para la portada, la matriz y el Monitor por curso.
+ */
+export function pesoDeFila(f: FilaAlumno): number {
+  let peso = 0
+  for (const c of Object.values(f.celdas)) {
+    if (!c.cerrada) continue
+    if (c.estado === 'no-entro' || c.estado === 'sin-avanzar') peso += 2
+    else if (c.estado === 'a-medias') peso += 1
+  }
+  return peso
 }
 
 export type Matriz = {
@@ -159,6 +185,12 @@ export async function matrizDelCurso(
             ? Math.round((ses.lastActivityAt.getTime() - ses.startedAt.getTime()) / 60_000)
             : null,
           completedAt: ses?.completedAt ?? null,
+          cerrada:
+            estado === 'terminada' || estado === 'no-programada' || estado === 'pendiente'
+              ? false
+              : ses
+                ? ventanaCerrada(cierre ?? null, ses.lastActivityAt, ahora)
+                : true, // no-entro: la ventana cerró por definición
         }
       }
 
@@ -169,8 +201,15 @@ export async function matrizDelCurso(
         telefono: e.user.phone,
         seccion: sec.name,
         celdas,
+        seguimiento: null,
+        desertor: false,
       })
     }
+  }
+  const marcas = await ultimaMarcaPorAlumno(userIds)
+  for (const a of alumnos) {
+    a.seguimiento = marcas.get(a.userId) ?? null
+    a.desertor = a.seguimiento?.estado === 'DESERTO'
   }
 
   // Una lección se muestra si la sección la programó O si alguien la hizo.
@@ -189,11 +228,9 @@ export async function matrizDelCurso(
   }
 
   // Los que peor van, arriba: es la pregunta del martes («¿a quién llamo?»).
-  const peso = (f: FilaAlumno) =>
-    Object.values(f.celdas).filter((c) => c.estado === 'no-entro').length * 2 +
-    Object.values(f.celdas).filter((c) => c.estado === 'sin-avanzar').length * 2 +
-    Object.values(f.celdas).filter((c) => c.estado === 'a-medias').length
-  alumnos.sort((a, b) => peso(b) - peso(a) || a.nombre.localeCompare(b.nombre))
+  // Los que desertaron, al final: ya no se les llama por una sesión.
+  const orden = (f: FilaAlumno) => (f.desertor ? -1 : pesoDeFila(f))
+  alumnos.sort((a, b) => orden(b) - orden(a) || a.nombre.localeCompare(b.nombre))
 
   return {
     lecciones: visibles

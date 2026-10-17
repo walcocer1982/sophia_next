@@ -53,9 +53,14 @@ export function detectHallucination(message: string): HallucinationCheck {
 
   // 4) Ratio de caracteres latinos: si <40% son letras latinas y el mensaje
   //    es largo (>30 chars), es ruido.
+  // Los dígitos y los signos de operación son contenido, no ruido: un
+  // cálculo escrito («cv 10 por 10% es 1, ep 11 por 20% es 2.2…») tiene pocas
+  // letras y se marcaba como alucinación (EVA-NOTA, 5 oct 2026). Se miden
+  // letras + dígitos sobre los caracteres que no son espacio.
   if (trimmed.length > 30) {
-    const latinChars = (trimmed.match(/[a-zA-ZáéíóúñÁÉÍÓÚÑ]/g) || []).length
-    const ratio = latinChars / trimmed.length
+    const contentChars = (trimmed.match(/[a-zA-ZáéíóúñÁÉÍÓÚÑ0-9]/g) || []).length
+    const nonSpace = (trimmed.match(/\S/g) || []).length || 1
+    const ratio = contentChars / nonSpace
     if (ratio < 0.4) {
       return { isHallucination: true, reason: `solo ${Math.round(ratio * 100)}% de caracteres latinos (mucho ruido)` }
     }

@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     where: { id: lessonId },
     select: {
       id: true,
+      contentJson: true,
       course: { select: { userId: true, scope: true, careers: { select: { id: true } }, sedes: { select: { id: true } } } },
     },
   })
@@ -57,7 +58,15 @@ export async function POST(request: Request) {
       where: { id: lessonId },
       data: {
         keyPoints,
-        contentJson,
+        // Se conservan las claves que este guardado no trae (sobre todo
+        // `context`: normativa y referencias). Antes se reemplazaba todo el
+        // contentJson y guardar desde el planner o desde Recursos las borraba.
+        contentJson: JSON.parse(JSON.stringify({
+          ...(lesson.contentJson && typeof lesson.contentJson === 'object' && !Array.isArray(lesson.contentJson)
+            ? (lesson.contentJson as Record<string, unknown>)
+            : {}),
+          ...contentJson,
+        })),
       },
     })
 

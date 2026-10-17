@@ -1,16 +1,15 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { ChatMessages } from './chat-messages'
-import { ChatInput, type ChatInputRef } from './chat-input'
-import { VoiceButton } from './voice-button'
-import { TutorMode } from './tutor-mode'
+import { type ChatInputRef } from './chat-input'
+import { Cuaderno, type ActividadDelCuaderno } from './cuaderno'
 import { DevToolsModal } from './dev-tools-modal'
 import { SurveyModal } from './survey-modal'
 import { useProgress } from './progress-context'
 import type { ChatMessage, OptimisticMessage } from '@/types/chat'
 import type { PlannerAttachment } from '@/types/planner'
 import { streamChatResponse } from '@/lib/chat-stream'
+import { useMaterial } from './material-context'
 import { toast } from 'sonner'
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -19,18 +18,34 @@ interface ChatInterfaceProps {
   sessionId: string
   initialMessages: ChatMessage[]
   lessonTitle: string
+  objective?: string
+  keyPoints?: string[]
+  /** «Sophia lee sus mensajes en voz alta» (configuración del curso; voz del navegador). */
   voiceEnabled?: boolean
   allowPaste?: boolean
   allowAttachments?: boolean
+  /** A dónde vuelve el alumno al terminar (la sesión de prueba, al curso del planner). */
+  exitHref?: string
+  exitLabel?: string
+  /** «Probar como estudiante»: sin herramientas de desarrollo y sin material sin validar. */
+  comoEstudiante?: boolean
+  /** Las actividades de la lección, con su nombre (regla de nombres). */
+  actividades?: ActividadDelCuaderno[]
 }
 
 export function ChatInterface({
   sessionId,
   initialMessages,
   lessonTitle,
+  objective = '',
+  keyPoints = [],
   voiceEnabled = true,
   allowPaste = false,
   allowAttachments = false,
+  exitHref = '/lessons',
+  exitLabel = 'Volver a mis lecciones',
+  comoEstudiante = false,
+  actividades = [],
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<OptimisticMessage[]>(
     initialMessages.map((msg) => ({
@@ -52,19 +67,27 @@ export function ChatInterface({
   const streamingContentRef = useRef<string>('')
   const assistantIdRef = useRef<string>('')
   const hasGeneratedWelcome = useRef(false)
-  const welcomeAudioPlayedRef = useRef(false)
   const chatInputRef = useRef<ChatInputRef>(null)
 
-  const isDevelopment = process.env.NODE_ENV === 'development'
-  const [viewMode, setViewMode] = useState<'tutor' | 'chat'>('tutor')
+  // Herramientas de desarrollo: nunca en la vista de estudiante.
+  const isDevelopment = process.env.NODE_ENV === 'development' && !comoEstudiante
 
-  const updateMessageById = (id: string, updater: (m: OptimisticMessage) => OptimisticMessage) => {
-    setMessages(prev => prev.map(m => m.id === id ? updater(m) : m))
+  // Lección terminada (decisión del 13 oct 2026): tarjeta de cierre y caja de
+  // texto cerrada. «Hacer una pregunta más» la reabre a propósito; antes la
+  // conversación seguía por inercia y el alumno no sabía que había terminado.
+  const [preguntaExtra, setPreguntaExtra] = useState(false)
+  const cerrada = progress.completedAt !== null && !preguntaExtra
+  const hacerUnaPreguntaMas = () => {
+    setPreguntaExtra(true)
+    setTimeout(() => chatInputRef.current?.focus(), 150)
   }
 
-  const addMessage = (msg: OptimisticMessage) => {
-    setMessages(prev => [...prev, msg])
-  }
+  // El panel muestra lo que Sophia citó: se calcula de sus mensajes, también
+  // mientras escribe, para que el bloque aparezca cuando lo nombra.
+  const { reportMessages, getMaterialState } = useMaterial()
+  useEffect(() => {
+    reportMessages(messages.filter((m) => m.role === 'assistant').map((m) => m.content))
+  }, [messages, reportMessages])
 
   // Generate welcome message if chat is empty
   useEffect(() => {
@@ -119,6 +142,7 @@ export function ChatInterface({
       status: 'streaming',
       isOptimistic: true,
       isWelcome: true,
+      activityId: progress.currentActivityId,
     }
 
     // Agregar placeholder inmediatamente
@@ -128,7 +152,7 @@ export function ChatInterface({
       const response = await fetch('/api/chat/welcome', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify({ sessionId, ...(comoEstudiante ? { comoEstudiante: true } : {}) }),
       })
 
       if (!response.ok) {
@@ -142,106 +166,20 @@ export function ChatInterface({
         throw new Error('No reader available')
       }
 
-      // Acumular el welcome SILENCIOSAMENTE. Si el curso tiene voz, queremos
-      // que texto y audio aparezcan al mismo tiempo (no texto primero y voz
-      // 1-2s después). Si no hay voz, mostramos el texto en streaming como antes.
-      const shouldDeferReveal = voiceEnabled && !welcomeAudioPlayedRef.current
+      // La bienvenida se ve mientras se escribe. Si el curso tiene «Sophia lee
+      // en voz alta», el Cuaderno la lee al terminar con la voz del navegador
+      // (antes se esperaba el audio de OpenAI, retirado el 14 oct 2026).
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-
-        const text = decoder.decode(value, { stream: true })
-        streamingContentRef.current += text
-
-        if (!shouldDeferReveal) {
-          // Sin voz: actualizar bubble en vivo como antes.
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === welcomeId ? { ...m, content: streamingContentRef.current } : m
-            )
-          )
-        }
-        // Con voz: dejamos el bubble vacío (TutorMode mostrará "Sophia se está
-        // preparando…") hasta que el audio esté listo.
+        streamingContentRef.current += decoder.decode(value, { stream: true })
+        const visto = streamingContentRef.current
+        setMessages((prev) => prev.map((m) => (m.id === welcomeId ? { ...m, content: visto } : m)))
       }
-
-      const fullWelcome = streamingContentRef.current
       streamingContentRef.current = ''
-
-      // Helper: revelar el texto del welcome (markear el mensaje como completed).
-      const revealWelcomeText = () => {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === welcomeId
-              ? { ...m, content: fullWelcome, status: 'completed', isOptimistic: false }
-              : m
-          )
-        )
-      }
-
-      if (shouldDeferReveal && fullWelcome.trim()) {
-        welcomeAudioPlayedRef.current = true
-        const cleanText = fullWelcome
-          .replace(/\*\*([^*]+)\*\*/g, '$1')
-          .replace(/\*([^*]+)\*/g, '$1')
-          .replace(/__([^_]+)__/g, '$1')
-          .replace(/_([^_]+)_/g, '$1')
-          .replace(/`([^`]+)`/g, '$1')
-          .replace(/#{1,6}\s+/g, '')
-          .replace(/^\s*\d+[.)]\s*/gm, '')
-          .replace(/^\s*[-*•]\s+/gm, '')
-          .replace(/\n{2,}/g, '. ')
-          .replace(/\n/g, ' ')
-          .replace(/\s+/g, ' ')
-          .replace(/\s+\./g, '.')
-          .replace(/\.+/g, '.')
-          .trim()
-        try {
-          const ttsRes = await fetch('/api/voice/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: cleanText }),
-          })
-          if (ttsRes.ok) {
-            const blob = await ttsRes.blob()
-            const url = URL.createObjectURL(blob)
-            const audio = new Audio()
-            audio.preload = 'auto'
-            audio.src = url
-            audio.onended = () => URL.revokeObjectURL(url)
-            // Esperar a que el audio pueda reproducirse de corrido o hasta 1.5s
-            // como tope, para no bloquear si la red está lenta.
-            await new Promise<void>((resolve) => {
-              audio.oncanplaythrough = () => resolve()
-              audio.onerror = () => resolve()
-              audio.load()
-              setTimeout(() => resolve(), 1500)
-            })
-            // Revelar texto y arrancar audio al mismo tiempo.
-            revealWelcomeText()
-            audio.play().catch((e) => {
-              console.warn('Welcome TTS autoplay blocked:', e)
-              URL.revokeObjectURL(url)
-            })
-          } else {
-            // TTS falló — mostrar texto igual.
-            revealWelcomeText()
-          }
-        } catch (e) {
-          console.warn('TTS welcome failed:', e)
-          revealWelcomeText()
-        }
-      } else {
-        // Sin voz — el texto ya estaba apareciendo en streaming. Solo marcar
-        // como completed.
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === welcomeId
-              ? { ...m, status: 'completed', isOptimistic: false }
-              : m
-          )
-        )
-      }
+      setMessages((prev) =>
+        prev.map((m) => (m.id === welcomeId ? { ...m, status: 'completed', isOptimistic: false } : m))
+      )
     } catch (error) {
       console.error('Error generating welcome message:', error)
       toast.error('Error al generar mensaje de bienvenida')
@@ -282,6 +220,7 @@ export function ChatInterface({
       createdAt: new Date(),
       status: 'completed',
       isOptimistic: false,
+      activityId: progress.currentActivityId,
     }
 
     // 2. Crear placeholder optimistic para respuesta del instructor
@@ -296,6 +235,7 @@ export function ChatInterface({
       createdAt: new Date(),
       status: 'streaming',
       isOptimistic: true,
+      activityId: progress.currentActivityId,
     }
 
     // 3. Agregar AMBOS mensajes inmediatamente
@@ -355,13 +295,25 @@ export function ChatInterface({
         },
         // onActivityCompleted: update shared progress immediately
         (progressData) => {
+          // Como en el servidor: la respuesta que cierra una actividad ya
+          // presenta la siguiente y se archiva bajo ella.
+          if (progressData.nextActivityId) {
+            const siguiente = progressData.nextActivityId
+            setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, activityId: siguiente } : m)))
+          }
           updateProgress({
+            currentActivityId: progressData.nextActivityId ?? progress.currentActivityId,
             current: progressData.currentPosition,
             total: progressData.total,
             currentActivity: progressData.nextActivityTitle || progressData.activityTitle,
             percentage: progressData.percentage,
             lastCompletedId: progressData.activityId,
-            completedAt: progressData.completedAt || null,
+            lastCompletedAt: progressData.completedAt || null,
+            // `completedAt` del progreso es el de la SESIÓN: solo con la última
+            // actividad. Antes se marcaba con cada actividad terminada.
+            ...(progressData.isLastActivity
+              ? { completedAt: progressData.completedAt || new Date().toISOString() }
+              : {}),
           })
 
           // Toast inmediato
@@ -381,7 +333,9 @@ export function ChatInterface({
             })
           }
         },
-        attachments
+        attachments,
+        getMaterialState(),
+        comoEstudiante
       )
     } catch (error) {
       console.error('Error sending message:', error)
@@ -392,140 +346,55 @@ export function ChatInterface({
     }
   }
 
-  // Render Tutor Mode (avatar-first) or Chat Mode (full conversation)
-  if (viewMode === 'tutor') {
-    return (
-      <div className="flex flex-col h-full bg-white">
-        {/* Mode toggle button */}
-        <div className="absolute top-3 right-3 z-10 flex gap-1">
+  // Encuesta NPS post-lección. Va en las DOS vistas: hasta el 13 oct 2026 solo
+  // estaba en la vista Chat y en la Tutor (la que abre por defecto) nunca salía.
+  const encuesta = (
+    <SurveyModal
+      open={showSurvey}
+      onOpenChange={setShowSurvey}
+      sessionId={sessionId}
+      onSubmitted={() => setSurveyAlreadySubmitted(true)}
+    />
+  )
+
+  // Una sola vista desde el 14 oct 2026: el Cuaderno (components/learning/cuaderno.tsx).
+  // Reemplaza a la vista Tutor, a la vista Chat y al panel derecho.
+  return (
+    <div className="relative flex h-full min-h-0 flex-col">
+      {isDevelopment && (
+        <div className="absolute top-3 right-3 z-10">
           <Button
             variant="outline"
-            size="sm"
-            onClick={() => setViewMode('chat')}
-            className="bg-white/90 backdrop-blur"
+            size="icon"
+            onClick={() => setShowDevTools(true)}
+            className="h-8 w-8 border-white/20 bg-[#0f2238]/90 text-[#a9b8c2] hover:bg-[#132a44] hover:text-white"
+            title="Dev Tools"
           >
-            Modo Chat
+            <Settings className="h-4 w-4" />
           </Button>
-          {isDevelopment && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowDevTools(true)}
-              className="bg-white/90 backdrop-blur h-8 w-8"
-              title="Dev Tools"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-          )}
         </div>
+      )}
 
-        <TutorMode
-          sessionId={sessionId}
-          lessonTitle={lessonTitle}
-          messages={messages}
-          onAddMessage={addMessage}
-          onUpdateMessage={updateMessageById}
-          onSendText={handleSendMessage}
-          isLoading={isLoading}
-          isGeneratingWelcome={isGeneratingWelcome}
-          voiceEnabled={voiceEnabled}
-          autoStartVoice={voiceEnabled}
-          allowPaste={allowPaste}
-        />
+      <Cuaderno
+        lessonTitle={lessonTitle}
+        objective={objective}
+        keyPoints={keyPoints}
+        messages={messages}
+        actividades={actividades}
+        actividadActualId={progress.currentActivityId}
+        onSendText={handleSendMessage}
+        isLoading={isLoading}
+        isGeneratingWelcome={isGeneratingWelcome}
+        leerEnVoz={voiceEnabled}
+        allowPaste={allowPaste}
+        allowAttachments={allowAttachments}
+        cerrada={cerrada}
+        exitHref={exitHref}
+        exitLabel={exitLabel}
+        onAskMore={hacerUnaPreguntaMas}
+        chatInputRef={chatInputRef}
+      />
 
-        {isDevelopment && (
-          <DevToolsModal
-            open={showDevTools}
-            onOpenChange={setShowDevTools}
-            sessionId={sessionId}
-          />
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col h-full bg-white">
-      {/* Header compacto */}
-      <div className="shrink-0 border-b border-gray-200 bg-white">
-        <div className="h-14 px-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">{lessonTitle}</h1>
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewMode('tutor')}
-            >
-              Modo Tutor
-            </Button>
-            {isDevelopment && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowDevTools(true)}
-                className="text-gray-500 hover:text-gray-700"
-                title="Dev Tools"
-              >
-                <Settings className="h-5 w-5" />
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Messages - ocupa espacio restante con scroll interno */}
-      <div className="flex-1 overflow-hidden">
-        <ChatMessages messages={messages} isLoading={isLoading || isGeneratingWelcome} />
-      </div>
-
-      {/* Input - altura fija, siempre visible */}
-      <div className="shrink-0 border-t border-gray-200">
-        {voiceEnabled && (
-          <div className="flex items-end gap-2 px-3 pt-2">
-            <VoiceButton
-              sessionId={sessionId}
-              onMessage={(msg) => setMessages(prev => [...prev, msg])}
-              onStreamStart={(id) => {
-                setMessages(prev => [...prev, {
-                  id,
-                  sessionId,
-                  role: 'assistant',
-                  content: '',
-                  createdAt: new Date(),
-                  status: 'streaming',
-                  isOptimistic: true,
-                }])
-              }}
-              onStreamDelta={(id, delta) => {
-                setMessages(prev => prev.map(m =>
-                  m.id === id ? { ...m, content: m.content + delta } : m
-                ))
-              }}
-              onStreamDone={(id) => {
-                setMessages(prev => prev.map(m =>
-                  m.id === id ? { ...m, status: 'completed', isOptimistic: false } : m
-                ))
-              }}
-              disabled={isLoading || isGeneratingWelcome}
-            />
-          </div>
-        )}
-        <ChatInput
-          ref={chatInputRef}
-          onSend={handleSendMessage}
-          disabled={isLoading || isGeneratingWelcome}
-          isGeneratingWelcome={isGeneratingWelcome}
-          isThinking={isLoading}
-          isStreaming={false}
-          allowPaste={allowPaste}
-          allowAttachments={allowAttachments}
-        />
-      </div>
-
-      {/* Dev Tools Modal - Solo en desarrollo */}
       {isDevelopment && (
         <DevToolsModal
           open={showDevTools}
@@ -533,14 +402,7 @@ export function ChatInterface({
           sessionId={sessionId}
         />
       )}
-
-      {/* Encuesta NPS post-lección */}
-      <SurveyModal
-        open={showSurvey}
-        onOpenChange={setShowSurvey}
-        sessionId={sessionId}
-        onSubmitted={() => setSurveyAlreadySubmitted(true)}
-      />
+      {encuesta}
     </div>
   )
 }

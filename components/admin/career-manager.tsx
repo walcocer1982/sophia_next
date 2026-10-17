@@ -102,7 +102,9 @@ export function CareerManager({
     setList(list.includes(sedeId) ? list.filter((id) => id !== sedeId) : [...list, sedeId])
   }
 
-  const SedeMultiSelect = ({ selected, onChange }: { selected: string[]; onChange: (ids: string[]) => void }) => (
+  // Función, no componente: un componente definido dentro del render se
+  // vuelve a montar en cada render (regla react-hooks de React 19).
+  const sedesSelector = (selected: string[], onChange: (ids: string[]) => void) => (
     <div className="flex flex-wrap gap-1">
       {sedes.map((s) => {
         const isOn = selected.includes(s.id)
@@ -157,7 +159,7 @@ export function CareerManager({
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 block mb-1">Sedes donde se dicta</label>
-            <SedeMultiSelect selected={newSedeIds} onChange={setNewSedeIds} />
+            {sedesSelector(newSedeIds, setNewSedeIds)}
           </div>
           <div className="flex gap-2">
             <Button onClick={handleCreate} disabled={isPending('create') || !newName.trim()} size="sm">
@@ -194,7 +196,7 @@ export function CareerManager({
                       className="col-span-2 text-sm"
                     />
                   </div>
-                  <SedeMultiSelect selected={editSedeIds} onChange={setEditSedeIds} />
+                  {sedesSelector(editSedeIds, setEditSedeIds)}
                   <div className="flex gap-2 pt-1">
                     <Button size="sm" onClick={() => handleSave(c.id)} disabled={isPending(c.id)}>
                       <Check className="mr-1 h-3.5 w-3.5" />

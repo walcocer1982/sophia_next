@@ -221,12 +221,38 @@ Genera entre 4-5 actividades total (MÁXIMO 5 para 45 min).
 - CIERRE → Preguntas ABIERTAS de síntesis:
   "¿Qué fue lo más importante que aprendiste?", "¿Cómo aplicarías esto en tu trabajo?"
 
-SUGERENCIAS DE IMÁGENES (image_suggestions):
-- Para CADA actividad, sugiere 1-2 imágenes que el profesor debería subir.
-- Describe qué tipo de imagen sería útil: "Diagrama de...", "Foto de...", "Tabla comparativa de...", "Esquema de...".
-- Sé específico al tema. Ej: "Foto de técnica de compresiones torácicas mostrando posición de manos" (NO "foto de RCP").
-- Si la actividad no necesita imagen (ej: cierre), usa array vacío [].
-- Las sugerencias guían al profesor para buscar/crear el recurso visual correcto.
+MATERIAL DE APOYO (teaching.blocks): lo que el alumno ve en el panel derecho mientras conversa.
+La IA tutora lo cita por su título y NO lo copia al chat, así que todo dato que el alumno necesite
+a la vista para responder (una tabla de umbrales, una fórmula, un caso, un fragmento) va aquí.
+- Tabla ("table") cuando hay umbrales, pesos, criterios o una comparación.
+- Fórmula ("formula") cuando hay un cálculo que el alumno debe aplicar; con ejemplo resuelto.
+- Texto ("text") cuando el alumno debe leer y citar (máximo 400 palabras).
+- Caso ("case") cuando hay un personaje con datos que se usan en más de un turno.
+- Diagrama ("diagram") SOLO para flujos, ciclos, jerarquías o líneas de tiempo. NUNCA de equipos ni cosas físicas.
+- NO propongas bloques de imagen: el profesor sube las fotos. Nunca inventes una URL.
+- showWhen: "on_start" lo que la pregunta necesita a la vista; "on_reference" lo que la IA tutora
+  introduce en el momento; "on_demand" una ayuda opcional. pinned: true si sigue sirviendo en las
+  actividades siguientes (una fórmula que se usa en varias).
+- id: minúsculas y guiones, único en toda la lección ("semaforo-faltas"). Máximo 3 bloques por actividad.
+- Un contenido va en UN solo bloque: no pongas una tabla y un diagrama con los mismos pasos, ni repitas
+  en una actividad lo que ya está fijo (pinned) desde una anterior.
+- Si la actividad no necesita material (reflexión sobre su propia experiencia, cierre), omite blocks.
+Formas (todos los valores son TEXTO, y los límites son en caracteres: el panel mide 340 px):
+  {"id","type":"table","title","columns":["…"],"rows":[["…"]],"legend"?}
+     ≤6 columnas, ≤20 filas, cada fila con tantas celdas como columnas, cada celda ≤60 (telegráfica: «Coloca su candado», no una oración).
+  {"id","type":"formula","title","expression","terms"?:[{"symbol","meaning","value"?}],"example"?:{"label","rows":[{"term","value","weight","result"}],"total"}}
+     expression ≤200; meaning ≤60. El ejemplo resuelto es una suma de aportes: cada fila es un término con su
+     valor, su peso o factor y su resultado parcial («EP», «12», «× 20 %», «2,4»), los cuatro como texto ≤20;
+     label ≤40 («Pedro»); total ≤30 («13,65 → 14»). Si el cálculo no es una suma de aportes, omite "example".
+  {"id","type":"text","title","body","source"?}   body ≤400 palabras.
+  {"id","type":"case","title","name","facts":["…"],"question"?}   name ≤40 («Rosa», «Mantenimiento de la bomba 3»), ≤8 hechos de ≤140.
+  {"id","type":"diagram","title","kind":"flow|cycle|hierarchy|timeline","nodes":[{"id","label"}]}   2-12 pasos, label ≤40.
+Todos llevan "title" ≤60, "showWhen" y, si aplica, "pinned".
+
+FOTOS (image_suggestions): para cada actividad que necesite una foto real (un equipo, una escena de
+trabajo, una pieza), sugiere 1-2 que el profesor debería subir, específicas al tema: "Foto de la
+posición de manos en las compresiones torácicas" (NO "foto de RCP"). Una escena de caso muestra la
+situación sin señalar el peligro. Si no hace falta foto, usa [].
 
 PREGUNTAS ABIERTAS vs CERRADAS (open_ended):
 Evalúa COMPRENSIÓN del concepto, no palabras exactas.
@@ -241,13 +267,61 @@ Evalúa COMPRENSIÓN del concepto, no palabras exactas.
 - Cuando open_ended es true, los must_include son GUÍAS de evaluación (aspectos a observar), no respuestas exactas.
 - Cuando open_ended es false, los must_include son criterios concretos que el estudiante debe mencionar.
 
+UNA ACTIVIDAD = UN PEDIDO (13 oct 2026):
+- "question" pide UNA sola cosa que el estudiante responde en un mensaje corto: una decisión con su porqué,
+  una predicción, un diagnóstico. NUNCA dos preguntas ("¿…? ¿Y…?"), ni la pregunta más otra tarea
+  ("¿…? Y reescribe/explica/calcula…"), ni un caso nuevo agregado al final ("y dime qué pasa si…").
+- Si quieres pedir dos cosas (decidir y luego redactar), son DOS actividades. Con dos tareas en una, el
+  desglose se gasta en la primera y la segunda se pierde.
+- Los must_include de una actividad evalúan lo que esa única respuesta tiene que contener, no otra tarea.
+
+NOMBRES (14 oct 2026) — vale para el título de la sesión y el "title" de cada actividad:
+- Nombran LO QUE SE APRENDE, en tono de sílabo: sustantivo o tema, de 2 a 8 palabras. Ej.: «Justificación
+  de inasistencias», «Ponderación de la nota final», «Sustento técnico verificable».
+- NUNCA: personajes o situaciones («Mario con fiebre»), preguntas («¿Cómo se arma tu nota?»), órdenes
+  («Justifica tu falta»), frases de motivación («Gana el TC»), códigos internos («EVA-NOTA ·», «S1 —»).
+- El caso va en "subtitle", corto: «Caso Mario», «Informe de la faja». Opcional.
+- Mayúscula solo al inicio y en nombres propios (norma del español); sin punto final.
+
+ALTERNATIVAS: SOLO DONDE SON EL CONTENIDO (decisión del 7 oct 2026):
+- PASO CERRADO ("choice") solo cuando la actividad es una DECISIÓN entre errores reales: el estudiante elige
+  entre lo que de verdad haría (ir enfermo, justificar tarde, copiar, no entregar) y después explica por qué
+  ("verification" pide la RAZÓN). Las opciones incorrectas son errores reales, no absurdos. Opciones sin
+  letra; NO las escribas dentro de "question" ni de "agent_instruction": se mezclan solas por sesión.
+- CONVERSACIÓN (sin "choice") cuando la actividad tiene algo que manipular o leer en el panel: un
+  ecualizador, una tabla, un fragmento, un caso con datos. La IA tutora pide una ACCIÓN sobre el panel
+  («mueve…», «mira la fila…») y luego el porqué. La acción es el ancla: ante «no sé» pide la acción, no la
+  respuesta. NUNCA pidas al estudiante que calcule a mano: si hay una fórmula ponderada, usa un ecualizador.
+- CIERRE: la reflexión abierta, precedida de una COMPROBACIÓN ("checks"): 2 a 4 preguntas cerradas, una por
+  punto clave, con opciones incorrectas que sean errores reales y SIN pedir el porqué. El sistema las
+  corrige solas y cuentan poco en la nota. El cierre con "checks" no lleva "choice".
+- Reflexión: sin choice ni checks.
+
+ECUALIZADOR ("simulator") — úsalo cuando la lección enseña cómo se arma un resultado ponderado (una nota,
+un promedio con pesos): barras que el estudiante mueve y un resultado que cambia al instante.
+  {"id","type":"simulator","title","kind":"weighted_sum",
+   "variables":[{"id":"cv","label":"CV","weight":10}],      // 2 a 8; ids en minúsculas; pesos en % que suman 100
+   "scale":{"min":0,"max":20,"pass":13,"round":"half_up"},  // half_up: 12,5 → 13
+   "presets":[{"label":"Ana","values":{"cv":10}}],           // 1 a 4 casos con TODAS las variables; el primero abre
+   "allowOwnValues":true}                                   // botón «Mis notas» (no se guardan)
+  No propongas a la vez una fórmula y un ecualizador para lo mismo.
+
 FORMATO DE ACTIVIDAD:
 {
   "id": "string",
   "type": "explanation|practice|reflection|closing",
+  "title": "string",     // nombre de la actividad (ver «NOMBRES»), ≤60
+  "subtitle": "string",  // opcional: el caso, ≤50
   "complexity": "simple|moderate|complex",
   "keyPointIndex": 0,  // número (0-indexed) o null para closing,
-  "teaching": { "agent_instruction": "string", "target_length": "string", "image_suggestions": ["string"] },
+  "teaching": { "agent_instruction": "string", "target_length": "string", "image_suggestions": ["string"], "blocks": [ /* material de apoyo, opcional */ ] },
+  "checks": [ /* solo en closing: 2-4 objetos con la misma forma que "choice" */ ],
+  "choice": {  // solo en actividades de DECISIÓN (ver «ALTERNATIVAS»)
+    "prompt": "string",            // la pregunta cerrada
+    "options": ["string"],         // 2-5 opciones, sin letra
+    "answer": 0,                   // índice 0-based de la correcta
+    "max_attempts": 2
+  },
   "verification": {
     "question": "string",
     "success_criteria": {

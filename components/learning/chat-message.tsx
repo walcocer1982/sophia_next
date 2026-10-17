@@ -5,6 +5,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { MessageRole } from '@/types/chat'
 import AITextLoading from '@/components/ui/text-loading'
+import { splitChoiceOptions, stripMarkers } from '@/lib/material-markers'
+import { ChoiceButtons, MaterialChips } from './message-material'
 
 interface ChatMessageProps {
   role: MessageRole
@@ -13,6 +15,9 @@ interface ChatMessageProps {
   isLastMessage?: boolean
   isStreaming?: boolean
   isError?: boolean
+  /** Último mensaje de Sophia: sus alternativas «A) …» se dibujan como botones que envían la elección. */
+  onChoose?: (texto: string) => void
+  choiceDisabled?: boolean
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -22,10 +27,24 @@ export const ChatMessage = memo(function ChatMessage({
   isLastMessage,
   isStreaming = false,
   isError = false,
+  onChoose,
+  choiceDisabled = false,
 }: ChatMessageProps) {
   const isUser = role === 'user'
 
+  // Markdown trata un salto de línea simple como espacio: las opciones «A) … B) …»
+  // de Sophia salían en una sola línea. Un salto simple pasa a salto duro (dos
+  // espacios + salto); las tablas y listas no se alteran.
+  // Los marcadores [[block:…]] del panel no se leen: se convierten en tarjetas.
+  const limpio = stripMarkers(content)
+  const conBotones = !isUser && !!onChoose && !isStreaming && !isError
+  const { body, options, tail } = conBotones
+    ? splitChoiceOptions(limpio)
+    : { body: limpio, options: [], tail: '' }
+  const markdownConSaltos = (options.length ? body : limpio).replace(/([^\n])\n(?!\n)/g, '$1  \n')
+
   // Format timestamp consistently for SSR hydration
+
   const formattedTime = timestamp
     ? new Date(timestamp).toLocaleTimeString('es-PE', {
       hour: 'numeric',
@@ -98,10 +117,27 @@ export const ChatMessage = memo(function ChatMessage({
               ul: ({ children }) => <ul className="list-disc list-inside my-1.5 space-y-0.5">{children}</ul>,
               ol: ({ children }) => <ol className="list-decimal list-inside my-1.5 space-y-0.5">{children}</ol>,
               li: ({ children }) => <li className="ml-2">{children}</li>,
+              // Tablas GFM: sin estos estilos las celdas salían pegadas y sin
+              // bordes (la tabla de la nota y el semáforo de EVA-NOTA).
+              table: ({ children }) => (
+                <div className="my-2 overflow-x-auto">
+                  <table className="min-w-[16rem] border-collapse text-sm">{children}</table>
+                </div>
+              ),
+              thead: ({ children }) => <thead className="bg-gray-100">{children}</thead>,
+              th: ({ children }) => <th className="border border-gray-300 px-3 py-1.5 text-left font-semibold text-gray-900">{children}</th>,
+              td: ({ children }) => <td className="border border-gray-300 px-3 py-1.5 align-top">{children}</td>,
             }}
           >
-            {content}
+            {markdownConSaltos}
           </ReactMarkdown>
+          {options.length > 0 && onChoose && (
+            <>
+              <ChoiceButtons options={options} onChoose={onChoose} disabled={choiceDisabled} />
+              {tail && <p className="mt-2 leading-7">{tail}</p>}
+            </>
+          )}
+          {!isStreaming && <MaterialChips content={content} />}
         </div>
       </div>
       <div className={cn('text-xs text-gray-500 text-left', !isLastMessage && 'scale-0 group-hover:scale-100')}>

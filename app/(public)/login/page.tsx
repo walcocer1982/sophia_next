@@ -20,10 +20,18 @@ export default function LoginPage() {
   const [isTestUserLoading, setIsTestUserLoading] = useState(false)
   const isDevelopment = process.env.NODE_ENV === 'development'
 
+  // Después de entrar: la página que pedía (?callbackUrl, la pone el proxy) o
+  // /login, que el proxy convierte en la casa de su rol (lib/inicio.ts). Antes
+  // iba siempre a /lessons, la pantalla del alumno, también para el personal.
+  const destino = () => {
+    const pedido = new URLSearchParams(window.location.search).get('callbackUrl')
+    return pedido && pedido.startsWith('/') && !pedido.startsWith('//') ? pedido : '/login'
+  }
+
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true)
     try {
-      await signIn('google', { callbackUrl: '/lessons' })
+      await signIn('google', { callbackUrl: destino() })
     } catch (error) {
       console.error('Error signing in with Google:', error)
       setIsGoogleLoading(false)
@@ -33,7 +41,7 @@ export default function LoginPage() {
   const handleTestUserSignIn = async () => {
     setIsTestUserLoading(true)
     try {
-      await signIn('test-user', { callbackUrl: '/lessons' })
+      await signIn('test-user', { callbackUrl: destino() })
     } catch (error) {
       console.error('Error signing in with test user:', error)
       setIsTestUserLoading(false)

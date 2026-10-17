@@ -1,70 +1,56 @@
 'use client'
 
-import { useSession, signOut } from 'next-auth/react'
-import { useRouter, usePathname } from 'next/navigation'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, BookOpen, Sparkles, Shield, LayoutDashboard, CalendarDays } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { useSession } from 'next-auth/react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { PARAM_VISTA, esVistaEstudiante } from '@/lib/vista-estudiante'
+import { inicioPorRol } from '@/lib/inicio'
+import { BookOpen, Sparkles, Shield, LayoutDashboard, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { nameInitials } from '@/lib/utils'
+import { UserMenu } from '@/components/user-menu'
 import { VerComo } from '@/components/ver-como'
 
-export function Navbar() {
+/**
+ * Lee `?vista=estudiante` de la dirección (necesita su propio Suspense: el
+ * layout la envuelve) y dibuja la barra como la vería un alumno. Solo en
+ * /learn: la página ignora el parámetro si la sesión no es de prueba.
+ */
+export function NavbarConVista() {
+  const pathname = usePathname()
+  const params = useSearchParams()
+  // En la lección no hay barra global: la lección tiene su propia barra única
+  // (components/learning/lesson-bar.tsx) con logo y menú (14 oct 2026).
+  if (pathname.startsWith('/learn/')) return null
+  return <Navbar comoEstudiante={esVistaEstudiante(params.get(PARAM_VISTA))} />
+}
+
+export function Navbar({ comoEstudiante = false }: { comoEstudiante?: boolean }) {
   const { data: session } = useSession()
-  const router = useRouter()
   const pathname = usePathname()
 
-  const handleLogout = async () => {
-    try {
-      // Force redirect to login after signout (with callbackUrl)
-      await signOut({ callbackUrl: '/login' })
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error)
-    }
-  }
-
-  const role = session?.user?.role || 'STUDENT'
+  // «Probar como estudiante»: la barra se dibuja con el rol de alumno (sin
+  // Diseño, Programación, Monitor, Config ni «Ver como»).
+  const role = comoEstudiante ? 'STUDENT' : session?.user?.role || 'STUDENT'
   const isInstructorOrAbove = role === 'INSTRUCTOR' || role === 'ADMIN' || role === 'SUPERADMIN'
   const isSuperadmin = role === 'SUPERADMIN'
 
-  const roleLabel = role === 'SUPERADMIN' ? 'Super Admin'
-    : role === 'ADMIN' ? 'Instructor Líder'
-    : role === 'INSTRUCTOR' ? 'Instructor'
-    : 'Estudiante'
-  const roleBadgeClass = role === 'SUPERADMIN'
-    ? 'bg-red-100 text-red-700 border-red-200'
-    : role === 'ADMIN'
-      ? 'bg-amber-100 text-amber-700 border-amber-200'
-      : role === 'INSTRUCTOR'
-        ? 'bg-blue-100 text-blue-700 border-blue-200'
-        : ''
-
-  // «Casa» depende del rol: el alumno vive en sus clases; el staff, en la
-  // programación. Antes el logo devolvía a la página pública de bienvenida.
-  const inicio = role === 'STUDENT' ? '/lessons' : '/programacion'
+  // «Casa» depende del rol (lib/inicio.ts). En la vista de estudiante, el logo
+  // lleva a la casa REAL del instructor: /lessons lo devolvería ahí de todos modos.
+  const inicio = inicioPorRol(comoEstudiante ? session?.user?.role : role)
 
   return (
-    <header className="h-14 border-b  bg-white flex items-center justify-between px-6 sticky top-0 z-50">
+    <header className="h-14 border-b  bg-white flex items-center justify-between gap-2 px-3 sm:px-6 sticky top-0 z-50">
       {/* Logo */}
-      <Link href={inicio} className="flex items-center gap-6">
+      <Link href={inicio} className="flex shrink-0 items-center gap-6">
         <Image src="/sophia_icon.svg" alt="Sophia Logo" width={32} height={32} />
       </Link>
 
       {/* Navigation Links */}
-      <nav className="flex items-center gap-6">
+      <nav className="flex min-w-0 items-center gap-4 sm:gap-6">
         {role === 'STUDENT' && (
           <Link
             href="/lessons"
+            aria-label="Clases"
             className={`flex items-center gap-2 text-sm font-medium transition-colors ${
               pathname === '/lessons'
                 ? 'text-instructor-600'
@@ -72,13 +58,14 @@ export function Navbar() {
             }`}
           >
             <BookOpen className="h-4 w-4" />
-            Clases
+            <span className="hidden md:inline">Clases</span>
           </Link>
         )}
         {isInstructorOrAbove && (
           <>
             <Link
               href="/planner"
+              aria-label="Diseño"
               className={`flex items-center gap-2 text-sm font-medium transition-colors ${
                 pathname.startsWith('/planner')
                   ? 'text-instructor-600'
@@ -86,10 +73,11 @@ export function Navbar() {
               }`}
             >
               <Sparkles className="h-4 w-4" />
-              Diseño
+              <span className="hidden md:inline">Diseño</span>
             </Link>
             <Link
               href="/programacion"
+              aria-label="Programación"
               className={`flex items-center gap-2 text-sm font-medium transition-colors ${
                 pathname.startsWith('/programacion')
                   ? 'text-instructor-600'
@@ -97,10 +85,11 @@ export function Navbar() {
               }`}
             >
               <CalendarDays className="h-4 w-4" />
-              Programación
+              <span className="hidden md:inline">Programación</span>
             </Link>
             <Link
               href="/dashboard"
+              aria-label="Monitor"
               className={`flex items-center gap-2 text-sm font-medium transition-colors ${
                 pathname.startsWith('/dashboard')
                   ? 'text-instructor-600'
@@ -108,7 +97,7 @@ export function Navbar() {
               }`}
             >
               <LayoutDashboard className="h-4 w-4" />
-              Monitor
+              <span className="hidden md:inline">Monitor</span>
             </Link>
             {/* «Eventos» (kiosko de ferias) se retiró el 14 set 2026: Sophia es
                 para los cursos de carrera. Ver investigacion/mejoras-sophia.md. */}
@@ -117,6 +106,7 @@ export function Navbar() {
         {isSuperadmin && (
           <Link
             href="/admin"
+            aria-label="Config"
             className={`flex items-center gap-2 text-sm font-medium transition-colors ${
               pathname.startsWith('/admin')
                 ? 'text-instructor-600'
@@ -124,70 +114,16 @@ export function Navbar() {
             }`}
           >
             <Shield className="h-4 w-4" />
-            Config
+            <span className="hidden md:inline">Config</span>
           </Link>
         )}
       </nav>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         {/* Solo el superadmin: mirar la app con el alcance de otra persona */}
         {isSuperadmin && <VerComo />}
 
-      {/* User Menu */}
-      {session?.user ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 rounded-xl flex items-center gap-2 px-4 ring-0">
-              <span className='text-xs hidden sm:block'>{session.user.name || ''}</span>
-              <span className='text-xs block sm:hidden'>{nameInitials(session.user.name || '')}</span>
-              {role !== 'STUDENT' && (
-                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${roleBadgeClass}`}>
-                  {roleLabel}
-                </Badge>
-              )}
-              <Avatar className="size-8">
-                <AvatarImage src={session.user.image || undefined} alt={session.user.name || 'Usuario'} />
-                <AvatarFallback className="bg-student-100 text-student-700">
-                  {session.user.name?.charAt(0).toUpperCase() || 'U'}
-                </AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56 bg-white border-slate-200" align="end" forceMount>
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{session.user.name || 'Usuario'}</p>
-                <p className="text-xs leading-none text-muted-foreground">
-                  {session.user.email}
-                </p>
-                <p className="text-xs leading-none text-muted-foreground">
-                  {roleLabel}
-                </p>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push('/profile')} className='cursor-pointer'>
-              <User className="mr-2 h-4 w-4" />
-              <span>Perfil</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push('/settings')} className='cursor-pointer'>
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Configuración</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className='cursor-pointer'>
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Cerrar sesión</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <Link href="/login">
-          <Button variant="default" size="sm">
-            Iniciar sesión
-          </Button>
-        </Link>
-      )}
+      <UserMenu comoEstudiante={comoEstudiante} />
       </div>
     </header>
   )

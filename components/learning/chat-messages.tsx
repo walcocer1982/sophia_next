@@ -9,9 +9,11 @@ import type { OptimisticMessage } from '@/types/chat'
 interface ChatMessagesProps {
   messages: OptimisticMessage[]
   isLoading?: boolean
+  /** Elegir una alternativa del último mensaje de Sophia (envía «B) …»). */
+  onChoose?: (texto: string) => void
 }
 
-export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
+export function ChatMessages({ messages, isLoading, onChoose }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messageCountRef = useRef(0)
   const hasInitiallyScrolledRef = useRef(false)
@@ -68,6 +70,8 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
               isLastMessage={isLastMessage}
               isStreaming={message.status === 'streaming' && message.content.length > 0}
               isError={message.status === 'error'}
+              onChoose={isLastMessage && message.role === 'assistant' ? onChoose : undefined}
+              choiceDisabled={isLoading}
             />
           )
         })}

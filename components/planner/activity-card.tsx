@@ -8,9 +8,11 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, ChevronUp, Check, RotateCcw, Pencil, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Check, RotateCcw, Pencil, X, TriangleAlert } from 'lucide-react'
 import type { Activity } from '@/types/lesson'
 import { normalizeLevel, LEVEL_LABEL_ES } from '@/lib/levels'
+import { revisarPedidos } from '@/lib/planner/pedidos'
+import { revisarTitulo } from '@/lib/planner/titulos'
 
 interface ActivityCardProps {
   activity: Activity
@@ -21,14 +23,20 @@ interface ActivityCardProps {
   onApprove: (activityId: string) => void
   onRevoke: (activityId: string) => void
   onEdit?: (activityId: string, updates: Partial<ActivityEdits>) => void
+  citables?: { id: string; title: string }[]
 }
 
 export interface ActivityEdits {
+  /** Nombre para el alumno (regla de nombres, lib/planner/titulos.ts). */
+  title: string
+  subtitle: string
   agent_instruction: string
   question: string
   must_include: string[]
   /** Índices 1-based de must_include que son eliminatorios. */
   critical: number[]
+  /** Criterios cuyas frases deben salir de un bloque del panel. */
+  quote_from: { criterion: number; block: string; min?: number }[]
   open_ended: boolean
   max_attempts: number
   understanding_level: string
@@ -42,15 +50,34 @@ function criteriosATexto(a: Activity): string {
     .join('\n')
 }
 
-export function ActivityCard({ activity, position, total, keyPoints, isApproved, onApprove, onRevoke, onEdit }: ActivityCardProps) {
+/** Reglas de citas por TEXTO del criterio, para que sobrevivan a reordenar o editar la lista. */
+type ReglaCita = { criterio: string; block: string; min: number }
+function reglasDeCitas(a: Activity): ReglaCita[] {
+  const must = a.verification.success_criteria.must_include
+  return (a.verification.success_criteria.quote_from ?? [])
+    .filter((q) => must[q.criterion - 1])
+    .map((q) => ({ criterio: must[q.criterion - 1], block: q.block, min: q.min ?? 1 }))
+}
+
+export function ActivityCard({ activity, position, total, keyPoints, isApproved, onApprove, onRevoke, onEdit, citables = [] }: ActivityCardProps) {
   const [isExpanded, setIsExpanded] = useState(!isApproved)
   const [isEditing, setIsEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState(activity.title ?? '')
+  const [editSubtitle, setEditSubtitle] = useState(activity.subtitle ?? '')
   const [editInstruction, setEditInstruction] = useState(activity.teaching.agent_instruction)
   const [editQuestion, setEditQuestion] = useState(activity.verification.question)
   const [editCriteria, setEditCriteria] = useState(criteriosATexto(activity))
   const [editOpenEnded, setEditOpenEnded] = useState(activity.verification.open_ended ?? false)
   const [editMaxAttempts, setEditMaxAttempts] = useState(activity.verification.max_attempts ?? 5)
   const [editUnderstandingLevel, setEditUnderstandingLevel] = useState<string>(normalizeLevel(activity.verification.success_criteria?.understanding_level))
+  const [editCitas, setEditCitas] = useState<ReglaCita[]>(reglasDeCitas(activity))
+  const lineasCriterios = editCriteria.split('\n').map((c) => c.trim().replace(/^!\s*/, '')).filter(Boolean)
+  // Regla «una actividad = un pedido» (lib/planner/pedidos.ts): avisa, no bloquea.
+  const avisoPedidos = revisarPedidos(isEditing ? editQuestion : activity.verification.question)
+  // Regla de nombres (lib/planner/titulos.ts): también avisa, no bloquea.
+  const tituloActual = isEditing ? editTitle : activity.title ?? ''
+  const avisosTitulo = tituloActual.trim() ? revisarTitulo(tituloActual) : ['Sin nombre: el alumno verá «Actividad N».']
+  const tituloDe = (id: string) => citables.find((c) => c.id === id)?.title ?? id
   const keyPoint = activity.keyPointIndex !== null
     ? (keyPoints[activity.keyPointIndex] || `Punto ${activity.keyPointIndex + 1}`)
     : 'Cierre general'
@@ -95,6 +122,40 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
 
       {isExpanded && (
         <CardContent className="space-y-4 border-t pt-4">
+          {/* Nombre que ve el alumno (riel de avance y encabezado de la sección) */}
+          <div>
+            <h4 className="mb-1 text-sm font-semibold">Nombre para el alumno</h4>
+            {isEditing ? (
+              <div className="grid gap-2 sm:grid-cols-[2fr_1fr]">
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  maxLength={60}
+                  placeholder="Tema: «Justificación de inasistencias»"
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+                <input
+                  value={editSubtitle}
+                  onChange={(e) => setEditSubtitle(e.target.value)}
+                  maxLength={50}
+                  placeholder="Caso (opcional): «Caso Mario»"
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+            ) : (
+              <p className="text-sm">
+                {activity.title ? <span className="font-medium">{activity.title}</span> : <span className="text-muted-foreground">Actividad {position}</span>}
+                {activity.subtitle && <span className="text-muted-foreground"> · {activity.subtitle}</span>}
+              </p>
+            )}
+            {avisosTitulo.length > 0 && (
+              <p className="mt-1.5 flex items-start gap-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span>{avisosTitulo.join(' ')} El nombre dice lo que se aprende, en tono de sílabo; el caso va aparte.</span>
+              </p>
+            )}
+          </div>
+
           {/* Instrucción al AI */}
           <div>
             <h4 className="mb-1 text-sm font-semibold">Instrucción al AI</h4>
@@ -125,6 +186,12 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
             ) : (
               <p className="text-sm italic text-blue-900">&quot;{activity.verification.question}&quot;</p>
             )}
+            {avisoPedidos && (
+              <p className="mt-2 flex items-start gap-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span><strong>Pide más de una cosa.</strong> {avisoPedidos} Con dos tareas en una pregunta, el desglose se gasta en la primera y la segunda se pierde.</span>
+              </p>
+            )}
           </div>
 
           {/* Criterios de éxito */}
@@ -143,19 +210,58 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                   Un criterio por línea. Empieza la línea con «!» para marcarlo eliminatorio: Sophia nunca lo
                   revela y, sin él, la actividad queda en «En inicio».
                 </p>
+                {citables.length > 0 && (
+                  <div className="mt-2 space-y-1.5 rounded-md border border-blue-100 bg-blue-50/50 p-2">
+                    <p className="text-xs font-medium text-blue-900">Frases que deben salir del material del panel</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Para criterios como «lista cuatro frases del fragmento»: el sistema comprueba que las frases del alumno existan en ese bloque; con frases inventadas, el criterio queda sin cubrir.
+                    </p>
+                    {editCitas.map((r, k) => (
+                      <div key={k} className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <select value={r.criterio} onChange={(e) => setEditCitas(editCitas.map((x, j) => (j === k ? { ...x, criterio: e.target.value } : x)))} className="max-w-[16rem] rounded border border-gray-300 px-1.5 py-1">
+                          {lineasCriterios.map((c) => (
+                            <option key={c} value={c}>{c.length > 50 ? `${c.slice(0, 49)}…` : c}</option>
+                          ))}
+                        </select>
+                        <span>frases de</span>
+                        <select value={r.block} onChange={(e) => setEditCitas(editCitas.map((x, j) => (j === k ? { ...x, block: e.target.value } : x)))} className="rounded border border-gray-300 px-1.5 py-1">
+                          {citables.map((c) => (
+                            <option key={c.id} value={c.id}>{c.title}</option>
+                          ))}
+                        </select>
+                        <span>mínimo</span>
+                        <input type="number" min={1} max={10} value={r.min} onChange={(e) => setEditCitas(editCitas.map((x, j) => (j === k ? { ...x, min: Math.max(1, Math.min(10, Number(e.target.value) || 1)) } : x)))} className="w-14 rounded border border-gray-300 px-1.5 py-1" />
+                        <button type="button" onClick={() => setEditCitas(editCitas.filter((_, j) => j !== k))} className="text-red-600 hover:underline">Quitar</button>
+                      </div>
+                    ))}
+                    {lineasCriterios.length > 0 && (
+                      <button type="button" onClick={() => setEditCitas([...editCitas, { criterio: lineasCriterios[0], block: citables[0].id, min: 1 }])} className="text-xs text-blue-700 hover:underline">
+                        + Exigir frases del panel en un criterio
+                      </button>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               <ul className="list-inside list-disc space-y-1">
-                {activity.verification.success_criteria.must_include.map((c, i) => (
-                  <li key={i} className="text-sm text-muted-foreground">
-                    {c}
-                    {(activity.verification.success_criteria.critical ?? []).includes(i + 1) && (
-                      <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
-                        eliminatorio
-                      </span>
-                    )}
-                  </li>
-                ))}
+                {activity.verification.success_criteria.must_include.map((c, i) => {
+                  const cita = activity.verification.success_criteria.quote_from?.find((q) => q.criterion === i + 1)
+                  return (
+                    <li key={i} className="text-sm text-muted-foreground">
+                      {c}
+                      {(activity.verification.success_criteria.critical ?? []).includes(i + 1) && (
+                        <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
+                          eliminatorio
+                        </span>
+                      )}
+                      {cita && (
+                        <span className="ml-1.5 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                          {cita.min ?? 1} frase(s) de «{tituloDe(cita.block)}»
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
             {isEditing ? (
@@ -261,11 +367,19 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                       const critical = lineas
                         .map((l, i) => (l.startsWith('!') ? i + 1 : 0))
                         .filter((i) => i > 0)
+                      // Las reglas se guardan por número de criterio; la que apunte a un
+                      // criterio borrado o cambiado se descarta.
+                      const quote_from = editCitas
+                        .map((r) => ({ criterion: criteria.indexOf(r.criterio) + 1, block: r.block, ...(r.min > 1 ? { min: r.min } : {}) }))
+                        .filter((q) => q.criterion > 0)
                       onEdit?.(activity.id, {
+                        title: editTitle.trim(),
+                        subtitle: editSubtitle.trim(),
                         agent_instruction: editInstruction.trim(),
                         question: editQuestion.trim(),
                         must_include: criteria,
                         critical,
+                        quote_from,
                         open_ended: editOpenEnded,
                         max_attempts: editMaxAttempts,
                         understanding_level: editUnderstandingLevel,
@@ -281,9 +395,12 @@ export function ActivityCard({ activity, position, total, keyPoints, isApproved,
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation()
+                      setEditTitle(activity.title ?? '')
+                      setEditSubtitle(activity.subtitle ?? '')
                       setEditInstruction(activity.teaching.agent_instruction)
                       setEditQuestion(activity.verification.question)
                       setEditCriteria(criteriosATexto(activity))
+                      setEditCitas(reglasDeCitas(activity))
                       setEditOpenEnded(activity.verification.open_ended ?? false)
                       setEditMaxAttempts(activity.verification.max_attempts ?? 5)
                       setEditUnderstandingLevel(normalizeLevel(activity.verification.success_criteria?.understanding_level))

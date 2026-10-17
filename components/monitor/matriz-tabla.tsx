@@ -3,6 +3,16 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import type { Matriz, EstadoSesion } from '@/lib/asistencia'
+import { formatDate } from '@/lib/formatters'
+
+/** Texto de la marca de seguimiento (lib/seguimiento.ts tiene prisma; acá solo el rótulo). */
+const SEGUIMIENTO: Record<string, string> = {
+  SIN_NOVEDAD: 'Sin novedad',
+  NO_RESPONDE: 'No responde',
+  JUSTIFICADO: 'Justificado',
+  DESERTO: 'Desertó',
+  RETOMO: 'Retomó',
+}
 
 /**
  * La matriz: filas = estudiantes, columnas = sesiones.
@@ -61,6 +71,9 @@ export function MatrizTabla({ matriz, courseId }: { matriz: Matriz; courseId: st
               <th className="sticky left-0 z-10 bg-gray-50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Estudiante
               </th>
+              <th className="px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Seguimiento
+              </th>
               {matriz.lecciones.map((l) => (
                 <th
                   key={l.id}
@@ -79,11 +92,14 @@ export function MatrizTabla({ matriz, courseId }: { matriz: Matriz; courseId: st
           </thead>
           <tbody>
             {filtrados.map((a) => (
-              <tr key={a.userId} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+              <tr
+                key={a.userId}
+                className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 ${a.desertor ? 'text-gray-400' : ''}`}
+              >
                 <td className="sticky left-0 z-10 bg-white px-4 py-2 hover:bg-gray-50">
                   <Link
                     href={`/dashboard/${courseId}/${a.userId}`}
-                    className="font-medium text-gray-900 hover:underline"
+                    className={`font-medium hover:underline ${a.desertor ? 'text-gray-500 line-through decoration-gray-300' : 'text-gray-900'}`}
                   >
                     {a.nombre}
                   </Link>
@@ -91,6 +107,19 @@ export function MatrizTabla({ matriz, courseId }: { matriz: Matriz; courseId: st
                     {a.seccion}
                     {a.dni ? ` · ${a.dni}` : ''}
                   </span>
+                </td>
+                <td className="px-2 py-2 text-xs text-gray-500 whitespace-nowrap">
+                  {a.seguimiento ? (
+                    <span title={a.seguimiento.nota ?? undefined}>
+                      <span className={a.desertor ? 'font-medium text-red-700' : 'font-medium text-gray-700'}>
+                        {SEGUIMIENTO[a.seguimiento.estado]}
+                      </span>
+                      {' · '}
+                      {a.seguimiento.autor} · {formatDate(a.seguimiento.fecha)}
+                    </span>
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
                 </td>
                 {matriz.lecciones.map((l) => {
                   const c = a.celdas[l.id]

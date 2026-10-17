@@ -1,6 +1,7 @@
 import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { inicioPorRol } from '@/lib/inicio'
 
 /**
  * Proxy de Next.js 16 para protección de rutas
@@ -65,13 +66,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Si intenta ir a /login pero ya está autenticado → Redirect según rol
+  // Si intenta ir a /login pero ya está autenticado → a su casa (lib/inicio.ts)
+  // o a la página que pedía antes de iniciar sesión. Solo rutas internas: un
+  // callbackUrl con dominio sería una redirección abierta.
   if (pathname === '/login' && session) {
     const callbackUrl = request.nextUrl.searchParams.get('callbackUrl')
-    const role = session.user?.role || 'STUDENT'
-    const defaultRedirect = role === 'STUDENT' ? '/lessons' : '/planner'
+    const interno = callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//') ? callbackUrl : null
     return NextResponse.redirect(
-      new URL(callbackUrl || defaultRedirect, request.url)
+      new URL(interno || inicioPorRol(session.user?.role), request.url)
     )
   }
 
@@ -95,7 +97,7 @@ export async function proxy(request: NextRequest) {
       (path) => pathname === path || pathname.startsWith(`${path}/`)
     )
     if (isSuperadminPath && role !== 'SUPERADMIN') {
-      return NextResponse.redirect(new URL('/lessons', request.url))
+      return NextResponse.redirect(new URL(inicioPorRol(role), request.url))
     }
 
     // ADMIN paths → solo ADMIN o SUPERADMIN
@@ -103,7 +105,14 @@ export async function proxy(request: NextRequest) {
       (path) => pathname === path || pathname.startsWith(`${path}/`)
     )
     if (isAdminPath && role !== 'ADMIN' && role !== 'SUPERADMIN') {
-      return NextResponse.redirect(new URL('/lessons', request.url))
+      return NextResponse.redirect(new URL(inicioPorRol(role), request.url))
+    }
+
+    // «Mis lecciones» es la pantalla del alumno. Desde ahí el personal abría
+    // sesiones reales que el Monitor contaba como de alumnos (19 al 14 oct
+    // 2026). Para verla como alumno está «Probar como estudiante».
+    if ((pathname === '/lessons' || pathname.startsWith('/lessons/')) && role !== 'STUDENT') {
+      return NextResponse.redirect(new URL(inicioPorRol(role), request.url))
     }
   }
 

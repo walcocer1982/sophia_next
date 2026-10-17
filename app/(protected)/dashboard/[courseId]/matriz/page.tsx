@@ -38,8 +38,12 @@ export default async function MatrizPage({
   const filtro = alcance.role === 'SUPERADMIN' ? {} : seccionesVisibles(alcance)
   const matriz = await matrizDelCurso(courseId, filtro)
 
+  // Los que desertaron salen del denominador: «uno de cada tres abandona»
+  // pasa a ser abandono de la tutoría, no del instituto.
+  const activos = matriz.alumnos.filter((f) => !f.desertor)
+  const desertaron = matriz.alumnos.length - activos.length
   const cuenta = (e: EstadoSesion) =>
-    matriz.alumnos.reduce(
+    activos.reduce(
       (a, f) => a + Object.values(f.celdas).filter((c) => c.estado === e).length,
       0
     )
@@ -73,6 +77,7 @@ export default async function MatrizPage({
             <Resumen etiqueta="Abrieron sin avanzar" valor={cuenta('sin-avanzar')} tono="naranja" />
             <Resumen etiqueta="Terminadas" valor={cuenta('terminada')} tono="verde" />
             <Resumen etiqueta="Aún abiertas" valor={cuenta('pendiente')} tono="gris" />
+            {desertaron > 0 && <Resumen etiqueta="Desertaron" valor={desertaron} tono="gris" />}
           </div>
 
           <MatrizTabla matriz={matriz} courseId={courseId} />

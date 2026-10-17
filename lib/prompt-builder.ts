@@ -2,6 +2,13 @@ import type { CurrentActivityContext, ActivityCompletionResult, ActivityType, Ac
 import type { Message } from '@prisma/client'
 import { buildOptimizedContext } from './message-summarizer'
 import { DEFAULT_MIN_COMPLETENESS } from '@/lib/rubric'
+import { choiceOrder, letterOf, renderChoice, type ChoiceState } from '@/lib/choice'
+import { buildMaterialPrompt, getActivityBlocks, isVisibleToStudent } from '@/lib/support-blocks'
+import type { SupportBlock } from '@/types/lesson'
+import type { Cited } from '@/lib/material-markers'
+
+/** Qué pasó en el paso cerrado en ESTE turno (lo decide app/api/chat/stream). */
+export type ChoiceTurn = 'no_pick' | 'pick_correct' | 'pick_wrong_retry' | 'pick_wrong_revealed'
 
 interface PromptBuilderContext {
   activityContext: CurrentActivityContext
@@ -16,6 +23,18 @@ interface PromptBuilderContext {
   methodology?: 'REFLECTIVE' | 'CODE'  // Metodología del curso (default REFLECTIVE)
   projectBrief?: unknown               // Propuesta acordada en la sesión-bisagra (CODE personalizado)
   wasExplained?: boolean               // Sophia ya dio una mini-explicación didáctica en esta actividad
+  /** Semilla (sesión) para el orden de las alternativas; sin ella no se mezclan. */
+  sessionSeed?: string
+  /** Estado del paso cerrado de la actividad actual (si la tiene). */
+  choiceState?: ChoiceState
+  /** Qué hizo el alumno en el paso cerrado en este turno. */
+  choiceTurn?: ChoiceTurn
+  /** Bloques `pinned` de actividades anteriores que siguen en el panel. */
+  pinnedBlocks?: SupportBlock[]
+  /** Sesión de prueba: las imágenes sin validar se muestran (y se citan). */
+  isTest?: boolean
+  /** Bloques y señalamientos que Sophia ya mostró en la sesión (marcadores en sus mensajes). */
+  cited?: Cited
 }
 
 // La intención del alumno («no sé», «dame una pista») la decide el verificador
@@ -153,6 +172,12 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
     methodology = 'REFLECTIVE',
     projectBrief,
     wasExplained = false,
+    sessionSeed = '',
+    choiceState,
+    choiceTurn,
+    pinnedBlocks = [],
+    isTest = false,
+    cited,
   } = context
   const isCodeMethodology = methodology === 'CODE'
 
@@ -272,6 +297,8 @@ Cada mensaje tuyo debe terminar en UNA de estas tres formas, nunca otra:
 1. Una PREGUNTA dirigida al estudiante (la pregunta de verificación, una sub-pregunta de desglose, o profundización dentro de los criterios).
 2. UN CIERRE EXPLÍCITO de la lección ("Gracias por participar.", "¡Buena clase!") — solo cuando se completó la última actividad.
 3. UNA TRANSICIÓN explícita a la siguiente actividad terminando con la pregunta de verificación de esa actividad.
+
+PROHIBIDO despedirte, agradecer la participación («Gracias por participar», «gracias por tu esfuerzo») o dar por terminada una actividad en cualquier momento que no sea el final de la lección. Al terminar una actividad intermedia no se agradece: se pasa a la siguiente con su pregunta en el mismo mensaje. Y si el estado dice que la actividad sigue abierta, no la cierras tú: preguntas lo que falta.
 
 PROHIBIDO terminar con un statement neutro tipo "Eso es así." / "Es importante." / "Por eso es clave." — porque deja al estudiante sin saber si tiene que responder. Si quieres cerrar un concepto, hazlo + plantea la siguiente pregunta en la MISMA respuesta.
 
@@ -421,45 +448,28 @@ VERIFICACIÓN FLEXIBLE:
 - Si la comprensión es clara (${minCompleteness}%+), permite avanzar
 - Al agotar los ${maxAttempts} intentos se continúa igual, pero continuar no es aprobar: no lo presentes como logro`
 
-  // Image block — contextual directives by activity type + showWhen
-  // Supports both images[] (new) and image (legacy)
-  const teachingImages = teaching?.images || (teaching?.image ? [teaching.image] : [])
-  const validImages = teachingImages.filter((img) => img.description)
-  let imageBlock = ''
-  if (validImages.length > 0) {
-    const actType = activity.type
+  // Material de apoyo del panel (bloques tipados + imágenes viejas convertidas).
+  // Reemplaza al antiguo bloque de imágenes: Sophia cita por título, no copia.
+  // Ver lib/support-blocks.ts y investigacion/panel-de-apoyo-especificacion.md
+  const activityBlocks = getActivityBlocks(activity).filter((b) => isVisibleToStudent(b, isTest))
+  const imageBlock = buildMaterialPrompt(activityBlocks, pinnedBlocks, cited)
 
-    const typeDirectives: Record<string, string> = {
-      explanation: 'Usa las imágenes para ilustrar tu explicación. Describe qué muestra cada imagen y conecta con el concepto que estás enseñando. Después haz preguntas de comprensión sobre lo que acabas de explicar.',
-      practice: 'El estudiante debe usar las imágenes como referencia para resolver el ejercicio. Pregunta qué elementos aplican al caso.',
-      reflection: 'Pide al estudiante que relacione lo aprendido con lo que muestran las imágenes.',
-      closing: 'Usa las imágenes como resumen visual. Pide al estudiante que las explique con lo aprendido.',
-    }
-    const typeDirective = typeDirectives[actType] || typeDirectives.explanation
-
-    const showDirectives: Record<string, string> = {
-      on_start: 'Ya visible para el estudiante. Referencíala directamente.',
-      on_reference: 'Se mostrará cuando la menciones. Introdúcela naturalmente.',
-      on_demand: 'Solo se muestra si el estudiante pide. Menciona que está disponible.',
-    }
-
-    const imageEntries = validImages.map((img, i) => {
-      const showDirective = showDirectives[img.showWhen || 'on_reference']
-      return `  [${i + 1}] "${img.description}" — ${showDirective}`
-    }).join('\n')
-
-    imageBlock = `
-IMÁGENES DE APOYO (${validImages.length}) — visibles en el panel del estudiante:
-${imageEntries}
-
-REGLA CRÍTICA — INTEGRAR IMÁGENES EN LA CONVERSACIÓN:
-- Refiérete a las imágenes EN MOMENTOS CLAVE de tu explicación, no las dejes solo en el panel.
-- Usa frases naturales como: "Mira la imagen 1, donde se ve...", "Fíjate en la imagen del jumbo...", "Como muestra la foto...", "Si observas el diagrama...".
-- Conecta cada imagen con el concepto exacto que estás enseñando o la pregunta que harás después.
-- Cuando hagas una pregunta basada en la imagen, INVITA al estudiante a observarla: "Observa la imagen 2 y dime, ¿qué tipo de perforación ves?".
-- ${typeDirective}
-- Usa SOLO las descripciones proporcionadas, no inventes detalles sobre las imágenes.`
-  }
+  // Conversación sobre el panel (spec del panel §16.1 y §16.4): una actividad
+  // sin paso cerrado que tiene material para manipular o leer no se ancla en
+  // alternativas sino en una ACCIÓN sobre el panel. Con un ecualizador, la
+  // secuencia es predecir, mover, observar, explicar y cerrar (§15.3).
+  const hayEcualizador = [...activityBlocks, ...pinnedBlocks].some((b) => b.type === 'simulator')
+  // El ecualizador puede venir fijado desde una actividad anterior (EVA-NOTA 6).
+  const esConversacionDePanel = !activity.choice && !activity.checks && (activityBlocks.length > 0 || hayEcualizador)
+  const conversacionPanel = esConversacionDePanel
+    ? `
+CONVERSACIÓN SOBRE LA PIZARRA (esta actividad no tiene alternativas):
+- El ancla es una acción del estudiante sobre la pizarra. Pide UNA acción concreta por turno.${hayEcualizador ? `
+- Con el ecualizador, en este orden: 1) pide una predicción («¿qué crees que pasa si…?»); 2) pide que mueva una barra y cuente qué número ve; 3) pide una segunda acción que contraste; 4) pregunta el porqué; 5) cierra la idea en dos oraciones. Si el ESTADO DEL ECUALIZADOR muestra que ya hizo un paso, sáltalo: nunca pidas lo que ya hizo.
+- Verás el estado real del ecualizador en «ESTADO DEL ECUALIZADOR». Reacciona a lo que pasó de verdad; si el estudiante dice un número distinto, señálaselo con amabilidad.
+- No digas el resultado antes de que el estudiante mueva: él lo lee en el ecualizador. Nunca le pidas que calcule.` : ''}
+- Si responde «no sé» o una sola palabra, NO le des la respuesta ni le preguntes otra cosa abstracta: pídele la acción («mueve…», «mira la fila…», «lee la línea…») y que te cuente qué ve.`
+    : ''
 
   const staticBlock2 = `
 ${typeTemplate}
@@ -470,6 +480,7 @@ INSTRUCCIÓN:
 ${agentInstruction}
 ${teachingContext ? `\nCONTEXTO: ${teachingContext}` : ''}
 ${imageBlock}
+${conversacionPanel}
 
 EXTENSIÓN ESPERADA: ${targetLength}
 
@@ -505,8 +516,10 @@ ${optimizedHistory}
     dynamicPrompt += `\nACTIVIDADES COMPLETADAS: ${completedActivities.length} (no volver a enseñar)`
   }
 
-  // Resultado de verificación si existe
-  if (verificationResult) {
+  // Resultado de verificación si existe. En un turno del paso cerrado no hay
+  // verificación de IA y la guía por response_type («da una pista») competiría
+  // con la instrucción del paso cerrado: solo manda esta última.
+  if (verificationResult && !choiceTurn) {
     // El verificador no respondió (falla técnica). El alumno avanza igual,
     // pero Sophia no debe calificar una respuesta que nadie evaluó.
     const sinVerificar = verificationResult.unverified === true
@@ -532,10 +545,27 @@ CÓMO RESPONDER (50-70 palabras MÁXIMO):
 - Promocionar nada ni sugerir otros cursos
 - Cualquier frase de cierre que no sea literalmente "Gracias por participar"
 
-Si el estudiante responde después de tu cierre, agradece en 1 oración corta y NO continúes el diálogo.`
+Si el estudiante escribe DESPUÉS de tu cierre: si pregunta algo de la lección, respóndele en 2-3 oraciones, sin hacerle preguntas; si solo agradece o se despide, contesta en 1 oración. No reabras la evaluación ni propongas actividades nuevas.`
+      } else if (nextActivity && nextActivity.checks?.length) {
+        // El cierre empieza con una comprobación que el código agrega al final
+        // de este mensaje (route.ts, checksIntro): Sophia solo hace la transición.
+        dynamicPrompt += `\n\nESTADO: COMPLETADA - TRANSICIÓN AL CIERRE
+
+En UNA o DOS oraciones: reconoce en concreto lo que el estudiante acaba de lograr y anuncia que van a cerrar la lección.
+⛔ PROHIBIDO hacer cualquier pregunta, listar opciones o resumir la lección: el sistema agrega a continuación las preguntas de comprobación.
+⛔ PROHIBIDO despedirte o decir «Gracias por participar»: la lección todavía no terminó (falta la comprobación y la reflexión final).`
       } else if (nextActivity) {
         const nextTeaching = nextActivity.teaching?.agent_instruction || (nextActivity as { agent_instruction?: string }).agent_instruction || ''
-        const nextQuestion = nextActivity.verification.question
+        // Una actividad con ecualizador se abre con la predicción, no con el porqué.
+        const nextQuestion = nextActivity.teaching?.first_question ?? nextActivity.verification.question
+        const nextChoice = nextActivity.choice
+        const nextChoiceText = nextChoice
+          ? renderChoice(nextChoice, choiceOrder(`${sessionSeed}:${nextActivity.id}`, nextChoice.options.length))
+          : null
+        // En la prueba del 6 oct, la introducción describió la opción correcta
+        // («para subirlo a Destacado necesita…»). Se nombra explícitamente lo
+        // que no se puede adelantar.
+        const nextCorrect = nextChoice ? nextChoice.options[nextChoice.answer] : null
 
         dynamicPrompt += `\n\nESTADO: COMPLETADA - TRANSICIÓN A SIGUIENTE ACTIVIDAD
 
@@ -544,13 +574,28 @@ Si el estudiante responde después de tu cierre, agradece en 1 oración corta y 
 FORMATO DE TRANSICIÓN (máximo 80 palabras total):
 1. ${sinVerificar ? '"Gracias, sigamos." (sin validar la respuesta: no pudo verificarse)' : '"Correcto/Bien." (1 palabra de cierre, NO resumas lo que ya dijiste)'}
 2. Introduce el nuevo tema en 2-3 oraciones máximo
-3. Termina con la pregunta de verificación
+3. ${nextChoiceText ? 'Termina presentando la PREGUNTA CERRADA, con sus opciones y letras EXACTAMENTE como están abajo (una por línea). Pide que elija una letra. NO hagas todavía la pregunta abierta y NO adelantes la respuesta correcta en la introducción (ni el número, ni el nivel, ni la causa): explica la regla general, el caso lo resuelve el estudiante.' : 'Termina con la pregunta de verificación'}
 
 SIGUIENTE ACTIVIDAD:
-Instrucción: ${nextTeaching}
-Pregunta: "${nextQuestion}"
+Instrucción: ${nextTeaching}${(() => {
+          const material = getActivityBlocks(nextActivity).filter((b) => isVisibleToStudent(b, isTest))
+          if (!material.length) return ''
+          const visibles = material.filter((b) => (b.showWhen ?? 'on_start') === 'on_start' || cited?.blocks.has(b.id))
+          const ocultos = material.filter((b) => b.showWhen === 'on_reference' && !cited?.blocks.has(b.id))
+          return [
+            visibles.length ? `
+Material que aparece en la pizarra al pasar (cítalo por su título, no lo copies): ${visibles.map((b) => `«${b.title}»`).join(', ')}` : '',
+            ocultos.length ? `
+Material oculto de la siguiente actividad: muéstralo al presentarlo escribiendo su marcador al final de la oración: ${ocultos.map((b) => `«${b.title}» [[block:${b.id}]]`).join(', ')}` : '',
+          ].join('')
+        })()}
+${nextChoiceText ? `PREGUNTA CERRADA (paso 1, copia literal):
+${nextChoiceText}
+(La pregunta abierta "${nextQuestion}" viene DESPUÉS, cuando elija.)
+⛔ La opción correcta es «${nextCorrect}». En la introducción NO la uses, no la parafrasees ni describas lo que la distingue de las otras: el estudiante tiene que llegar solo. Introduce el tema en general.` : `Pregunta: "${nextQuestion}"`}
 
 ⛔ PROHIBIDO en transiciones:
+- Pedir algo más de la actividad que se cierra (reescribir, calcular, explicar otra parte): el sistema ya la dio por cerrada y esa respuesta no se evaluaría. Tu único pedido es el de la siguiente actividad.
 - Listar lo que "aprendimos" o "cubrimos" (ya lo sabe, lo acaba de hacer)
 - Repetir felicitaciones ("Excelente trabajo", "Has demostrado...")
 - Dar resúmenes antes de avanzar
@@ -574,8 +619,12 @@ Pregunta: "${nextQuestion}"
       // Si el AI evaluador sugiere desglose, tiene prioridad sobre las guías
       // genéricas por response_type: Sophia debe hacer la sub-pregunta SUGERIDA
       // sin revelar la respuesta esperada.
+      // En la prueba del 6 oct Sophia ignoró el desglose: dijo «Exacto», cerró la
+      // actividad y presentó un caso de dos actividades más adelante, mientras el
+      // puntero seguía en esta. De ahí la línea «LA ACTIVIDAD SIGUE ABIERTA».
       if (verificationResult.needs_scaffolding && verificationResult.next_subquestion) {
         dynamicPrompt += `\n\nESTADO: DESGLOSE — la respuesta está parcial/incompleta pero el estudiante está en tema. Haz UNA sub-pregunta específica para que llegue al criterio que falta.
+⛔ LA ACTIVIDAD SIGUE ABIERTA: el sistema todavía no la da por cumplida. NO la cierres con «Exacto» o «Perfecto», NO resumas, NO agradezcas ni te despidas, NO presentes otro caso ni otra actividad. Tu mensaje termina con la sub-pregunta.
 ${matchedStr}
 ${missingStr}
 
@@ -600,7 +649,7 @@ Nivel acumulado actual: ${verificationResult.understanding_level}
       } else {
       switch (responseType) {
         case 'partial':
-          if (attempts >= 3) {
+          if (attempts >= maxAttempts) {
             // Después de 3+ intentos parciales: cerrar y avanzar. Lo que faltó
             // se explica brevemente, salvo los eliminatorios, que no se revelan.
             responseGuidance = `RESPUESTA PARCIAL TRAS ${attempts} INTENTOS — Ya es suficiente, avanza.
@@ -665,6 +714,7 @@ Intento: ${attempts}/${maxAttempts}
 "${verification.question}"
 
 ⚠️ REGLA CRÍTICA: Si el estudiante ya respondió parte de la pregunta correctamente, NO vuelvas a preguntar eso. Enfócate SOLO en lo que falta.
+⛔ LA ACTIVIDAD SIGUE ABIERTA: no agradezcas, no te despidas y no la des por cerrada. Tu mensaje termina con una pregunta${attempts >= maxAttempts ? ' o con la transición que se indica arriba' : ''}.
 
 ${extractedScenario ? `📍 ESCENARIO A USAR (OBLIGATORIO):
 "${extractedScenario}"
@@ -680,6 +730,41 @@ ${extractedScenario ? `📍 ESCENARIO A USAR (OBLIGATORIO):
     }
   }
 
+  // ── Paso cerrado (alternativas) de la actividad actual ──────────────────
+  // Se corrige en el código; acá solo se le dice a Sophia qué mostrar y qué
+  // decir. Va en el bloque dinámico porque el orden de las opciones es por sesión.
+  if (activity.choice && !isCodeMethodology) {
+    const choice = activity.choice
+    const order = choiceState?.order ?? choiceOrder(`${sessionSeed}:${activity.id}`, choice.options.length)
+    const texto = renderChoice(choice, order)
+    const correcta = `${letterOf(order, choice.answer)}) ${choice.options[choice.answer]}`
+    const ultimaLetra = choiceState?.picks.length ? letterOf(order, choiceState.picks[choiceState.picks.length - 1]) : ''
+    dynamicPrompt += `
+
+PASO CERRADO (paso 1 de esta actividad; el sistema lo corrige, NO tú):
+${texto}
+REGLA: nada de lo que digas antes o después de presentarlo puede contener la respuesta correcta ni descartar opciones (ni el número, ni el nivel, ni la causa). Explica la regla general; el caso lo resuelve el estudiante.`
+    if (!choiceState || (!choiceState.resolved && !choiceTurn)) {
+      dynamicPrompt += `
+ESTADO DEL PASO 1: aún no se presentó. Preséntalo EXACTAMENTE como está arriba (una opción por línea, con su letra) y pide que elija una letra. NO pidas la razón todavía; NO reveles cuál es la correcta.`
+    } else if (choiceTurn === 'no_pick') {
+      dynamicPrompt += `
+ESTADO DEL PASO 1: el estudiante NO eligió una opción. En máximo 40 palabras pídele que elija una letra y vuelve a listar las opciones tal cual. No evalúes lo que dijo, no des pistas, no reveles la correcta.`
+    } else if (choiceTurn === 'pick_correct') {
+      dynamicPrompt += `
+ESTADO DEL PASO 1: eligió ${ultimaLetra}, que es la CORRECTA. Responde SOLO con esto, adaptando la pregunta a tus palabras pero sin cambiar lo que pide: "Correcto. ${verification.question}". PROHIBIDO repetir la opción, explicar por qué es la correcta o agregar datos: eso lo tiene que decir el estudiante.`
+    } else if (choiceTurn === 'pick_wrong_retry') {
+      dynamicPrompt += `
+ESTADO DEL PASO 1: eligió ${ultimaLetra}, que NO es la correcta. Responde SOLO con esto, sin agregar nada: "No exactamente. Vuelve a mirar los datos del caso y elige otra letra." Está PROHIBIDO decir por qué está mal, nombrar qué dato la descarta, mencionar las opciones que quedan o dar cualquier pista: eso es lo que el estudiante tiene que descubrir.`
+    } else if (choiceTurn === 'pick_wrong_revealed') {
+      dynamicPrompt += `
+ESTADO DEL PASO 1: eligió ${ultimaLetra} y agotó los intentos. Responde SOLO con esto, adaptando la pregunta a tus palabras pero sin cambiar lo que pide: "La correcta era ${correcta}. Ahora explícame por qué: ${verification.question}". PROHIBIDO dar pistas, explicar tú la respuesta o hacer otra pregunta.`
+    } else if (choiceState.resolved) {
+      dynamicPrompt += `
+ESTADO DEL PASO 1: ya resuelto (${choiceState.correct ? 'acertó' : `no acertó; se le dijo que era ${correcta}`}). Estás en el PASO 2: evalúa SOLO la justificación según el estado de verificación de arriba. No vuelvas a presentar las opciones.`
+    }
+  }
+
   // Manejo de tangentes
   if (tangentCount >= 3) {
     dynamicPrompt += `\n\nLÍMITE OFF-TOPIC: Redirige al tema.`
@@ -691,7 +776,21 @@ ${extractedScenario ? `📍 ESCENARIO A USAR (OBLIGATORIO):
   // - Pide ayuda, o segunda vez → reformulación con escenario (sin opciones reveladas)
   if (studentIsUnsure) {
     const firstTime = (attempts || 0) <= 1
-    const shouldExplain = studentHasNoBase && firstTime && !wasExplained
+    // Conversación sobre el panel (spec §16.4): el primer «no sé» no se
+    // responde explicando, se responde pidiendo la acción. Si después de mover
+    // sigue sin saber, recién ahí corre la regla de siempre.
+    const pideAccion = esConversacionDePanel && firstTime && !wasExplained
+    const shouldExplain = studentHasNoBase && firstTime && !wasExplained && !pideAccion
+
+    if (pideAccion) {
+      dynamicPrompt += `\n\n📍 EL ESTUDIANTE NO SABE — PIDE UNA ACCIÓN SOBRE LA PIZARRA
+
+NO expliques el concepto ni des la respuesta: todavía no miró ni movió nada.
+CÓMO RESPONDER (máximo 50 palabras):
+1. Una frase que lo tranquilice, sin validar («Tranquilo, lo vemos en la pizarra»).
+2. Pídele UNA acción concreta sobre la pizarra (mover una barra, cargar un caso, mirar una fila) y que te diga el número o el dato que ve.
+⛔ PROHIBIDO decir pesos, porcentajes, resultados o la razón: eso lo va a descubrir él al mover.`
+    }
 
     if (shouldExplain) {
       // Mini-explicación derivada de los criterios `must_include` de la actividad.

@@ -11,6 +11,8 @@ export interface ChatMessage {
   createdAt: Date
   inputTokens?: number | null
   outputTokens?: number | null
+  /** Actividad a la que pertenece (la vista Cuaderno agrupa por esto). */
+  activityId?: string | null
 }
 
 // ⭐ Optimistic UI: Extender con propiedades para estado en tiempo real
@@ -30,6 +32,7 @@ export function toOptimisticMessage(message: Message): OptimisticMessage {
     createdAt: message.timestamp,
     inputTokens: message.inputTokens,
     outputTokens: message.outputTokens,
+    activityId: message.activityId,
     status: 'completed',
     isOptimistic: false,
   }

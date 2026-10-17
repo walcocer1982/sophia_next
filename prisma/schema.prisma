@@ -63,6 +63,8 @@ model User {
   courses            Course[]
   sectionInstructors SectionInstructor[]
   enrollments        Enrollment[]
+  seguimientos       SeguimientoAlumno[]  @relation("SeguimientoDelAlumno")
+  seguimientosHechos SeguimientoAlumno[]  @relation("SeguimientoHechoPor")
 
   @@index([email])
   @@index([googleId])
@@ -168,7 +170,7 @@ model Course {
   instructor  String   @db.Text  // Personalidad del AI instructor
   userId      String?            // Instructor que creó el curso
   careerId    String?            // Programa académico (Career = Programa)
-  voiceEnabled Boolean @default(true)  // Si false, el chat del curso oculta el botón de voz
+  voiceEnabled Boolean @default(true)  // Sophia lee sus mensajes en voz alta (voz del navegador, sin costo). El micrófono para dictar no depende de esto.
   // Scope: alcance del curso dentro del plan académico
   //  - TRANSVERSAL: se dicta en todas las sedes (no requiere carrera).
   //  - SPECIALIZATION: específico de la carrera asignada (careerId).
@@ -196,14 +198,44 @@ model Course {
   careers  Career[]  @relation("CourseCareers")
   lessons  Lesson[]
   sections Section[]
+  images   CourseImage[]
   // Un curso puede ofrecerse en VARIAS sedes (m:n).
   sedes    Sede[]    @relation("CourseSedes")
+  seguimientos SeguimientoAlumno[]
 
   @@index([slug])
   @@index([userId])
   @@index([careerId])
   @@index([scope])
   @@index([deletedAt])
+}
+
+// Banco de imágenes del curso (panel de apoyo, etapa 3). Una foto se sube y se
+// describe una vez y la usan varias lecciones: el bloque `image` guarda una
+// copia de url y descripción más `bankId`, así el alumno no depende de esta
+// tabla. Una imagen sin validar no se muestra al alumno.
+// Spec: investigacion/panel-de-apoyo-especificacion.md §9.3
+model CourseImage {
+  id          String    @id @default(cuid())
+  courseId    String
+  url         String
+  description String    @db.Text
+  kind        String    @default("equipment") // scene | term | equipment | diagram
+  source      String    @default("")
+  license     String    @default("")
+  validated   Boolean   @default(false)
+  uploadedBy  String?   // userId de quien la subió
+  validatedBy String?   // userId de quien la validó
+  validatedAt DateTime?
+  tags        String[]  @default([])
+  width       Int?
+  height      Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
 }
 
 model Lesson {
@@ -304,6 +336,46 @@ model LessonSurvey {
 
   @@index([npsScore])
   @@index([submittedAt])
+}
+
+// ── Seguimiento manual del alumno (decisión del 1 oct 2026, lienzo
+// investigacion/lienzo-estado-alumno.html) ──
+// Lo que Sophia no puede saber sola: si se le llamó y qué pasó. Es POR ALUMNO,
+// no por curso: «desertó» lo saca de todos sus cursos de una vez. La marca
+// vigente es la última; el historial no se pisa (cada una guarda fecha y autor).
+enum SeguimientoEstado {
+  SIN_NOVEDAD
+  NO_RESPONDE // llamado o escrito, sin respuesta
+  JUSTIFICADO // habló y hay un motivo
+  DESERTO     // dejó el instituto
+  RETOMO
+}
+
+enum SeguimientoMotivo {
+  HORARIO
+  CONEXION
+  NO_ENTENDIO
+  PERSONAL
+}
+
+model SeguimientoAlumno {
+  id        String             @id @default(cuid())
+  userId    String
+  estado    SeguimientoEstado
+  motivo    SeguimientoMotivo?
+  // Curso al que se refiere el motivo («horario, choca con Química»). Opcional.
+  courseId  String?
+  nota      String?            @db.Text
+  autorId   String
+  createdAt DateTime           @default(now())
+
+  alumno User    @relation("SeguimientoDelAlumno", fields: [userId], references: [id], onDelete: Cascade)
+  autor  User    @relation("SeguimientoHechoPor", fields: [autorId], references: [id])
+  course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([autorId])
+  @@index([courseId])
 }
 
 enum ActivityStatus {
