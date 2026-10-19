@@ -49,4 +49,4 @@ Todo lo de esta carpeta es contenido: no toca `lib/`, `app/` ni los prompts. Lo 
 
 ## Fuente de los datos
 
-Solo `05_Base-de-datos` del proyecto `C:\Users\LEGION\Claude\diseño-ppt-cetemin` (solo lectura). Lo que falte (casos cortos con solución, texto visible de las imágenes, rutinas con sus preguntas) se pide a ese proyecto; no se saca de los guiones.
+Solo `05_Base-de-datos` del proyecto `C:\Users\LEGION\Claude\cetemin\diseño-ppt-cetemin` (solo lectura). Lo que falte (casos cortos con solución, texto visible de las imágenes, rutinas con sus preguntas) se pide a ese proyecto; no se saca de los guiones.
