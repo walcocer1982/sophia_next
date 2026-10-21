@@ -28,7 +28,13 @@ const FOREIGN_WORD_RE = /\b(input|output|labs?|labs|members|certificate|cognitio
 // Patrones de "tarjetas de presentación" hallucinated.
 const NAME_SOUP_RE = /^[A-ZÁÉÍÓÚÑ\s]{15,}$/  // todo mayúsculas largo (15+ chars sin minúscula)
 
-export function detectHallucination(message: string): HallucinationCheck {
+/**
+ * `pregunta`: la pregunta que el alumno está respondiendo. Sus palabras no
+ * cuentan como repetición (regla 5): responder «¿qué hay abajo de cada uno?» con
+ * «abajo del borde… la planta de abajo… y abajo de las tablas…» es natural, y
+ * se tomaba por ruido (21 oct 2026).
+ */
+export function detectHallucination(message: string, pregunta = ''): HallucinationCheck {
   const trimmed = message.trim()
   if (!trimmed) return { isHallucination: false }
 
@@ -71,15 +77,17 @@ export function detectHallucination(message: string): HallucinationCheck {
   //    pegada al micrófono en loop.
   if (trimmed.length > 30) {
     const words = trimmed.toLowerCase().match(/[a-zA-ZáéíóúñÁÉÍÓÚÑ]{4,}/g) || []
+    const deLaPregunta = new Set(pregunta.toLowerCase().match(/[a-zA-ZáéíóúñÁÉÍÓÚÑ]{4,}/g) || [])
     if (words.length >= 6) {
       const counts: Record<string, number> = {}
-      for (const w of words) counts[w] = (counts[w] || 0) + 1
-      const maxRepeat = Math.max(...Object.values(counts))
+      for (const w of words) if (!deLaPregunta.has(w)) counts[w] = (counts[w] || 0) + 1
+      const maxRepeat = Math.max(0, ...Object.values(counts))
       const totalWords = words.length
-      // Si una palabra ocupa >25% del total Y se repite 3+ veces, es ruido
-      // (bajado de 40% a 25% para cubrir casos donde hay ruido + repetición
-      // mezclada, ej: "Tengo problema cámara cómo puede ver cómo puede ver...")
-      if (maxRepeat >= 3 && maxRepeat / totalWords > 0.25) {
+      // Si una palabra ocupa >25% del total Y se repite 4+ veces, es ruido.
+      // Era 3+: una respuesta de once palabras con «abajo» tres veces caía
+      // (21 oct 2026). Los bucles de una frase («cómo puede ver cómo puede
+      // ver…») los sigue atrapando la regla 6.
+      if (maxRepeat >= 4 && maxRepeat / totalWords > 0.25) {
         const topWord = Object.entries(counts).find(([, c]) => c === maxRepeat)?.[0]
         return { isHallucination: true, reason: `palabra "${topWord}" repetida ${maxRepeat} veces (${Math.round((maxRepeat / totalWords) * 100)}% del texto)` }
       }

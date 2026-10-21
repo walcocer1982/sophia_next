@@ -78,3 +78,21 @@ test('la pantalla reconoce el pedido y el recordatorio de subrayar (prueba de Ed
   assert.deepEqual(textosPedidosEn('Toca en «La regla» la línea, por favor.', bloques), [])
   assert.ok(mensajeRecordatorioSubrayado(['La regla']).includes('ya quedó guardada'))
 })
+
+test('prueba de Walther (21 oct): una línea equivocada deja el pedido pendiente; la revelada o la correcta lo cierran', async () => {
+  const { pendientesDeSubrayar, mensajeTurnoDeSubrayar } = await import('../lib/subrayado')
+  const bloques = [{ id: 'norma-x', title: 'La regla', type: 'text', activityId: 'a4' }]
+  const base = { bloques, actividadActual: 'a4' }
+  // Pedido sin tocar
+  assert.deepEqual(pendientesDeSubrayar({ ...base, ultimoMensajeDeSophia: mensajeTurnoDeSubrayar(['La regla']), subrayados: {}, revisados: {} }), { ids: ['norma-x'], motivo: 'pedido' })
+  // Tocó: mientras viaja la revisión, ya no es «pedido»
+  assert.deepEqual(pendientesDeSubrayar({ ...base, ultimoMensajeDeSophia: mensajeTurnoDeSubrayar(['La regla']), subrayados: { 'norma-x': { lineas: [0] } }, revisados: {} }), { ids: [], motivo: null })
+  // Línea equivocada: pendiente aunque haya una línea marcada y Sophia diga otra cosa
+  const mal = { 'norma-x': { blockId: 'norma-x', resultado: 'no_respalda' as const } }
+  assert.deepEqual(pendientesDeSubrayar({ ...base, ultimoMensajeDeSophia: 'Decides que sí; ¿qué hay justo debajo?', subrayados: { 'norma-x': { lineas: [0] } }, revisados: mal }), { ids: ['norma-x'], motivo: 'equivocada' })
+  // Revelada o correcta: ya no
+  assert.deepEqual(pendientesDeSubrayar({ ...base, ultimoMensajeDeSophia: 'x', subrayados: { 'norma-x': { lineas: [0] } }, revisados: { 'norma-x': { blockId: 'norma-x', resultado: 'no_respalda' as const, revelada: ['Tercera condición.'] } } }).ids, [])
+  assert.deepEqual(pendientesDeSubrayar({ ...base, ultimoMensajeDeSophia: 'x', subrayados: { 'norma-x': { lineas: [2] } }, revisados: { 'norma-x': { blockId: 'norma-x', resultado: 'respalda' as const } } }).ids, [])
+  // En otra actividad, la revisión vieja no cuenta
+  assert.deepEqual(pendientesDeSubrayar({ ...base, actividadActual: 'a5', ultimoMensajeDeSophia: 'x', subrayados: { 'norma-x': { lineas: [0] } }, revisados: mal }).ids, [])
+})

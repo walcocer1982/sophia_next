@@ -59,7 +59,7 @@ interface CuadernoProps {
    * Falta tocar una línea en la pizarra (lectura comprobada). Aviso sobre la caja,
    * para que no vuelva a escribir la respuesta (prueba de Edwin, 21 oct 2026).
    */
-  avisoSubrayar?: { titulos: string[]; onIr: () => void } | null
+  avisoSubrayar?: { titulos: string[]; motivo: 'pedido' | 'equivocada'; onIr: () => void } | null
 }
 
 export function Cuaderno({
@@ -352,7 +352,9 @@ export function Cuaderno({
               {avisoSubrayar && (
                 <div role="status" className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-[#fbc50b]/50 bg-[#fbc50b]/10 px-3 py-2 text-[14px] leading-snug text-[#f3e2a6]">
                   <span className="min-w-0 flex-1">
-                    Falta tocar en {avisoSubrayar.titulos.map((t) => `«${t}»`).join(' o ')} la línea que respalda tu respuesta. No hace falta escribir de nuevo.
+                    {avisoSubrayar.motivo === 'equivocada'
+                      ? `La línea que tocaste en ${avisoSubrayar.titulos.map((t) => `«${t}»`).join(' o ')} no respalda tu respuesta. Toca otra.`
+                      : `Falta tocar en ${avisoSubrayar.titulos.map((t) => `«${t}»`).join(' o ')} la línea que respalda tu respuesta. No hace falta escribir de nuevo.`}
                   </span>
                   <button
                     type="button"

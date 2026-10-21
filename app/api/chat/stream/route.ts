@@ -375,7 +375,11 @@ export async function POST(request: Request) {
   // Detector de hallucinations de voz (Whisper transcribiendo ruido como palabras).
   // Si se detecta, saltamos verificación AI (caro y engañoso) y devolvemos
   // un off_topic suave que no cuenta como intento real.
-  const hallucinationCheck = detectHallucination(message)
+  // Con la pregunta: repetir sus palabras al responder no es ruido (21 oct 2026).
+  const hallucinationCheck = detectHallucination(
+    message,
+    [currentActivity.verification.question, currentActivity.teaching?.first_question ?? ''].join(' '),
+  )
   if (hallucinationCheck.isHallucination) {
     logger.warn('chat.stream.hallucination_detected', {
       sessionId,
@@ -701,8 +705,21 @@ export async function POST(request: Request) {
     respuestaFija = mensajeRevisarSubrayado(subrayadoQueNoRespalda!.b)
     logger.info('chat.stream.subrayado_revisar', { sessionId, activityId: currentActivity.id })
   }
-  // Segundo error (o primero que ya no puede retener): se revela la línea.
-  const revelarSubrayado = !!subrayadoQueNoRespalda && !revisarSubrayado && !turnoDeSubrayar && fallosDeSubrayado >= 1
+  // Segunda línea equivocada: se revela la que respalda, SOLO si la respuesta
+  // escrita aprobó (21 oct 2026, prueba de Walther). Con una respuesta parcial,
+  // la línea revelada era justo la razón que faltaba: Sophia decía «tu respuesta
+  // va bien», daba la razón y después la preguntaba. Si no aprobó, Sophia
+  // trabaja la respuesta como siempre y el pedido de tocar sigue pendiente.
+  const revelarSubrayado =
+    !!subrayadoQueNoRespalda &&
+    !revisarSubrayado &&
+    !turnoDeSubrayar &&
+    fallosDeSubrayado >= 1 &&
+    verification.ready_to_advance === true &&
+    verification.unverified !== true
+  // Una línea equivocada en un «listo», sin respuesta nueva: se evalúa lo escrito,
+  // pero el toque no cuenta como intento ni cierra la actividad por tope.
+  const lineaEquivocadaSola = isContinuationMessage && !!subrayadoQueNoRespalda && !revisarSubrayado && !turnoDeSubrayar && !revelarSubrayado
   // Turnos que no evalúan ni cuentan intento.
   const turnoSinEvaluar = turnoDeSubrayar || recordarSubrayado || revisarSubrayado || pidioAclaracion
 
@@ -720,7 +737,8 @@ export async function POST(request: Request) {
     verification.response_type !== 'continuation' &&
     !hallucinationCheck.isHallucination &&
     attempts + 1 >= (currentActivity.verification.max_attempts || 3) &&
-    !turnoSinEvaluar
+    !turnoSinEvaluar &&
+    !lineaEquivocadaSola
 
   // ═══════════════════════════════════════════════════════════════
   // 4. VERIFICAR MODERACIÓN - Intervenir sin guardar en BD
@@ -1568,7 +1586,7 @@ const allActivities = await prisma.activityProgress.findMany({
 
           // Scaffolding y off_topic NO cuentan attempt — solo evidencia/contexto.
           // Retenido: el alumno cumplió, solo se esperó a que Sophia cerrara el tema.
-          const attemptsIncrement = (willScaffold || isOffTopic || retenido || turnoSinEvaluar) ? 0 : 1
+          const attemptsIncrement = (willScaffold || isOffTopic || retenido || turnoSinEvaluar || lineaEquivocadaSola) ? 0 : 1
 
           evidenciaEscrita = true
           await prisma.activityProgress.upsert({
@@ -1613,7 +1631,7 @@ const allActivities = await prisma.activityProgress.findMany({
           // pregunta. 20 oct 2026: en una actividad de un intento se retuvo y se
           // forzó en el mismo turno; el puntero pasó a la actividad siguiente
           // sin que Sophia la enseñara.
-          if (newAttemptCount >= forcedAdvanceLimit && !retenido && !turnoSinEvaluar) {
+          if (newAttemptCount >= forcedAdvanceLimit && !retenido && !turnoSinEvaluar && !lineaEquivocadaSola) {
             // Buscar el mejor intento (mayor completeness_percentage)
             type AttemptAnalysis = { understanding_level?: string; completeness_percentage?: number }
             type AttemptRecord = { analysis?: AttemptAnalysis }

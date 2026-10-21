@@ -102,7 +102,15 @@ export function Pizarra({ blocks, activityOrder, currentActivityId, activityInfo
         {total > 0 && <span className="text-xs text-[#7f909b]">{total}</span>}
       </div>
 
-      <div ref={panelRef} className="flex-1 overflow-y-auto overscroll-contain p-4">
+      {/* El panel es un contenedor de tamaño: las imágenes miden su tope de alto
+          contra la pizarra (cqh), no contra la pantalla. Con un texto para
+          subrayar en la actividad, una imagen no pasa de la mitad de la pizarra,
+          para que la norma quede a la vista en cualquier pantalla (21 oct 2026). */}
+      <div
+        ref={panelRef}
+        data-con-subrayado={current.some((b) => b.type === 'text' && b.subrayable) ? 'true' : undefined}
+        className="group/pizarra flex-1 overflow-y-auto overscroll-contain p-4 [container-type:size]"
+      >
         {total === 0 && onDemand.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center py-10 text-center">
             <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/5">

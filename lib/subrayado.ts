@@ -195,3 +195,28 @@ export function textosPedidosEn(mensaje: string, bloques: { id: string; title: s
   if (!t.startsWith(PEDIDO_SUBRAYAR) && !t.startsWith(RECORDATORIO_SUBRAYAR)) return []
   return bloques.filter((b) => b.type === 'text' && t.includes(`«${b.title}»`)).map((b) => b.id)
 }
+
+/**
+ * Qué textos siguen pendientes de tocar, y por qué (21 oct 2026, prueba de
+ * Walther): el pedido de Sophia sin línea marcada, o una última revisión «no
+ * respalda» sin línea revelada, en la actividad actual. Con una línea
+ * equivocada, el aviso desaparecía y el alumno no sabía dónde tocar.
+ */
+export function pendientesDeSubrayar(args: {
+  ultimoMensajeDeSophia: string | null
+  bloques: { id: string; title: string; type: string; activityId?: string }[]
+  subrayados: Record<string, SubrayadoState | undefined>
+  revisados: Record<string, Pick<SubrayadoGuardado, 'blockId' | 'resultado' | 'revelada'> | undefined>
+  actividadActual: string | null
+}): { ids: string[]; motivo: 'pedido' | 'equivocada' | null } {
+  const { ultimoMensajeDeSophia, bloques, subrayados, revisados, actividadActual } = args
+  const porPedido = ultimoMensajeDeSophia
+    ? textosPedidosEn(ultimoMensajeDeSophia, bloques).filter((id) => !subrayados[id]?.lineas.length)
+    : []
+  const porRevision = Object.values(revisados)
+    .filter((r): r is NonNullable<typeof r> => !!r && r.resultado === 'no_respalda' && !r.revelada?.length)
+    .filter((r) => bloques.find((b) => b.id === r.blockId)?.activityId === actividadActual)
+    .map((r) => r.blockId)
+  const ids = [...new Set([...porRevision, ...porPedido])]
+  return { ids, motivo: ids.length ? (porRevision.length ? 'equivocada' : 'pedido') : null }
+}
