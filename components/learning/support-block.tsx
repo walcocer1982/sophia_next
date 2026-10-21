@@ -71,8 +71,10 @@ interface SupportBlockCardProps {
 export function SupportBlockCard({ block, pinned = false, startCollapsed = false, isTest = false }: SupportBlockCardProps) {
   const [abierto, setAbierto] = useState(!startCollapsed)
   const [ampliado, setAmpliado] = useState(false)
-  const { focus } = useMaterial()
+  const { focus, pendienteSubrayar } = useMaterial()
   const enfocado = focus?.id === block.id
+  // Sophia pidió tocar una línea de este texto y todavía no se tocó.
+  const pendiente = pendienteSubrayar.includes(block.id)
   // Si Sophia lo cita o el alumno lo pide desde el chat, la tarjeta se abre
   // aunque estuviera plegada (ajuste de estado durante el render, sin efecto).
   const [nonceVisto, setNonceVisto] = useState(enfocado ? focus.nonce : 0)
@@ -88,7 +90,7 @@ export function SupportBlockCard({ block, pinned = false, startCollapsed = false
       id={`block-${block.id}`}
       className={cn(
         'scroll-mt-4 rounded-xl border bg-white overflow-hidden transition-shadow',
-        enfocado ? 'border-[#fbc50b] ring-2 ring-[#fbc50b]/60' : 'border-gray-200',
+        pendiente ? 'border-[#fbc50b] ring-4 ring-[#fbc50b]/70' : enfocado ? 'border-[#fbc50b] ring-2 ring-[#fbc50b]/60' : 'border-gray-200',
       )}
     >
       {/* Encabezado: el título pliega; «Ampliar» es un ícono aparte (antes era un
@@ -128,7 +130,7 @@ export function SupportBlockCard({ block, pinned = false, startCollapsed = false
           {block.source && block.type !== 'image' && block.type !== 'compare' && (
             <p className="px-3.5 pt-2 text-xs text-gray-600">Fuente: {block.source}</p>
           )}
-          <BlockBody block={block} isTest={isTest} />
+          <BlockBody block={block} isTest={isTest} onAmpliar={ampliable ? () => setAmpliado(true) : undefined} />
         </div>
       )}
 
@@ -137,10 +139,10 @@ export function SupportBlockCard({ block, pinned = false, startCollapsed = false
   )
 }
 
-function BlockBody({ block, isTest }: { block: SupportBlock; isTest: boolean }) {
+function BlockBody({ block, isTest, onAmpliar }: { block: SupportBlock; isTest: boolean; onAmpliar?: () => void }) {
   switch (block.type) {
     case 'image':
-      return <ImageBody block={block} isTest={isTest} />
+      return <ImageBody block={block} isTest={isTest} onAmpliar={onAmpliar} />
     case 'compare':
       return <CompareBody block={block} />
     case 'formula':
@@ -241,7 +243,7 @@ function ImageFooter({ block }: { block: ImageBlock }) {
   )
 }
 
-function ImageBody({ block, isTest }: { block: ImageBlock; isTest: boolean }) {
+function ImageBody({ block, isTest, onAmpliar }: { block: ImageBlock; isTest: boolean; onAmpliar?: () => void }) {
   if (block.kind === 'term') {
     return (
       <div>
@@ -261,10 +263,22 @@ function ImageBody({ block, isTest }: { block: ImageBlock; isTest: boolean }) {
           Imagen pendiente de validación: los estudiantes no la ven.
         </p>
       )}
-      <div className="relative mx-3 mt-3 overflow-hidden rounded-lg bg-[#09222d]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={block.url} alt={block.description} className="block w-full h-auto" />
-        <Markers block={block} />
+      {/* Alto limitado (21 oct 2026): en una laptop la lámina ocupaba toda la
+          altura y el texto para subrayar quedaba fuera de vista. El marco se ajusta
+          a la imagen, así las marcas (en % de la imagen) siguen en su lugar.
+          Tocarla la amplía. */}
+      <div className="mx-3 mt-3 flex justify-center rounded-lg bg-[#09222d]">
+        <button
+          type="button"
+          onClick={onAmpliar}
+          disabled={!onAmpliar}
+          aria-label={onAmpliar ? `Ampliar ${block.title}` : undefined}
+          className="relative block max-w-full overflow-hidden rounded-lg enabled:cursor-zoom-in"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={block.url} alt={block.description} className="block h-auto max-h-[40vh] w-auto max-w-full" />
+          <Markers block={block} />
+        </button>
       </div>
       <MarkerList block={block} />
       <ImageFooter block={block} />
@@ -410,7 +424,8 @@ function TextBody({ block, large = false }: { block: TextBlock; large?: boolean 
  * subraya y tocarla otra vez la quita. Lo subrayado viaja a Sophia.
  */
 function TextoSubrayable({ block, large = false }: { block: TextBlock; large?: boolean }) {
-  const { subrayados, setSubrayado, subrayadosRevisados, pedirRevision } = useMaterial()
+  const { subrayados, setSubrayado, subrayadosRevisados, pedirRevision, pendienteSubrayar } = useMaterial()
+  const pendiente = pendienteSubrayar.includes(block.id)
   const estado = subrayados[block.id] ?? sinSubrayar()
   const lineas = lineasDelTexto(block.body)
   // Lo revisado por el servidor (21 oct 2026): nunca antes de enviar, para que
@@ -428,10 +443,12 @@ function TextoSubrayable({ block, large = false }: { block: TextBlock; large?: b
   const enRevision = tocada && tocada.nonce === (revisado?.nonce ?? 0) ? tocada.n : null
   return (
     <div className={cn('px-2.5 py-3 leading-relaxed text-gray-900', large ? 'text-lg' : 'text-[15px]')}>
-      <p className="mb-2 px-1 text-xs text-gray-600">
+      <p className={cn('mb-2 px-1', pendiente ? 'rounded-md bg-[#fbc50b]/25 px-2 py-1.5 text-sm font-semibold text-[#09222d]' : 'text-xs text-gray-600')}>
         {estado.lineas.length
           ? `${estado.lineas.length} subrayada${estado.lineas.length > 1 ? 's' : ''}.`
-          : 'Toca la línea que respalda tu respuesta: se revisa al tocarla.'}
+          : pendiente
+            ? 'Toca aquí la línea que respalda tu respuesta.'
+            : 'Toca la línea que respalda tu respuesta: se revisa al tocarla.'}
       </p>
       <ul className="space-y-1">
         {lineas.map((linea, n) => {

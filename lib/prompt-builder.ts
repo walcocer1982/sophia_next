@@ -6,6 +6,7 @@ import { choiceOrder, letterOf, renderChoice, type ChoiceState } from '@/lib/cho
 import { buildMaterialPrompt, getActivityBlocks, isVisibleToStudent } from '@/lib/support-blocks'
 import type { SupportBlock } from '@/types/lesson'
 import type { Cited } from '@/lib/material-markers'
+import { guiaAclaracion } from '@/lib/aclaracion'
 
 /** Qué pasó en el paso cerrado en ESTE turno (lo decide app/api/chat/stream). */
 export type ChoiceTurn = 'no_pick' | 'pick_correct' | 'pick_wrong_retry' | 'pick_wrong_revealed'
@@ -43,6 +44,12 @@ interface PromptBuilderContext {
    * seguir preguntando mientras el código ya había avanzado (19 oct 2026).
    */
   cierraPorTope?: boolean
+  /**
+   * El estudiante pidió que le aclaren la pregunta (lib/aclaracion.ts): la
+   * pregunta que Sophia reformula y repite. Reemplaza la guía por tipo de
+   * respuesta y las pistas: no hubo respuesta que evaluar.
+   */
+  aclaracion?: string
 }
 
 // La intención del alumno («no sé», «dame una pista») la decide el verificador
@@ -187,6 +194,7 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
     isTest = false,
     cited,
     cierraPorTope = false,
+    aclaracion,
   } = context
   const isCodeMethodology = methodology === 'CODE'
 
@@ -530,7 +538,12 @@ ${optimizedHistory}
   // Resultado de verificación si existe. En un turno del paso cerrado no hay
   // verificación de IA y la guía por response_type («da una pista») competiría
   // con la instrucción del paso cerrado: solo manda esta última.
-  if (verificationResult && !choiceTurn) {
+  if (aclaracion) {
+    dynamicPrompt += `
+
+${guiaAclaracion(aclaracion)}`
+  }
+  if (verificationResult && !choiceTurn && !aclaracion) {
     // El verificador no respondió (falla técnica). El alumno avanza igual,
     // pero Sophia no debe calificar una respuesta que nadie evaluó.
     const sinVerificar = verificationResult.unverified === true
@@ -544,8 +557,11 @@ ${optimizedHistory}
 
 CÓMO RESPONDER (50-70 palabras MÁXIMO):
 1. ${sinVerificar ? 'Cierre neutro en 1 oración: "Gracias, con esto terminamos."' : cierraPorTope && isEvaluative ? 'Reconoce en 1 oración lo que sí dijo y explica en 1-2 oraciones lo que faltó' + salvoEliminatorios + '. Se acabaron los intentos: NO lo presentes como logrado y NO hagas más preguntas sobre esta actividad.' : isEvaluative ? 'Validación corta en 1 oración: "Exacto." o "Perfecto, lo entendiste."' : 'Recoge lo que respondió en 1 oración neutra, sin calificar (esta actividad no lleva nota). Si nombró una duda, dile que el instructor la verá: NO la respondas ni la expliques tú, aunque sea una pregunta.'}
-2. Resumen breve en 2-3 bullets de lo APRENDIDO EN TODA LA LECCIÓN, tomado de los PUNTOS CLAVE con sus mismas palabras. PROHIBIDO agregar cifras, normas, ejemplos o comparaciones que no estén en ellos: un resumen improvisado enseña cosas falsas al final.
-3. Cierra EXACTAMENTE con: "Gracias por participar." o "¡Gracias por participar!". Una sola oración, sin agregar nada.
+${lessonKeyPoints.length > 0
+  ? `2. Si la instrucción de la actividad pide anunciar lo que sigue, hazlo en 1 oración.
+3. NO escribas resumen ni «Gracias por participar»: el sistema agrega a continuación la lista de lo trabajado hoy y el agradecimiento. Tu mensaje termina en la oración anterior.`
+  : `2. Resumen breve en 2-3 bullets de lo APRENDIDO EN TODA LA LECCIÓN. PROHIBIDO agregar cifras, normas o ejemplos que no estén en la lección.
+3. Cierra EXACTAMENTE con: "Gracias por participar." o "¡Gracias por participar!". Una sola oración, sin agregar nada.`}
 
 ⛔ PROHIBIDO ABSOLUTO EN EL CIERRE:
 - Hacer MÁS preguntas — la lección terminó
@@ -554,7 +570,7 @@ CÓMO RESPONDER (50-70 palabras MÁXIMO):
 - Pedir "una última reflexión" o "una idea más"
 - Mencionar el nombre "Sophia" en tercera persona ("adentro de Sophia hay...")
 - Promocionar nada ni sugerir otros cursos
-- Cualquier frase de cierre que no sea literalmente "Gracias por participar"
+- ${lessonKeyPoints.length > 0 ? 'Despedirte, agradecer o resumir: eso lo agrega el sistema' : 'Cualquier frase de cierre que no sea literalmente "Gracias por participar"'}
 
 Si el estudiante escribe DESPUÉS de tu cierre: si pregunta algo de la lección, respóndele en 2-3 oraciones solo con lo que está en el material o en las instrucciones de la lección (si no está ahí, dile que lo verá con el instructor), sin hacerle preguntas; si solo agradece o se despide, contesta en 1 oración. No reabras la evaluación ni propongas actividades nuevas.`
       } else if (nextActivity && nextActivity.checks?.length) {
@@ -889,7 +905,7 @@ CÓMO RESPONDER (máx 60 palabras):
   // Scaffolding docente: progresión por intentos. Ninguna etapa entrega la
   // respuesta a un criterio eliminatorio; y agotar los intentos no es lograr:
   // el código avanza al alumno (avance forzado), pero no lo aprueba.
-  if (attempts >= 1 && !cierraPorTope) {
+  if (attempts >= 1 && !cierraPorTope && !aclaracion) {
     const hintStrategies: Record<number, string> = {
       1: `INTENTO 2/${maxAttempts} — PISTA SUTIL:
 - Reformula la pregunta de otra manera, sin meter en ella el dato que tiene que buscar

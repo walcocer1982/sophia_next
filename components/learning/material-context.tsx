@@ -66,6 +66,12 @@ interface MaterialContextValue {
   registrarRevisor: (fn: (() => boolean) | null) => void
   /** Lo que el chat manda al servidor con cada mensaje (spec §16.3): ecualizadores y clasificaciones, por id de bloque. */
   getMaterialState: () => Record<string, unknown>
+  /**
+   * Textos en que Sophia pidió tocar la línea y el alumno todavía no la tocó
+   * (lectura comprobada, 21 oct 2026). La pizarra los ilumina y la caja avisa.
+   */
+  pendienteSubrayar: string[]
+  setPendienteSubrayar: (ids: string[]) => void
 }
 
 const VACIO: Cited = { blocks: new Set(), markers: new Set() }
@@ -217,9 +223,24 @@ export function MaterialProvider({
     setRevisados(ultimo)
   }, [])
 
+  // Pedido de tocar una línea: se lleva el texto a la vista y, en celular, la
+  // pestaña «Pizarra» avisa (punto). No se cambia de pestaña sola.
+  const [pendienteSubrayar, setPendiente] = useState<string[]>([])
+  const pendienteRef = useRef<string[]>([])
+  const setPendienteSubrayar = useCallback((ids: string[]) => {
+    const antes = pendienteRef.current
+    if (antes.join('|') === ids.join('|')) return
+    pendienteRef.current = ids
+    setPendiente(ids)
+    if (ids.length && !antes.length) {
+      setFocus({ id: ids[0], nonce: ++nonce.current, byUser: false })
+      setUnseen(true)
+    }
+  }, [])
+
   const value = useMemo(
-    () => ({ cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, hasProvider: true, simStates, setSimState, resetSimState, clasifStates, setClasifState, subrayados, setSubrayado, subrayadosRevisados, reportSubrayadosRevisados, pedirRevision, registrarRevisor, getMaterialState }),
-    [cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, simStates, setSimState, resetSimState, clasifStates, setClasifState, subrayados, setSubrayado, subrayadosRevisados, reportSubrayadosRevisados, pedirRevision, registrarRevisor, getMaterialState],
+    () => ({ cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, hasProvider: true, simStates, setSimState, resetSimState, clasifStates, setClasifState, subrayados, setSubrayado, subrayadosRevisados, reportSubrayadosRevisados, pedirRevision, registrarRevisor, getMaterialState, pendienteSubrayar, setPendienteSubrayar }),
+    [cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, simStates, setSimState, resetSimState, clasifStates, setClasifState, subrayados, setSubrayado, subrayadosRevisados, reportSubrayadosRevisados, pedirRevision, registrarRevisor, getMaterialState, pendienteSubrayar, setPendienteSubrayar],
   )
   return <MaterialContext.Provider value={value}>{children}</MaterialContext.Provider>
 }
@@ -247,6 +268,8 @@ const SIN_PROVEEDOR: MaterialContextValue = {
   pedirRevision: () => false,
   registrarRevisor: () => {},
   getMaterialState: () => ({}),
+  pendienteSubrayar: [],
+  setPendienteSubrayar: () => {},
 }
 
 export function useMaterial(): MaterialContextValue {

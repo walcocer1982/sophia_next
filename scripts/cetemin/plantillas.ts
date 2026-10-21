@@ -56,7 +56,8 @@ function bloqueRutina(r: RutinaSpec): TextBlock {
     source: r.fuente ?? 'Rutina de pensamiento de Project Zero (Harvard)',
     pinned: true,
     body: [
-      'Mira la fotografía sin leer nada más.',
+      // «sin leer nada más» era ambiguo (¿qué no se lee?); 21 oct 2026.
+      'Mira la fotografía y responde una pregunta a la vez.',
       '',
       `- **VEO:** ${r.preguntas.veo}`,
       `- **PIENSO:** ${r.preguntas.pienso}`,
@@ -90,11 +91,11 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
       complexity: 'simple',
       keyPointIndex: null,
       teaching: {
-        agent_instruction: `Primer paso de la rutina Veo · Pienso · Me pregunto. Dile que mire la fotografía «${r.tituloImagen}» de la pizarra sin leer nada más y hazle la pregunta tal cual. Sin nota. No califiques (nada de «correcto», «exacto» ni «bien») y no interpretes la foto por él: recoge lo que describa en una frase neutra y pasa al paso siguiente.${pista} Nada de normas todavía.`,
+        agent_instruction: `Primer paso de la rutina Veo · Pienso · Me pregunto. Dile que mire la fotografía «${r.tituloImagen}» de la pizarra antes de leer los textos y hazle la pregunta tal cual. Sin nota. No califiques (nada de «correcto», «exacto» ni «bien») y no interpretes la foto por él: recoge lo que describa en una frase neutra y pasa al paso siguiente.${pista} Nada de normas todavía.`,
         target_length: '40-70 palabras',
         blocks: [mural, bloqueRutina(r)],
       },
-      verification: sinNota(`Mira la fotografía «${r.tituloImagen}» de la pizarra, sin leer nada más: ${r.preguntas.veo}`, ['Describe algo de lo que ve en la foto'], 1),
+      verification: sinNota(`Mira la fotografía «${r.tituloImagen}» de la pizarra: ${r.preguntas.veo}`, ['Describe algo de lo que ve en la foto'], 1),
     },
     {
       id: `${prefijo}-2`,
@@ -118,11 +119,11 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
       complexity: 'simple',
       keyPointIndex: null,
       teaching: {
-        agent_instruction: `Tercer paso de la rutina: Me pregunto. Haz la pregunta tal cual. No la respondas tú: si dice «no sé», eso es lo que buscamos; recógelo como su pregunta («eso lo vemos ahora») sin calificar. No anuncies temas ni hagas otra pregunta: la bienvenida ya presentó los temas de hoy.`,
+        agent_instruction: `Tercer paso de la rutina: Me pregunto. Haz la pregunta tal cual; se refiere a los puntos que el estudiante señaló en el paso anterior. No la respondas tú: si dice «no sé», eso es lo que buscamos; recógelo como su pregunta («eso lo vemos ahora») sin calificar. No anuncies temas ni hagas otra pregunta: la bienvenida ya presentó los temas de hoy.`,
         target_length: '40-70 palabras',
         uses: usa,
       },
-      verification: sinNota(`De lo que señalaste: ${r.preguntas.mePregunto}`, ['Dice qué hay abajo de al menos un punto, o qué le falta saber'], 1),
+      verification: sinNota(`De los puntos que señalaste: ${r.preguntas.mePregunto}`, ['Dice qué hay abajo de al menos un punto, o qué le falta saber'], 1),
     },
   ]
 }
@@ -201,7 +202,7 @@ function cierre(spec: SesionSpec, prefijo: string, n: number): Activity {
     complexity: 'simple',
     keyPointIndex: null,
     teaching: {
-      agent_instruction: 'Cierre corto, sin nota. Pregúntale qué punto de hoy le quedó menos claro; esa respuesta la ve el instructor antes de aclarar en clase. No califiques. Reconoce una cosa concreta que haya hecho bien hoy, sin felicitaciones vacías. Anuncia en una oración que ahora el instructor aclara dudas y que luego, en equipo, trabajarán el caso de la clase. Termina con «Gracias por participar».',
+      agent_instruction: 'Cierre corto, sin nota. Pregúntale qué punto de hoy le quedó menos claro; esa respuesta la ve el instructor antes de aclarar en clase. No califiques. Reconoce una cosa concreta que haya hecho bien hoy, sin felicitaciones vacías. Anuncia en una oración que ahora el instructor aclara dudas y que luego, en equipo, trabajarán el caso de la clase. No resumas ni agradezcas: el resumen con los puntos clave y el «Gracias por participar» los agrega el sistema.',
       target_length: '40-70 palabras',
     },
     verification: sinNota('¿Qué punto de hoy te quedó menos claro?', ['Nombra un punto que le quedó menos claro, o dice que ninguno'], 1),

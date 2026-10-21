@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { type ChatInputRef } from './chat-input'
 import { Cuaderno, type ActividadDelCuaderno } from './cuaderno'
 import { DevToolsModal } from './dev-tools-modal'
@@ -10,7 +10,7 @@ import type { ChatMessage, OptimisticMessage } from '@/types/chat'
 import type { PlannerAttachment } from '@/types/planner'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { useMaterial } from './material-context'
-import { paraGuardar } from '@/lib/subrayado'
+import { paraGuardar, textosPedidosEn } from '@/lib/subrayado'
 import { toast } from 'sonner'
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -85,7 +85,7 @@ export function ChatInterface({
 
   // El panel muestra lo que Sophia citó: se calcula de sus mensajes, también
   // mientras escribe, para que el bloque aparezca cuando lo nombra.
-  const { reportMessages, getMaterialState, subrayados, blocksById, reportSubrayadosRevisados, registrarRevisor } = useMaterial()
+  const { reportMessages, getMaterialState, subrayados, blocksById, reportSubrayadosRevisados, registrarRevisor, setPendienteSubrayar, openBlock } = useMaterial()
   useEffect(() => {
     reportMessages(messages.filter((m) => m.role === 'assistant').map((m) => m.content))
   }, [messages, reportMessages])
@@ -228,6 +228,22 @@ export function ChatInterface({
     registrarRevisor(() => revisarAlTocar.current())
     return () => registrarRevisor(null)
   }, [registrarRevisor])
+
+  // Pedido de tocar una línea (lectura comprobada): lo dice el último mensaje de
+  // Sophia, que en ese turno escribe el código con una frase fija
+  // (lib/subrayado.ts). Mientras la línea no se toque, la pizarra la ilumina y la
+  // caja avisa que no hace falta escribir de nuevo (prueba de Edwin, 21 oct 2026).
+  const ultimoDeSophia = [...messages].reverse().find((m) => m.role === 'assistant')
+  const pedidosDeSubrayar = useMemo(() => {
+    if (!ultimoDeSophia || isLoading || cerrada) return []
+    return textosPedidosEn(ultimoDeSophia.content, [...blocksById.values()]).filter((id) => !subrayados[id]?.lineas.length)
+  }, [ultimoDeSophia, isLoading, cerrada, blocksById, subrayados])
+  useEffect(() => {
+    setPendienteSubrayar(pedidosDeSubrayar)
+  }, [pedidosDeSubrayar, setPendienteSubrayar])
+  const avisoSubrayar = pedidosDeSubrayar.length
+    ? { titulos: pedidosDeSubrayar.map((id) => blocksById.get(id)?.title ?? '').filter(Boolean), onIr: () => openBlock(pedidosDeSubrayar[0]) }
+    : null
 
   const handleSendMessage = async (content: string, attachments?: PlannerAttachment[]) => {
     if ((!content.trim() && (!attachments || attachments.length === 0)) || isLoading) return
@@ -429,6 +445,7 @@ export function ChatInterface({
         exitLabel={exitLabel}
         onAskMore={hacerUnaPreguntaMas}
         chatInputRef={chatInputRef}
+        avisoSubrayar={avisoSubrayar}
       />
 
       {isDevelopment && (

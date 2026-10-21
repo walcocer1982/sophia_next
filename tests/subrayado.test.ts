@@ -42,7 +42,8 @@ test('lo guardado se lee sin confiar en su forma; el pedido de subrayar no calif
   assert.deepEqual(leerSubrayadoGuardado({ subrayado: [{ blockId: 'a', titulo: 'T', lineas: ['x'] }, { titulo: 3 }] }), [{ blockId: 'a', titulo: 'T', lineas: ['x'] }])
   assert.deepEqual(leerSubrayadoGuardado(null), [])
   const g = mensajeTurnoDeSubrayar(['La regla'])
-  assert.ok(g.startsWith('Anoto tu respuesta.') && g.includes('«La regla»') && g.includes('se revisa apenas la tocas'))
+  // Prueba de Edwin (21 oct): «Anoto tu respuesta» se leía como «no llegó» y volvía a dictarla.
+  assert.ok(g.startsWith('Tu respuesta quedó guardada.') && g.includes('«La regla»') && g.includes('No hace falta escribir de nuevo'))
   assert.ok(!/correct|exact|bien/i.test(g))
 })
 
@@ -67,4 +68,13 @@ test('la línea que respalda: acierta, se equivoca, subraya de más; la clave no
 test('de lo subrayado, solo se pintan de verde las líneas que respaldan (21 oct)', async () => {
   const { subrayadasQueRespaldan } = await import('../lib/subrayado')
   assert.deepEqual(subrayadasQueRespaldan({ ...texto, lineasClave: [2] }, { lineas: [0, 2] }), ['Tercera condición.'])
+})
+
+test('la pantalla reconoce el pedido y el recordatorio de subrayar (prueba de Edwin, 21 oct)', async () => {
+  const { mensajeTurnoDeSubrayar, mensajeRecordatorioSubrayado, textosPedidosEn } = await import('../lib/subrayado')
+  const bloques = [{ id: 'norma-x', title: 'La regla', type: 'text' }, { id: 'img', title: 'La regla', type: 'image' }]
+  assert.deepEqual(textosPedidosEn(mensajeTurnoDeSubrayar(['La regla']), bloques), ['norma-x'])
+  assert.deepEqual(textosPedidosEn(mensajeRecordatorioSubrayado(['La regla']), bloques), ['norma-x'])
+  assert.deepEqual(textosPedidosEn('Toca en «La regla» la línea, por favor.', bloques), [])
+  assert.ok(mensajeRecordatorioSubrayado(['La regla']).includes('ya quedó guardada'))
 })
