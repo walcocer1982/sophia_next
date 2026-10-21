@@ -11,6 +11,14 @@ test('valores con unidad: misma cifra escrita distinto; sin unidad no cuenta', (
   assert.deepEqual(valoresConUnidad('una baranda de 60 cm y un 25 %'), [{ n: 60, unidad: 'cm' }, { n: 25, unidad: '%' }])
 })
 
+test('dictado del navegador: «1 m 80» es 1,80 m (prueba de Edwin, 21 oct)', () => {
+  assert.deepEqual(valoresConUnidad('ahí aplicaría 1 m 80 y en industria 1 m 20 que es'), [{ n: 1.8, unidad: 'm' }, { n: 1.2, unidad: 'm' }])
+  const crit = 'Decide: en la embotelladora sí (OSHA 1910, industria general, desde 1,20 m) y en la mina no por umbral (D.S. 024, desde 1,80 m)'
+  const alumno = ['en la planta concentradora de minerales, ahí aplicaría 1 m 80 porque está el Decreto Supremo cero 24 y en la planta embotelladora sería la zona industrial 1 m 20 que es la olla 19 10.28.']
+  assert.equal(contradiceCifras(crit, alumno, 'La misma plataforma de 1,60 m en dos lugares'), false)
+  assert.deepEqual(valoresConUnidad('una baranda de 1 m 5 cm'), [{ n: 1, unidad: 'm' }, { n: 5, unidad: 'cm' }])
+})
+
 test('simulación «apurado» del 21 oct: decide bien con un umbral falso → no cubre', () => {
   const alumno = [
     'ok, en industria general es desde 1,80 m. Entonces no está en trabajo en altura',

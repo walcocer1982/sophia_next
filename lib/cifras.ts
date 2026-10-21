@@ -28,11 +28,20 @@ function sinTildes(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
-/** Los valores con unidad de un texto («1,20 m» y «1.2 metros» son el mismo). */
+/**
+ * El dictado del navegador escribe «1,80 m» como «1 m 80» (prueba de Edwin, 21
+ * oct 2026): se lee «1 m» y la respuesta correcta salía contradicha. Se pasa a
+ * «1,80 m» antes de leer.
+ */
+function metrosDictados(texto: string): string {
+  return texto.replace(/\b(\d+)\s*(?:m|metros?)\s+(?:con\s+)?(\d{1,2})\b(?!\s*(?:cm|mm|%|[.,]\d))/gi, (_, e: string, d: string) => `${e},${d} m`)
+}
+
+/** Los valores con unidad de un texto («1,20 m», «1.2 metros» y «1 m 20» son el mismo). */
 export function valoresConUnidad(texto: string): Valor[] {
   const re = /(\d+(?:[.,]\d+)?)\s*(%|[a-zA-Z]+)/g
   const out: Valor[] = []
-  for (const m of sinTildes(texto).matchAll(re)) {
+  for (const m of metrosDictados(sinTildes(texto)).matchAll(re)) {
     const unidad = UNIDADES[m[2].toLowerCase()]
     if (!unidad) continue
     out.push({ n: Number(m[1].replace(',', '.')), unidad })
