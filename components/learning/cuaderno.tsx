@@ -54,6 +54,11 @@ interface CuadernoProps {
   exitLabel: string
   onAskMore: () => void
   chatInputRef: React.RefObject<ChatInputRef | null>
+  /**
+   * Falta tocar una línea en la pizarra (lectura comprobada). Aviso sobre la caja,
+   * para que no vuelva a escribir la respuesta (prueba de Edwin, 21 oct 2026).
+   */
+  avisoSubrayar?: { titulos: string[]; onIr: () => void } | null
 }
 
 export function Cuaderno({
@@ -74,6 +79,7 @@ export function Cuaderno({
   exitLabel,
   onAskMore,
   chatInputRef,
+  avisoSubrayar = null,
 }: CuadernoProps) {
   const orden = useMemo(() => actividades.map((a) => a.id), [actividades])
   const actualId = actividadActualId ?? orden[0] ?? null
@@ -323,6 +329,20 @@ export function Cuaderno({
         {!cerrada && (
           <div className="shrink-0 border-t border-white/10 bg-[#0b1a2e]">
             <div className="px-4 py-3 sm:px-6 lg:px-10">
+              {avisoSubrayar && (
+                <div role="status" className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-[#fbc50b]/50 bg-[#fbc50b]/10 px-3 py-2 text-[14px] leading-snug text-[#f3e2a6]">
+                  <span className="min-w-0 flex-1">
+                    Falta tocar en {avisoSubrayar.titulos.map((t) => `«${t}»`).join(' o ')} la línea que respalda tu respuesta. No hace falta escribir de nuevo.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={avisoSubrayar.onIr}
+                    className="min-h-9 shrink-0 rounded-md bg-[#fbc50b] px-3 text-[13px] font-semibold text-[#09222d] hover:bg-[#ffd43b]"
+                  >
+                    Ir a la línea
+                  </button>
+                </div>
+              )}
               <ChatInput
                 ref={chatInputRef}
                 variant="dark"

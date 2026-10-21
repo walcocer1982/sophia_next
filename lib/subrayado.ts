@@ -168,5 +168,30 @@ export function leerSubrayadoGuardado(material: unknown): SubrayadoGuardado[] {
  */
 export function mensajeTurnoDeSubrayar(titulos: string[]): string {
   const donde = titulos.map((t) => `«${t}»`).join(' o ')
-  return `Anoto tu respuesta. Ahora toca en ${donde}, en la pizarra, la línea que la respalda: se revisa apenas la tocas.`
+  // Prueba de Edwin (21 oct 2026): «Anoto tu respuesta» se leía como si la respuesta
+  // no hubiera llegado, y volvía a dictarla. Ahora dice que quedó y que no se escribe más.
+  return `${PEDIDO_SUBRAYAR} toca en ${donde}, en la pizarra, la línea que respalda tu respuesta. No hace falta escribir de nuevo: se revisa apenas la tocas.`
+}
+
+/**
+ * Si vuelve a escribir sin tocar la línea, se le recuerda UNA vez, sin evaluar
+ * lo que escribió. A la segunda, se sigue y queda «lectura no comprobada».
+ */
+export function mensajeRecordatorioSubrayado(titulos: string[]): string {
+  const donde = titulos.map((t) => `«${t}»`).join(' o ')
+  return `${RECORDATORIO_SUBRAYAR} toca en ${donde} la línea que respalda tu respuesta; está marcada en la pizarra. Tu respuesta ya quedó guardada.`
+}
+
+const PEDIDO_SUBRAYAR = 'Tu respuesta quedó guardada. Falta un paso:'
+const RECORDATORIO_SUBRAYAR = 'Todavía falta tocar la línea:'
+
+/**
+ * ¿Este mensaje de Sophia pide tocar una línea? Devuelve los ids de los textos
+ * que nombra. Los dos mensajes los escribe el código, así que se reconocen por
+ * su comienzo: la pantalla ilumina el texto aunque el alumno recargue la página.
+ */
+export function textosPedidosEn(mensaje: string, bloques: { id: string; title: string; type: string }[]): string[] {
+  const t = mensaje.trimStart()
+  if (!t.startsWith(PEDIDO_SUBRAYAR) && !t.startsWith(RECORDATORIO_SUBRAYAR)) return []
+  return bloques.filter((b) => b.type === 'text' && t.includes(`«${b.title}»`)).map((b) => b.id)
 }

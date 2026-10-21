@@ -525,6 +525,13 @@ function Senales({ f }: { f: FilaMonitor }) {
       </p>
     )
   }
+  if (f.lecturaSinComprobar?.length) {
+    items.push(
+      <p key="lectura" className="text-[10px] text-amber-700 mt-0.5" title={f.lecturaSinComprobar.map((a) => a.title).join(' · ')}>
+        Lectura sin comprobar en Act {f.lecturaSinComprobar.map((a) => a.index).join(', ')}
+      </p>
+    )
+  }
   if (f.seguimiento) {
     items.push(
       <p key="marca" className="text-[10px] text-gray-500 truncate mt-0.5" title={f.seguimiento.texto}>

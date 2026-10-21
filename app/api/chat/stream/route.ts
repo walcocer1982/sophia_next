@@ -15,7 +15,8 @@ import { applyPick, esEleccionConRazon, newChoiceState, parseChoicePick, renderC
 import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/support-blocks'
 import { citedFromTexts, createMarkerFilter, stripMarkers, type MarkerCheck } from '@/lib/material-markers'
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
-import { crearQuitadorDeCalificacionInicial } from '@/lib/calificacion'
+import { crearCorrectorDeTitulos } from '@/lib/titulos-material'
+import { crearQuitadorDeCalificaciones } from '@/lib/calificacion'
 import { planteaLaPregunta } from '@/lib/planteo'
 import type { ChoiceTurn } from '@/lib/prompt-builder'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
@@ -29,7 +30,9 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { checkReply, checksIntro, newChecksState, readCheck, type ChecksState, type CheckTurn } from '@/lib/checks'
 import { describeStateForPrompt, directivaSiYaMovio, initialState, sanitizeState, type SimState } from '@/lib/simulator'
 import { describeClasifForPrompt, describeClasifForVerifier, sanitizeClasif, vacio as clasificacionVacia, type ClasifState } from '@/lib/clasificar'
-import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, guiaRevelarSubrayado, leerSubrayadoGuardado, lineasClaveTexto, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
+import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, guiaRevelarSubrayado, leerSubrayadoGuardado, lineasClaveTexto, mensajeRecordatorioSubrayado, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
+import { resumenDeCierre } from '@/lib/cierre'
+import { pideAclaracion } from '@/lib/aclaracion'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -488,6 +491,16 @@ export async function POST(request: Request) {
     !activityAlreadyCompleted &&
     lessonSession.lesson.course?.methodology !== 'CODE'
 
+  // Pedir que le aclaren la pregunta no es responderla (lib/aclaracion.ts, prueba
+  // de Edwin del 21 oct 2026): no se verifica, no cuenta intento ni avanza.
+  const pidioAclaracion =
+    pideAclaracion(message) &&
+    !choiceTurn &&
+    !checkTurn &&
+    !esTurnoDeConexion &&
+    !activityAlreadyCompleted &&
+    lessonSession.lesson.course?.methodology !== 'CODE'
+
   const [moderation, intent, verification] = await Promise.all([
     isContinuationMessage || choiceTurn || checkTurn
       ? Promise.resolve(SAFE_MODERATION)
@@ -499,8 +512,10 @@ export async function POST(request: Request) {
           currentActivity: currentActivityInstruction,
           lastInstructorQuestion: lastInstructorMessage?.content || undefined
         }),
+    pidioAclaracion
+      ? Promise.resolve<ActivityCompletionResult>(SIN_VERIFICAR)
     // Revisión al tocar: el código ya sabe que la línea no respalda.
-    revisionRapida
+    : revisionRapida
       ? Promise.resolve<ActivityCompletionResult>({ ...SIN_VERIFICAR, response_type: 'partial' })
     // Hallucination de voz: skip AI verifier (caro), tratar como off_topic
     // suave para que Sophia pida repetir sin contar como intento real.
@@ -626,10 +641,10 @@ export async function POST(request: Request) {
   // subrayar nada y todavía no se le pidió: este turno no se evalúa ni cuenta
   // intento; Sophia solo pide la línea. Una sola vez por actividad. No se
   // intercepta un «no sé», una ayuda, un fuera de tema ni una continuación.
-  const turnoDeSubrayar =
+  const sinSubrayarAun =
     subrayablesPropios.length > 0 &&
     subrayablesPropios.every(({ state }) => state.lineas.length === 0) &&
-    (existingEvidence as { subrayadoPedido?: boolean }).subrayadoPedido !== true &&
+    !pidioAclaracion &&
     lessonSession.lesson.course?.methodology !== 'CODE' &&
     !choiceTurn &&
     !checkTurn &&
@@ -641,6 +656,19 @@ export async function POST(request: Request) {
     verification.response_type !== 'continuation' &&
     verification.student_intent !== 'does_not_know' &&
     verification.student_intent !== 'asks_for_help'
+  const evidenciaSubrayado = existingEvidence as { subrayadoPedido?: boolean; subrayadoRecordado?: boolean }
+  const turnoDeSubrayar = sinSubrayarAun && evidenciaSubrayado.subrayadoPedido !== true
+  // Prueba de Edwin (21 oct 2026): tras el pedido volvió a dictar la respuesta sin
+  // tocar la línea, y la actividad se evaluó y avanzó sin lectura comprobada. Ahora
+  // se le recuerda una vez, sin evaluar lo que escribió; a la segunda, se sigue.
+  const recordarSubrayado = sinSubrayarAun && evidenciaSubrayado.subrayadoPedido === true && evidenciaSubrayado.subrayadoRecordado !== true
+  if (recordarSubrayado) {
+    verification.ready_to_advance = false
+    verification.completed = false
+    willScaffold = false
+    respuestaFija = mensajeRecordatorioSubrayado(subrayablesPropios.map(({ b }) => b.title))
+    logger.info('chat.stream.subrayado_recordado', { sessionId, activityId: currentActivity.id })
+  }
   if (turnoDeSubrayar) {
     verification.ready_to_advance = false
     verification.completed = false
@@ -676,7 +704,7 @@ export async function POST(request: Request) {
   // Segundo error (o primero que ya no puede retener): se revela la línea.
   const revelarSubrayado = !!subrayadoQueNoRespalda && !revisarSubrayado && !turnoDeSubrayar && fallosDeSubrayado >= 1
   // Turnos que no evalúan ni cuentan intento.
-  const turnoSinEvaluar = turnoDeSubrayar || revisarSubrayado
+  const turnoSinEvaluar = turnoDeSubrayar || recordarSubrayado || revisarSubrayado || pidioAclaracion
 
   // ¿Este turno agota los intentos? Misma condición que el avance forzado de
   // más abajo (bloque «intento fallido»: ni paso cerrado, ni comprobación, ni
@@ -811,7 +839,19 @@ export async function POST(request: Request) {
   const clasifGuardable = Object.fromEntries(
     estadosDeClasificacion.filter(({ state }) => Object.keys(state.placements).length).map(({ b, state }) => [b.id, state]),
   )
+  // Lectura comprobada (21 oct 2026): ¿la actividad tiene un texto con línea que
+  // respalda y el alumno nunca la tocó bien? Se reescribe en cada turno, así que al
+  // cerrar la actividad queda el valor final; el Monitor lo muestra al instructor.
+  const conLineaClave = subrayablesPropios.filter(({ b }) => (b.lineasClave?.length ?? 0) > 0)
+  const lecturaComprobada =
+    conLineaClave.some(({ b, state }) => evaluarSubrayado(b, state) === 'respalda') ||
+    sessionWithMessages.messages.some(
+      (m) => m.role === 'user' && m.activityId === currentActivity.id &&
+        leerSubrayadoGuardado((m as { material?: unknown }).material).some((s) => s.resultado === 'respalda'),
+    )
   const panelExtra = {
+    ...(conLineaClave.length ? { lecturaNoComprobada: !lecturaComprobada } : {}),
+    ...(evidenciaSubrayado.subrayadoRecordado || recordarSubrayado ? { subrayadoRecordado: true } : {}),
     ...(Object.keys(panelGuardable).length ? { panelState: panelGuardable } : {}),
     ...(Object.keys(clasifGuardable).length ? { clasificaciones: clasifGuardable } : {}),
     ...(estadosDeSubrayado.some(({ state }) => state.lineas.length)
@@ -850,6 +890,9 @@ export async function POST(request: Request) {
     pinnedBlocks: blocksForActivity(contentJson, currentActivity.id, verSinValidar).pinned,
     isTest: verSinValidar,
     cited: materialCitado,
+    aclaracion: pidioAclaracion
+      ? (attempts === 0 && currentActivity.teaching?.first_question) || currentActivity.verification.question
+      : undefined,
   })
 
   // Turno de conexión: el alumno respondió una bienvenida genérica. Sophia
@@ -958,10 +1001,12 @@ CÓMO RESPONDER (máximo 90 palabras):
         const filtroMarcadores = createMarkerFilter(marcadorValido)
         // Voseo corregido en el código (lib/voseo.ts): «Mirá» → «Mira».
         const correctorVoseo = crearCorrectorDeVoseo()
+        // Títulos del material entre «» (lib/titulos-material.ts): «toca en el texto Cuándo…».
+        const correctorTitulos = crearCorrectorDeTitulos(allLessonBlocks(contentJson, verSinValidar).map((b) => b.title))
         // En un paso sin nota, la calificación con que abre («Exacto.») se quita
         // en el código (lib/calificacion.ts): el prompt no bastó.
         const quitador = currentActivity.verification.is_evaluative === false && respuestaFija === null
-          ? crearQuitadorDeCalificacionInicial()
+          ? crearQuitadorDeCalificaciones()
           : null
         const limpiar = (trozo: string) => (quitador ? quitador.push(trozo) : trozo)
 
@@ -969,7 +1014,7 @@ CÓMO RESPONDER (máximo 90 palabras):
           if (event.type === 'content_block_delta') {
             if (event.delta.type === 'text_delta') {
               if (marcas.primer_token === undefined) marcar('primer_token')
-              const text = limpiar(correctorVoseo.push(filtroMarcadores.push(event.delta.text)))
+              const text = limpiar(correctorTitulos.push(correctorVoseo.push(filtroMarcadores.push(event.delta.text))))
               if (!text) continue
               fullResponse += text
               if (suppressFurther) continue
@@ -1000,7 +1045,7 @@ CÓMO RESPONDER (máximo 90 palabras):
         marcar('stream')
 
         // Lo que retuvo el filtro de marcadores al final del texto.
-        const restoMarcadores = limpiar(correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()) + (quitador?.flush() ?? '')
+        const restoMarcadores = limpiar(correctorTitulos.push(correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()) + correctorTitulos.flush()) + (quitador?.flush() ?? '')
         if (restoMarcadores) {
           fullResponse += restoMarcadores
           if (!suppressFurther) unsent += restoMarcadores
@@ -1087,6 +1132,16 @@ CÓMO RESPONDER (máximo 90 palabras):
               logger.info('chat.stream.next_question_appended', { sessionId, activityId: currentActivity.id })
             }
           }
+        }
+        // Cierre de la lección: el resumen y el agradecimiento los escribe el código,
+        // con los puntos clave literales (lib/cierre.ts). Sophia solo recoge la duda.
+        if (
+          avanzaEsteTurno && !activityAlreadyCompleted && verification.unverified !== true && !retenido &&
+          currentActivityContext.isLastActivity && lessonKeyPoints.length > 0
+        ) {
+          const resumen = `\n\n${resumenDeCierre(lessonKeyPoints)}`
+          flushToClient(resumen)
+          cleanedAssistantContent += resumen
         }
 
         // ── La actividad sigue abierta: el mensaje tiene que terminar preguntando ──

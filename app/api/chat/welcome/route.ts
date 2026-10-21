@@ -2,6 +2,7 @@ import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/support-blocks'
 import { createMarkerFilter } from '@/lib/material-markers'
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
+import { crearCorrectorDeTitulos } from '@/lib/titulos-material'
 import { prisma } from '@/lib/prisma'
 import { anthropic, TUTOR_MODEL } from '@/lib/anthropic'
 import { logger } from '@/lib/logger'
@@ -218,9 +219,12 @@ Genera el mensaje ahora, sin formato, conversacional.`
 
     // Marcadores del panel en la bienvenida: un bloque de la lección se puede
     // mostrar; un señalamiento nunca (el alumno todavía no respondió nada).
-    const idsDeLaLeccion = new Set(allLessonBlocks(contentJson, verSinValidar).map((b) => b.id))
+    const bloquesDeLaLeccion = allLessonBlocks(contentJson, verSinValidar)
+    const idsDeLaLeccion = new Set(bloquesDeLaLeccion.map((b) => b.id))
     const filtroMarcadores = createMarkerFilter((kind, id) => kind === 'block' && idsDeLaLeccion.has(id))
     const correctorVoseo = crearCorrectorDeVoseo()
+    // Títulos del material entre «» (lib/titulos-material.ts): «la fotografía Obra en losa».
+    const correctorTitulos = crearCorrectorDeTitulos(bloquesDeLaLeccion.map((b) => b.title))
 
     // Stream response from Claude con bloques cacheables
     const stream = await anthropic.messages.stream({
@@ -247,13 +251,13 @@ Genera el mensaje ahora, sin formato, conversacional.`
               chunk.delta.type === 'text_delta'
             ) {
               // Voseo corregido en el código (lib/voseo.ts): «Mirá» → «Mira».
-              const text = correctorVoseo.push(filtroMarcadores.push(chunk.delta.text))
+              const text = correctorTitulos.push(correctorVoseo.push(filtroMarcadores.push(chunk.delta.text)))
               if (!text) continue
               fullContent += text
               controller.enqueue(encoder.encode(text))
             }
           }
-          const restoMarcadores = correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()
+          const restoMarcadores = correctorTitulos.push(correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()) + correctorTitulos.flush()
           if (restoMarcadores) {
             fullContent += restoMarcadores
             controller.enqueue(encoder.encode(restoMarcadores))

@@ -16,21 +16,6 @@ const IMAGENES: ImagenSpec[] = [
     description: 'Losa de un edificio en obra, vista desde arriba: la parrilla de fierro de la losa con varillas de arranque hacia arriba, encofrados y tablas apiladas, seis trabajadores con chaleco y casco parados sobre el fierro y cerca de los bordes, cerco de malla al perímetro; afuera, una furgoneta y casas vecinas. Debajo de la foto, las tres preguntas de la rutina: VEO ¿Qué está pasando en esta obra? · PIENSO ¿Desde dónde se podría caer alguien, o algo? · ME PREGUNTO ¿Qué hay abajo de cada uno?',
   },
   {
-    id: 'IMG-SI-ALTORIESGO-S1-DEFINICION', archivo: `${ESQ}/altoriesgo_s1_definicion.png`, kind: 'diagram', license: PROPIA,
-    source: 'Elaboración propia sobre el D.S. 024, la G.050, la OSHA, la Ley 29783, el D.S. 005 y la ISO 45001',
-    description: 'Esquema en tres filas. LA ALTURA: desde 1,80 m sobre el nivel del piso (G.050 · D.S. 024, art. 134). EL RIESGO: caída a distinto nivel, o rodadura lateral. SIEMPRE: sobre punzocortantes, líquidos o electricidad (G.050, 20.1). Cierre: «Ninguna norma lo define: las que lo tratan, lo delimitan». Pie: G.050, permiso de trabajos en altura (Anexo J) y cap. 20 · D.S. 024, art. 134.',
-  },
-  {
-    id: 'IMG-SI-ALTORIESGO-S1-COMPARATIVA', archivo: `${ESQ}/altoriesgo_s1_comparativa.png`, kind: 'diagram', license: PROPIA,
-    source: 'Elaboración propia sobre el D.S. 024, la G.050, la OSHA, la Ley 29783, el D.S. 005 y la ISO 45001',
-    description: 'Tabla: la norma, ¿define?, lo que dice. D.S. 024 (minería): no en su glosario; lo delimita el art. 134 desde 1,80 m. G.050 (obra): no, lo delimita; desde 1,80 m con riesgo de caída a distinto nivel (permiso, Anexo J). OSHA: no como término; fija umbrales de 6 pies en obra y 4 en industria. Ley 29783 y D.S. 005: no; la palabra «altura» no aparece. ISO 45001: no; lo alcanza el control operacional (8.1). Cierre: «Se delimita por la altura y por lo que hay abajo».',
-  },
-  {
-    id: 'IMG-SI-ALTORIESGO-S1-FOTO-ALTURA', archivo: `${FOTO}/altura-trabajo-en-altura.jpg`, kind: 'scene', license: 'Dominio público',
-    source: 'Fotografía: NIOSH · Wikimedia Commons, «Residential construction fall arrest (9253628909).jpg»',
-    description: 'Trabajador de pie sobre el muro de una vivienda en obra, recibiendo una tijera de techo con la grúa, con línea de vida y arnés.',
-  },
-  {
     id: 'IMG-SI-ALTORIESGO-S1-G050', archivo: `${ESQ}/altoriesgo_s1_g050.png`, kind: 'diagram', license: PROPIA,
     source: 'Elaboración propia sobre el D.S. 024, la G.050 y la OSHA 1926/1910 · fotografías de Wikimedia Commons',
     description: 'Cuatro fotos numeradas, cada una con el rótulo «a cualquier altura»: 1 sobre elementos punzocortantes (columnas con varillas de arranque), 2 sobre contenedores de líquidos (pozas de agua), 3 sobre instalaciones eléctricas activadas (subestación), 4 en tejados y taludes (dos techadores con arnés sobre tejas). Cierre: «Arnés desde 1,80 m y, en estos cuatro, a cualquier altura». Pie: Norma G.050, capítulo 20, rige en las actividades de construcción.',
@@ -41,29 +26,14 @@ const IMAGENES: ImagenSpec[] = [
     description: 'Tabla: el rubro, la norma, desde. Minería: D.S. 024, art. 134: 1,80 m. Construcción: G.050, cap. 20: 1,80 m. Construcción (EE. UU.): OSHA 1926.501: 1,8 m (6 pies). Industria (EE. UU.): OSHA 1910.28: 1,2 m (4 pies). Cierre: «El umbral depende del rubro y de lo que hay abajo». Nota: sobre equipo peligroso, la OSHA 1910 protege a menor altura.',
   },
   {
-    id: 'IMG-SI-ALTORIESGO-S1-FOTO-BORDE', archivo: `${FOTO}/altura-borde-losa.jpg`, kind: 'scene', license: 'CC BY-SA 4.0',
-    source: 'Fotografía: Patrick Oberdörfer · Wikimedia Commons, «PSA-Fallschutz SAP-Garden.jpg»',
-    description: 'Trabajador en el borde de un encofrado de losa, sin baranda, enganchado a un anclaje portátil.',
-  },
-  {
-    id: 'IMG-SI-ALTORIESGO-S1-ABERTURAS', archivo: `${ESQ}/altoriesgo_s1_aberturas.png`, kind: 'diagram', license: PROPIA,
-    source: 'Elaboración propia sobre el D.S. 024, la G.050 y la OSHA 1926/1910 · fotografías de Wikimedia Commons',
-    description: 'Dos fotos: 1, una losa en obra con el hueco de la escalera abierto entre el fierro, con el rótulo «En el piso: todo hueco de 5 cm o más»; 2, una claraboya sobre un techo, con el rótulo «La claraboya también es abertura». Abajo: EN LA PARED, desde 76 cm de alto por 48 cm de ancho. Pie: OSHA 1926.500 · 1926.501(b)(4) · 1910.21 · 1910.28(b)(3).',
-  },
-  {
-    id: 'IMG-SI-ALTORIESGO-S1-TEJADOS', archivo: `${ESQ}/altoriesgo_s1_tejados.png`, kind: 'diagram', license: PROPIA,
-    source: 'Elaboración propia sobre el D.S. 024, la G.050 y la OSHA 1926/1910',
-    description: 'Esquema en tres filas. TEJADOS Y TALUDES: posición precaria a cualquier altura (Norma G.050, cap. 20). ABERTURA DEL PISO: en obra, protección desde 6 pies (OSHA 1926.501(b)(4)(i)). CUALQUIER ABERTURA: tapa contra el tropiezo o la pisada (OSHA 1926.501(b)(4)(ii)). Cierre: «Una abertura baja no es inofensiva: también se tapa».',
+    id: 'IMG-SI-FOTO-ALTURA-ABERTURA-LOSA', archivo: `${FOTO}/altura-abertura-losa.jpg`, kind: 'scene', license: 'CC BY 2.0',
+    source: 'Fotografía: peter tr · Wikimedia Commons, «A Building construction site in Taiwan 2007-12-28 02.jpg»',
+    description: 'Losa armada en obra, vista de cerca: la parrilla de fierro con varillas sueltas y, a la derecha, el vano de la escalera abierto al piso de abajo, rodeado de encofrado de madera, sin tapa ni baranda. Un hombre camina sobre el fierro, a pocos pasos del hueco; al fondo, otros trabajadores y casas.',
   },
   {
     id: 'IMG-SI-ALTORIESGO-S1-PELIGRO-RIESGO', archivo: `${ESQ}/altoriesgo_s1_peligro-riesgo.png`, kind: 'diagram', license: PROPIA,
     source: 'Elaboración propia sobre el D.S. 024, la G.050 y la OSHA 1926/1910 · fotografías de Wikimedia Commons',
     description: 'Tres columnas con flechas. EL PELIGRO: foto de un borde de losa sin protección; «la condición capaz de dañar: el borde sin protección». EL RIESGO: «que caiga la persona, o un objeto»; la probabilidad de que se materialice. LA CONSECUENCIA: «concreto, fierro, líquido o electricidad»; el daño, que depende de lo que hay abajo. Cierre: «Un peligro de caída, dos riesgos: la persona o el objeto». Pie: glosario del D.S. 005-2012-TR y del D.S. 024-2016-EM.',
-  },
-  {
-    id: 'IMG-SI-ALTORIESGO-S1-ABAJO', archivo: `${ESQ}/altoriesgo_s1_abajo.png`, kind: 'diagram', license: PROPIA,
-    source: 'Elaboración propia sobre el D.S. 024, la G.050 y la OSHA 1926/1910',
-    description: 'Tabla: a 1,20 m, sobre piso plano o sobre varillas. ¿La G.050 pide arnés? Piso plano: no, no pasa de 1,80 m. Varillas: sí, a cualquier altura. La severidad: menor sobre piso plano, mayor sobre varillas. Cierre: «La altura no es la única medida: cuenta lo que hay abajo». Pie: Norma G.050, cap. 20 · ISO 45001: riesgo es probabilidad y severidad (3.21).',
   },
   {
     id: 'IMG-SI-ALTORIESGO-S1-FOTO-OBJETOS', archivo: `${FOTO}/altura-malla-fachada.jpg`, kind: 'scene', license: 'CC0',
@@ -109,24 +79,22 @@ export const S1: SesionSpec = {
       title: 'Trabajo en altura según la norma',
       subtitle: 'La G.050 y el D.S. 024',
       keyPointIndex: 0,
-      lamina: { imagenId: 'IMG-SI-ALTORIESGO-S1-DEFINICION', title: 'Qué es un trabajo en altura' },
+      // 21 oct 2026: una sola imagen, la que conversa con el ejemplo (la cisterna →
+      // «sobre contenedores de líquidos») y con la pregunta (electricidad activa).
+      // Salieron el esquema de definición («ninguna norma lo define», dato para el
+      // instructor) y la foto de una casa en EE. UU. que no ilustraba esto.
+      lamina: { imagenId: 'IMG-SI-ALTORIESGO-S1-G050', title: 'Los cuatro casos de la G.050' },
       norma: {
         id: 'norma-umbral',
         title: 'Cuándo una tarea es trabajo en altura',
         source: 'D.S. 024-2016-EM, art. 134 · Norma G.050',
         body: [
-          '- El **D.S. 024** pone el trabajo en altura entre los de alto riesgo «como mínimo».',
           '- En minería, protección contra caídas desde **1,80 m** (D.S. 024, art. 134).',
-          '- Y para subir, **certificado de suficiencia médica anual** (art. 134).',
           '- En construcción, la **G.050**: arnés si la caída libre supera 1,80 m.',
           '- O a menos de 1,80 m del borde de techos, losas o aberturas sin baranda.',
           '- **A cualquier altura** sobre punzocortantes, líquidos o electricidad activa, y en tejados y taludes (G.050, 20.1).',
         ].join('\n'),
       },
-      apoyo: [
-        { imagenId: 'IMG-SI-ALTORIESGO-S1-G050', title: 'Los cuatro casos de la G.050' },
-        { imagenId: 'IMG-SI-ALTORIESGO-S1-FOTO-ALTURA', title: 'Trabajo en altura con arnés' },
-      ],
       regla: 'la G.050 cuenta como altura desde 1,80 m, o con riesgo de caída a distinto nivel, y a cualquier altura sobre punzocortantes, líquidos, electricidad activa, tejados y taludes.',
       ejemplo: 'un albañil tarrajea a 1,30 m sobre un banco junto a una cisterna destapada: no llega a 1,80 m, pero sobre líquido la G.050 exige protección.',
       ejemploClave: 'cisterna',
@@ -152,19 +120,20 @@ export const S1: SesionSpec = {
         id: 'norma-rubro',
         title: 'El umbral según el rubro',
         source: 'D.S. 024 · G.050 · OSHA 1926.501(b)(1) · OSHA 1910.28(b)(1)',
+        // 21 oct 2026: sin «Ninguna norma lo define…» (dato para el instructor; un
+        // alumno lo tocó como respaldo y confundía). Una línea por rubro.
         body: [
-          '- Ninguna norma lo define con todas sus letras: la G.050 y el D.S. 024 lo **delimitan desde 1,80 m**; la Ley 29783, el D.S. 005 y la ISO 45001 no lo nombran.',
-          '- **OSHA en construcción:** desde 6 pies, 1,8 m [1926.501(b)(1)].',
-          '- **OSHA en industria general:** desde 4 pies, 1,2 m [1910.28(b)(1)].',
+          '- **Minería:** desde **1,80 m** (D.S. 024, art. 134).',
+          '- **Construcción:** desde **1,80 m** (G.050, cap. 20; OSHA 1926.501, 6 pies).',
+          '- **Industria general:** desde **1,2 m** (OSHA 1910.28, 4 pies).',
           '- El umbral depende **del rubro y de lo que hay abajo**, no solo de la altura.',
         ].join('\n'),
       },
-      apoyo: [{ imagenId: 'IMG-SI-ALTORIESGO-S1-COMPARATIVA', title: 'Qué dice cada norma' }],
       regla: 'el umbral cambia con el rubro: minería 1,80 m (D.S. 024), construcción 1,80 m (G.050 y OSHA 1926), industria general 1,20 m (OSHA 1910).',
       ejemplo: 'una tarea a 1,50 m sobre piso plano no obliga en una obra y sí en una fábrica, porque la industria general la pide desde 1,20 m.',
       ejemploClave: 'fábrica',
       // Dos mitades de la respuesta: la embotelladora sí (1,2 m) y la concentradora no (1,80 m).
-      subrayar: { respalda: ['OSHA en industria general', 'delimitan desde 1,80 m'] },
+      subrayar: { respalda: ['Industria general', 'Minería'] },
       pregunta: 'La misma plataforma de 1,60 m en dos lugares: una concentradora de minerales y una planta embotelladora. ¿En cuál le exige la norma protección contra caídas, y por qué?',
       criterios: [
         'Decide: en la embotelladora sí (OSHA 1910, industria general, desde 1,20 m) y en la mina no por umbral (D.S. 024, desde 1,80 m)',
@@ -178,23 +147,21 @@ export const S1: SesionSpec = {
       title: 'Bordes, aberturas y techos',
       subtitle: 'Dónde empieza el peligro de caída',
       keyPointIndex: 1,
-      lamina: { imagenId: 'IMG-SI-ALTORIESGO-S1-FOTO-BORDE', title: 'Borde de losa sin baranda' },
+      // 21 oct 2026: la foto del vano abierto conversa con el ejemplo (la canaleta es
+      // abertura). La del borde mostraba a un trabajador enganchado, es decir
+      // protegido, y el borde casi no se veía.
+      lamina: { imagenId: 'IMG-SI-FOTO-ALTURA-ABERTURA-LOSA', title: 'Vano abierto en una losa' },
       norma: {
         id: 'norma-peligros',
         title: 'Bordes, aberturas y techos',
         source: 'OSHA 1926.500-501 · OSHA 1910.28 · Norma G.050',
         body: [
-          '- **Borde sin protección:** el que no tiene muro ni baranda de al menos 1,0 m (OSHA 1926.500, para pisos, techos, rampas y pasarelas). La G.050 ya cuenta como altura trabajar a menos de 1,80 m de ese borde.',
-          '- **Abertura en el piso:** todo hueco de **5 cm o más** en su menor dimensión. Las claraboyas cuentan como abertura [1926.501(b)(4) · 1910.28(b)(3)].',
-          '- **Abertura en pared:** desde 76 cm de alto por 48 cm de ancho [1926.500].',
+          '- **Borde sin protección:** el que no tiene muro ni baranda de al menos 1,0 m (OSHA 1926.500, para pisos, techos, rampas y pasarelas).',
+          '- **Abertura en el piso:** todo hueco de **5 cm o más** en su menor dimensión; las claraboyas cuentan como abertura [1926.501(b)(4)].',
+          '- Ante cualquier abertura, **tapas contra el tropiezo o la pisada** [1926.501(b)(4)].',
           '- **Tejados inclinados y taludes:** posición precaria a cualquier altura (G.050).',
-          '- En obra, protección desde 6 pies ante las aberturas del piso, y ante cualquier abertura, **tapas contra el tropiezo o la pisada** [1926.501(b)(4)].',
         ].join('\n'),
       },
-      apoyo: [
-        { imagenId: 'IMG-SI-ALTORIESGO-S1-ABERTURAS', title: 'Aberturas en piso y pared' },
-        { imagenId: 'IMG-SI-ALTORIESGO-S1-TEJADOS', title: 'Tejados, taludes y tapas' },
-      ],
       regla: 'borde sin protección: sin muro ni baranda de 1,0 m; abertura en el piso: todo hueco desde 5 cm, con tapa que resista la pisada; tejados y taludes: posición precaria a cualquier altura.',
       ejemplo: 'una canaleta de 20 cm sin tapa en una losa es abertura aunque nadie quepa: se pisa, y la norma pide tapa.',
       ejemploClave: 'canaleta',
@@ -220,15 +187,13 @@ export const S1: SesionSpec = {
         body: [
           '- **Peligro:** situación o característica capaz de ocasionar daño. **Riesgo:** probabilidad de que ese peligro se materialice (D.S. 005 y D.S. 024).',
           '- Cada peligro de caída tiene **dos riesgos**: cae la persona o cae un objeto.',
-          '- La consecuencia depende de la altura **y de lo que hay abajo** (G.050, cap. 20): por eso la G.050 pide arnés sobre fierro o líquido aunque no haya 1,80 m.',
-          '- La ISO 45001 define el riesgo como probabilidad y severidad (3.21).',
+          '- La consecuencia depende de la altura **y de lo que hay abajo** (G.050, cap. 20).',
           '- La caída de objetos alcanza a quien **no** está trabajando en altura. G.050: nadie debajo del área, herramienta amarrada y mallas entre niveles. OSHA: casco y además rodapié, malla, baranda o cubierta [1926.501(c)].',
         ].join('\n'),
       },
-      apoyo: [
-        { imagenId: 'IMG-SI-ALTORIESGO-S1-ABAJO', title: 'Lo que hay abajo decide' },
-        { imagenId: 'IMG-SI-ALTORIESGO-S1-FOTO-OBJETOS', title: 'Malla contra caída de objetos' },
-      ],
+      // 21 oct 2026: salió la tabla «a 1,20 m sobre piso plano: no pide arnés», que en
+      // apariencia contradecía el umbral de 1,2 m de industria del punto anterior.
+      apoyo: [{ imagenId: 'IMG-SI-ALTORIESGO-S1-FOTO-OBJETOS', title: 'Malla contra caída de objetos' }],
       regla: 'peligro es lo que puede causar daño y riesgo, la probabilidad de que ocurra; cada peligro de caída tiene dos riesgos, la persona o el objeto, y la consecuencia la decide lo que hay abajo.',
       ejemplo: 'un soldador a 3 m con carretilleros debajo: si cae él, golpe sobre concreto; si cae la amoladora, le llega al carretillero.',
       ejemploClave: 'soldador',

@@ -2,6 +2,8 @@
 
 Decisión de Walther (15 oct 2026): **todas las cargas de sesiones de curso pasan por aquí.** Nada se escribe a mano en la base ni en el planner.
 
+**Antes de escribir una sesión, lee [DISENO-DE-CLASE.md](DISENO-DE-CLASE.md):** cómo se piensa cada punto clave (regla, ejemplo, imagen y pregunta que conversan) y qué revisar antes de publicar.
+
 ```
 cursos/<curso>/curso.ts      datos del curso (slug, título, capacidad, voz de Sophia, carrera)
 cursos/<curso>/s<n>.ts       datos de la sesión (imágenes, rutina, puntos clave, caso corto, contexto)

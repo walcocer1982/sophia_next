@@ -311,6 +311,12 @@ export async function GET(
           porLimiteIdx >= 0
             ? { index: porLimiteIdx + 1, title: tituloActividad(actividades[porLimiteIdx], porLimiteIdx) }
             : null,
+        lecturaSinComprobar: completadas
+          .filter((a) => (a.evidenceData as { lecturaNoComprobada?: boolean } | null)?.lecturaNoComprobada === true)
+          .map((a) => actividades.findIndex((x) => x.id === a.activityId))
+          .filter((i) => i >= 0)
+          .sort((x, y) => x - y)
+          .map((i) => ({ index: i + 1, title: tituloActividad(actividades[i], i) })),
         seguimiento: aDTO(marca),
       })
 
