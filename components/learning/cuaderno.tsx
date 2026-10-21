@@ -28,6 +28,7 @@ import { PlayAudioButton } from './play-audio-button'
 import { LessonCompleteCard } from './lesson-complete-card'
 import { QueVasALograr } from './que-vas-a-lograr'
 import { useLectura } from '@/hooks/use-lectura'
+import { alFinal, desplazarDentro } from '@/lib/desplazar'
 
 export interface ActividadDelCuaderno {
   id: string
@@ -149,21 +150,40 @@ export function Cuaderno({
     lectura.leer(m.content, m.id)
   }, [ultimoDeSophia, messages, leerEnVoz, lectura])
 
-  // Bajar al final cuando llega algo nuevo, si el alumno ya estaba cerca del final.
+  // Desplazamiento de la hoja (21 oct 2026, capturas de Walther). Solo se mueve la
+  // hoja, nunca la página (lib/desplazar.ts): con scrollIntoView subía la lección
+  // entera y abajo quedaba una franja blanca. Y un mensaje nuevo de Sophia se ve
+  // desde su comienzo: antes se seguía el final mientras escribía y, al terminar,
+  // había que subir para leerlo.
+  // - Al cargar: el historial, desde el final.
+  // - El alumno envía: al final (su respuesta y «Sophia está escribiendo»).
+  // - Empieza un mensaje de Sophia: su comienzo arriba, una vez; no se sigue el final.
   const hojaRef = useRef<HTMLDivElement>(null)
-  const finRef = useRef<HTMLDivElement>(null)
-  const cercaDelFinal = useRef(true)
+  const anclados = useRef<Set<string> | null>(null)
   const ultimo = messages.at(-1)
   useEffect(() => {
-    if (cercaDelFinal.current) finRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages.length, ultimo?.content.length, cerrada])
-  const alDesplazar = () => {
-    const el = hojaRef.current
-    if (el) cercaDelFinal.current = el.scrollHeight - el.scrollTop - el.clientHeight < 160
-  }
+    const hoja = hojaRef.current
+    if (!hoja) return
+    if (anclados.current === null) {
+      anclados.current = new Set(messages.filter((m) => m.role === 'assistant' && m.content.trim()).map((m) => m.id))
+      alFinal(hoja)
+      return
+    }
+    if (!ultimo) return
+    if (ultimo.role === 'user') {
+      alFinal(hoja, true)
+      return
+    }
+    if (ultimo.role === 'assistant' && ultimo.content.trim() && !anclados.current.has(ultimo.id)) {
+      anclados.current.add(ultimo.id)
+      const id = ultimo.id
+      // El comienzo puede estar al final de la sección anterior (el párrafo de cierre).
+      requestAnimationFrame(() => desplazarDentro(hoja, hoja.querySelector(`[data-inicio-sophia="${id}"]`), 'inicio'))
+    }
+  }, [messages, ultimo])
   const irA = (id: string) => {
     setAbiertas((prev) => new Set(prev).add(id))
-    requestAnimationFrame(() => document.getElementById(`seccion-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    requestAnimationFrame(() => desplazarDentro(hojaRef.current, document.getElementById(`seccion-${id}`), 'inicio'))
   }
 
   return (
@@ -243,7 +263,7 @@ export function Cuaderno({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* La conversación se pega a la caja, como en un chat: con pocos mensajes,
             el vacío queda arriba y no entre el último mensaje y la caja. */}
-        <div ref={hojaRef} onScroll={alDesplazar} className="flex flex-1 flex-col overflow-y-auto">
+        <div ref={hojaRef} className="flex flex-1 flex-col overflow-y-auto overscroll-contain">
           <div className="mt-auto w-full px-4 pt-6 pb-4 sm:px-6 lg:px-10">
             {isGeneratingWelcome && !messages.some((m) => m.content.trim()) && (
               <p className="flex items-center gap-3 text-[#a9b8c2]">
@@ -298,17 +318,18 @@ export function Cuaderno({
                         m.role === 'user' ? (
                           <Respuesta key={m.id} texto={m.content} material={m.material} />
                         ) : (
-                          <MensajeDeSophia
-                            key={m.id}
-                            mensaje={recorte?.mensajeId === m.id ? { ...m, content: recorte.resto } : m}
-                            esElUltimo={m.id === ultimoDeSophia?.id && !cerrada}
-                            ocupado={isLoading || isGeneratingWelcome}
-                            onChoose={(t) => onSendText(t)}
-                          />
+                          <div key={m.id} data-inicio-sophia={m.id}>
+                            <MensajeDeSophia
+                              mensaje={recorte?.mensajeId === m.id ? { ...m, content: recorte.resto } : m}
+                              esElUltimo={m.id === ultimoDeSophia?.id && !cerrada}
+                              ocupado={isLoading || isGeneratingWelcome}
+                              onChoose={(t) => onSendText(t)}
+                            />
+                          </div>
                         ),
                       )}
                       {cierreDeEsta && (
-                        <div className="min-w-0 text-[16px] leading-relaxed text-[#e6edf1]">
+                        <div data-inicio-sophia={cierreDeEsta.mensajeId} className="min-w-0 text-[16px] leading-relaxed text-[#e6edf1]">
                           <ReactMarkdown remarkPlugins={[remarkGfm]} components={md}>{conSaltos(arreglarNegritas(stripMarkers(cierreDeEsta.cierre)))}</ReactMarkdown>
                         </div>
                       )}
@@ -321,7 +342,6 @@ export function Cuaderno({
             {cerrada && (
               <LessonCompleteCard lessonTitle={lessonTitle} exitHref={exitHref} exitLabel={exitLabel} onAskMore={onAskMore} />
             )}
-            <div ref={finRef} />
           </div>
         </div>
 
