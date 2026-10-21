@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils'
 import { isBlockShown, pinnedStaysOpen, type ActivityPanelInfo, type BlockWithActivity } from '@/lib/support-blocks'
 import { SupportBlockCard } from './support-block'
 import { useMaterial } from './material-context'
+import { desplazarDentro } from '@/lib/desplazar'
 
 export function splitBlocks(blocks: BlockWithActivity[], activityOrder: string[], currentActivityId: string | null) {
   const idx = currentActivityId ? Math.max(0, activityOrder.indexOf(currentActivityId)) : 0
@@ -80,11 +81,14 @@ export function Pizarra({ blocks, activityOrder, currentActivityId, activityInfo
     }
   }, [currentActivityId, blocks, activityOrder, info, resetSimState])
 
-  // Traer a la vista el bloque que Sophia acaba de citar o que el alumno tocó en el chat.
+  // Traer a la vista el bloque que Sophia acaba de citar o que el alumno tocó en el
+  // chat. Solo dentro de la pizarra (lib/desplazar.ts): scrollIntoView movía también
+  // la página y abajo aparecía una franja blanca (21 oct 2026).
+  const panelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!focus) return
     const raf = requestAnimationFrame(() => {
-      document.getElementById(`block-${focus.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      desplazarDentro(panelRef.current, document.getElementById(`block-${focus.id}`), 'cercano')
     })
     return () => cancelAnimationFrame(raf)
   }, [focus])
@@ -98,7 +102,7 @@ export function Pizarra({ blocks, activityOrder, currentActivityId, activityInfo
         {total > 0 && <span className="text-xs text-[#7f909b]">{total}</span>}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div ref={panelRef} className="flex-1 overflow-y-auto overscroll-contain p-4">
         {total === 0 && onDemand.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center py-10 text-center">
             <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/5">

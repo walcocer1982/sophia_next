@@ -105,7 +105,9 @@ function LayoutBody({
     )
 
   return (
-    <div className="tema-noche flex h-dvh flex-col">
+    // Ocupa la pantalla del alumno, sea cual sea (fixed inset-0): la página no se
+    // desplaza; se desplazan la hoja y la pizarra (21 oct 2026).
+    <div className="tema-noche fixed inset-0 flex flex-col overflow-hidden">
       <LessonBar
         lessonTitle={lessonTitle}
         objective={objective}
@@ -153,7 +155,9 @@ function LayoutBody({
         {/* El riel de avance va DENTRO del Cuaderno: el tope suma riel (56 px en lg,
             256 en xl) + conversación (880 px). Sin eso, el texto quedaba en 620 px
             y el espacio sobrante se iba a la derecha de la pizarra. */}
-        <div className={cn('min-w-0 flex-1 flex-col lg:flex-[3_1_0] lg:max-w-[936px] xl:max-w-[1136px]', pestana === 'pizarra' ? 'hidden lg:flex' : 'flex')}>{children}</div>
+        {/* Sin anchos máximos fijos (21 oct 2026, Walther): conversación y pizarra se
+            reparten la pantalla 3 a 2 y crecen con ella. */}
+        <div className={cn('min-w-0 flex-1 flex-col lg:flex-[3_1_0]', pestana === 'pizarra' ? 'hidden lg:flex' : 'flex')}>{children}</div>
         <Pizarra
           blocks={allBlocks}
           activityOrder={activityOrder}
