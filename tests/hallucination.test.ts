@@ -17,3 +17,9 @@ test('el ruido de transcripción sigue detectándose', () => {
   assert.equal(detectHallucination('Bienvenidos a Communication Labs もしくはコネクタイヤ').isHallucination, true)
   assert.equal(detectHallucination('%%% ### @@@ !!! $$$ ^^^ &&& *** ((( ))) ___').isHallucination, true)
 })
+
+test('una respuesta escrita larga que repite una frase técnica no es ruido (simulación del 21 oct)', () => {
+  const r = detectHallucination('Sí profe, es trabajo en altura según la G.050, aunque esté a 1,50 m. La razón es clara: aunque no llega a los 1,80 m, hay una instalación eléctrica energizada justo debajo. La norma dice que a cualquier altura se cuenta como trabajo en altura si hay electricidad activa debajo. Entonces el electricista está expuesto, y eso activa la protección completa: arnés, línea de vida, permiso de trabajo en altura, todo.')
+  assert.equal(r.isHallucination, false, r.reason)
+  assert.equal(detectHallucination('cómo puede ver cómo puede ver cómo puede ver cómo puede ver').isHallucination, true)
+})

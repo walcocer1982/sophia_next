@@ -17,7 +17,8 @@ import { motion } from 'framer-motion'
 import { Check, ChevronDown, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { citedBlocksInOrder, stripMarkers, splitChoiceOptions } from '@/lib/material-markers'
-import { agruparPorActividad, separarPedido } from '@/lib/cuaderno'
+import { agruparPorActividad, arreglarNegritas, separarCierreDeLaAnterior, separarPedido } from '@/lib/cuaderno'
+import { leerSubrayadoGuardado } from '@/lib/subrayado'
 import type { OptimisticMessage } from '@/types/chat'
 import type { PlannerAttachment } from '@/types/planner'
 import { useMaterial } from './material-context'
@@ -82,7 +83,16 @@ export function Cuaderno({
   // Lo que se ve abierto: la sección actual (o la última si terminó) y las que el alumno abra.
   const ultimaId = secciones.at(-1)?.actividadId ?? null
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set())
-  const estaAbierta = (id: string) => id === ultimaId || id === actualId || abiertas.has(id)
+  // La actividad que acaba de cerrarse sigue abierta hasta que el alumno responde
+  // la nueva: ahí está el feedback de Sophia. Antes se plegaba apenas llegaba el
+  // mensaje y el feedback desaparecía sin dar tiempo a leerlo (20 oct 2026).
+  const ultima = secciones.at(-1)
+  const previaAbierta =
+    secciones.length >= 2 && ultima && !ultima.mensajes.some((m) => m.role === 'user')
+      ? secciones[secciones.length - 2].actividadId
+      : null
+  const fijaAbierta = (id: string) => id === ultimaId || id === actualId || id === previaAbierta
+  const estaAbierta = (id: string) => fijaAbierta(id) || abiertas.has(id)
   const alternar = (id: string) =>
     setAbiertas((prev) => {
       const s = new Set(prev)
@@ -90,6 +100,22 @@ export function Cuaderno({
       else s.add(id)
       return s
     })
+
+  // El párrafo con que Sophia cierra una actividad llega en el mensaje que abre
+  // la siguiente: se dibuja al final de la sección anterior (lib/cuaderno.ts).
+  // También mientras se escribe, apenas el primer párrafo está completo (exige un
+  // párrafo después). 20 oct 2026: si se esperaba al final, el mensaje pasaba
+  // entero a la actividad nueva y el feedback saltaba a la anterior al terminar.
+  const cierres = useMemo(() => {
+    const porSeccion = new Map<number, { mensajeId: string; cierre: string; resto: string }>()
+    secciones.forEach(({ mensajes }, i) => {
+      const m = mensajes[0]
+      if (i === 0 || !m || m.role !== 'assistant' || m.status === 'error') return
+      const { cierre, resto } = separarCierreDeLaAnterior(m.content)
+      if (cierre) porSeccion.set(i, { mensajeId: m.id, cierre, resto })
+    })
+    return porSeccion
+  }, [secciones])
 
   // El último mensaje de Sophia con contenido: es el que lleva el pedido destacado y los botones.
   const ultimoDeSophia = useMemo(() => {
@@ -219,44 +245,66 @@ export function Cuaderno({
               </p>
             )}
 
-            {secciones.map(({ actividadId, mensajes }) => {
+            {secciones.map(({ actividadId, mensajes }, iSeccion) => {
               const idx = orden.indexOf(actividadId)
               const act = actividades[idx]
               const abierta = estaAbierta(actividadId)
               const ultimaRespuesta = [...mensajes].reverse().find((m) => m.role === 'user')
+              const pasada = actividadId !== ultimaId && actividadId !== actualId
+              const plegable = !fijaAbierta(actividadId)
+              const cierreDeEsta = cierres.get(iSeccion + 1)
+              const recorte = cierres.get(iSeccion)
               return (
                 <section key={actividadId} id={`seccion-${actividadId}`} className="scroll-mt-4 mb-8">
-                  <header className="mb-4">
-                    <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#fbc50b]">Actividad {idx + 1}</p>
+                  {/* Una sola línea (19 oct 2026): «Actividad 5 · Nombre · Caso». Antes
+                      eran tres niveles con título serif de 22 px y pesaban más
+                      que la conversación. */}
+                  <header className="mb-4 border-b border-white/10 pb-2">
                     <button type="button" onClick={() => alternar(actividadId)} className="group flex w-full items-start gap-2 text-left" aria-expanded={abierta}>
-                      <h2 className="flex-1 font-serif text-[22px] leading-tight text-white">{act?.titulo ?? `Actividad ${idx + 1}`}</h2>
-                      {actividadId !== ultimaId && actividadId !== actualId && (
-                        <ChevronDown className={cn('mt-1.5 h-4 w-4 shrink-0 text-[#7f909b] transition-transform', abierta && 'rotate-180')} aria-hidden />
+                      <h2 className={cn('flex-1 text-[15px] font-semibold leading-snug sm:text-base', pasada ? 'text-[#c3ced6]' : 'text-white')}>
+                        <span className="font-bold text-[#fbc50b]">Actividad {idx + 1}</span>
+                        <span className="text-[#7f909b]"> · </span>
+                        {act?.titulo ?? `Actividad ${idx + 1}`}
+                        {act?.subtitulo && (
+                          <>
+                            <span className="text-[#7f909b]"> · </span>
+                            <span className="font-normal text-[#a9b8c2]">{act.subtitulo}</span>
+                          </>
+                        )}
+                      </h2>
+                      {plegable && (
+                        <ChevronDown className={cn('mt-1 h-4 w-4 shrink-0 text-[#7f909b] transition-transform', abierta && 'rotate-180')} aria-hidden />
                       )}
                     </button>
-                    {act?.subtitulo && <p className="mt-0.5 text-sm text-[#a9b8c2]">{act.subtitulo}</p>}
                   </header>
 
                   {!abierta ? (
-                    ultimaRespuesta && (
-                      <p className="border-l-2 border-white/15 pl-3 text-sm text-[#a9b8c2]">
-                        Respondiste: «{ultimaRespuesta.content.length > 140 ? `${ultimaRespuesta.content.slice(0, 140)}…` : ultimaRespuesta.content}»
-                      </p>
+                    (ultimaRespuesta || cierreDeEsta) && (
+                      <div className="space-y-1 border-l-2 border-white/15 pl-3 text-sm text-[#a9b8c2]">
+                        {ultimaRespuesta && <p>Respondiste: «{recortar(ultimaRespuesta.content, 140)}»</p>}
+                        {/* Lo que Sophia le dijo al cerrar: sin abrir la sección se recuerda el feedback */}
+                        {cierreDeEsta && <p><span className="text-[#fbc50b]/80">Sophia:</span> {recortar(stripMarkers(cierreDeEsta.cierre).replace(/\*\*/g, ''), 180)}</p>}
+                      </div>
                     )
                   ) : (
                     <div className="space-y-4">
                       {mensajes.map((m) =>
                         m.role === 'user' ? (
-                          <Respuesta key={m.id} texto={m.content} />
+                          <Respuesta key={m.id} texto={m.content} material={m.material} />
                         ) : (
                           <MensajeDeSophia
                             key={m.id}
-                            mensaje={m}
-                            esElUltimo={m === ultimoDeSophia && !cerrada}
+                            mensaje={recorte?.mensajeId === m.id ? { ...m, content: recorte.resto } : m}
+                            esElUltimo={m.id === ultimoDeSophia?.id && !cerrada}
                             ocupado={isLoading || isGeneratingWelcome}
                             onChoose={(t) => onSendText(t)}
                           />
                         ),
+                      )}
+                      {cierreDeEsta && (
+                        <div className="min-w-0 text-[16px] leading-relaxed text-[#e6edf1]">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={md}>{conSaltos(arreglarNegritas(stripMarkers(cierreDeEsta.cierre)))}</ReactMarkdown>
+                        </div>
                       )}
                     </div>
                   )}
@@ -301,12 +349,25 @@ export function Cuaderno({
  * etiqueta, como en ChatGPT (decisión del 14 oct 2026). Sophia va como texto
  * limpio a la izquierda, también sin avatar: con eso basta para saber quién habla.
  */
-function Respuesta({ texto }: { texto: string }) {
+function Respuesta({ texto, material }: { texto: string; material?: unknown }) {
+  const subrayado = leerSubrayadoGuardado(material)
   return (
-    <div className="flex justify-end">
+    <div className="flex flex-col items-end gap-1.5">
       <div className="max-w-[75%] whitespace-pre-wrap break-words rounded-3xl bg-white/[0.09] px-4 py-2.5 text-[15px] leading-relaxed text-[#e6edf1]">
         {texto}
       </div>
+      {/* Lo que subrayó en la pizarra al responder (turno de subrayar, 20 oct 2026) */}
+      {subrayado.map((s) => (
+        <p key={s.blockId} className="max-w-[75%] text-right text-[13px] leading-snug text-[#a9b8c2]">
+          Subrayaste en «{s.titulo}»: {s.lineas.map((l, i) => (
+            <span key={i} className="text-[#e6edf1] underline decoration-[#fbc50b] decoration-2 underline-offset-4">
+              {i > 0 && ' · '}«{l}»
+            </span>
+          ))}
+          {s.resultado === 'respalda' && <span className="ml-1 font-semibold text-[#8fe0ad]">✓ respalda tu respuesta</span>}
+          {s.resultado === 'no_respalda' && <span className="ml-1 font-semibold text-[#f5a3a3]">✗ no respalda tu respuesta</span>}
+        </p>
+      ))}
     </div>
   )
 }
@@ -328,6 +389,8 @@ const md = {
 const conSaltos = (t: string) => t.replace(/([^\n])\n(?!\n)/g, '$1  \n')
 
 /** Lo que Sophia pide, destacado: va justo encima de la caja de respuesta. */
+const recortar = (t: string, max: number) => (t.length > max ? `${t.slice(0, max).trimEnd()}…` : t)
+
 function Pedido({ texto }: { texto: string }) {
   return (
     <p className="mt-3 flex gap-2 font-semibold text-white">
@@ -385,7 +448,7 @@ function MensajeDeSophia({
       </div>
     )
   }
-  const limpio = stripMarkers(mensaje.content)
+  const limpio = arreglarNegritas(stripMarkers(mensaje.content))
   const conOpciones = !escribiendo ? splitChoiceOptions(limpio) : { body: limpio, options: [], tail: '' }
   const hayOpciones = conOpciones.options.length > 0
   const { cuerpo, pedido } = esElUltimo && !escribiendo && !hayOpciones ? separarPedido(limpio) : { cuerpo: conOpciones.body, pedido: null }

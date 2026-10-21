@@ -130,6 +130,10 @@ export const S1: SesionSpec = {
       regla: 'la G.050 cuenta como altura desde 1,80 m, o con riesgo de caída a distinto nivel, y a cualquier altura sobre punzocortantes, líquidos, electricidad activa, tejados y taludes.',
       ejemplo: 'un albañil tarrajea a 1,30 m sobre un banco junto a una cisterna destapada: no llega a 1,80 m, pero sobre líquido la G.050 exige protección.',
       ejemploClave: 'cisterna',
+      // Prueba del subrayado (20 oct 2026): el alumno toca en la norma la línea que
+      // respalda su respuesta. (El bloque «clasificar» se probó aquí y se retiró:
+      // a todo el ancho desplazaba el resto de la pizarra.)
+      subrayar: { respalda: 'A cualquier altura sobre punzocortantes' },
       pregunta: 'Un electricista instala luminarias parado en una plataforma de 1,50 m, en una obra, con el tablero energizado justo debajo: ¿es trabajo en altura según la G.050, y por qué?',
       criterios: [
         'Decide que sí es trabajo en altura',
@@ -159,6 +163,8 @@ export const S1: SesionSpec = {
       regla: 'el umbral cambia con el rubro: minería 1,80 m (D.S. 024), construcción 1,80 m (G.050 y OSHA 1926), industria general 1,20 m (OSHA 1910).',
       ejemplo: 'una tarea a 1,50 m sobre piso plano no obliga en una obra y sí en una fábrica, porque la industria general la pide desde 1,20 m.',
       ejemploClave: 'fábrica',
+      // Dos mitades de la respuesta: la embotelladora sí (1,2 m) y la concentradora no (1,80 m).
+      subrayar: { respalda: ['OSHA en industria general', 'delimitan desde 1,80 m'] },
       pregunta: 'La misma plataforma de 1,60 m en dos lugares: una concentradora de minerales y una planta embotelladora. ¿En cuál le exige la norma protección contra caídas, y por qué?',
       criterios: [
         'Decide: en la embotelladora sí (OSHA 1910, industria general, desde 1,20 m) y en la mina no por umbral (D.S. 024, desde 1,80 m)',
@@ -192,6 +198,7 @@ export const S1: SesionSpec = {
       regla: 'borde sin protección: sin muro ni baranda de 1,0 m; abertura en el piso: todo hueco desde 5 cm, con tapa que resista la pisada; tejados y taludes: posición precaria a cualquier altura.',
       ejemplo: 'una canaleta de 20 cm sin tapa en una losa es abertura aunque nadie quepa: se pisa, y la norma pide tapa.',
       ejemploClave: 'canaleta',
+      subrayar: { respalda: 'Borde sin protección' },
       pregunta: 'Un pintor avanza por una pasarela a 3 m del piso que tiene una baranda de 60 cm de alto: ¿es un borde sin protección, y por qué?',
       criterios: [
         'Decide que sí es un borde sin protección',
@@ -225,10 +232,15 @@ export const S1: SesionSpec = {
       regla: 'peligro es lo que puede causar daño y riesgo, la probabilidad de que ocurra; cada peligro de caída tiene dos riesgos, la persona o el objeto, y la consecuencia la decide lo que hay abajo.',
       ejemplo: 'un soldador a 3 m con carretilleros debajo: si cae él, golpe sobre concreto; si cae la amoladora, le llega al carretillero.',
       ejemploClave: 'soldador',
+      subrayar: { respalda: 'La caída de objetos alcanza a quien no está' },
       pregunta: 'Un albañil levanta un muro desde un andamio de 4 m, junto a la puerta por donde entran los camiones, con baldes de mezcla sobre la plataforma: si cae un balde, ¿quién está en riesgo, y por qué?',
       criterios: [
         'Identifica a quien pasa por la puerta (choferes, ayudantes) como quien recibe el objeto, aunque no trabaje en altura',
-        'Da la razón con la norma: la caída de objetos alcanza a quien está abajo; la G.050 pide que nadie esté debajo del área, herramienta amarrada o malla',
+        // 19 oct 2026: antes también exigía las medidas de la G.050 (nadie debajo,
+        // herramienta amarrada, malla), que la pregunta no pide. Sophia gastó un
+        // turno extra preguntándolas. Van en la norma de la pizarra y, cuando
+        // exista, en la pregunta de extensión del punto.
+        'Da la razón: el balde cae sobre quien está abajo, aunque no trabaje en altura',
       ],
       critical: [2],
       commonMistakes: ['Cree que el riesgo de caída solo existe para quien está arriba', 'Cree que el casco basta contra la caída de objetos'],

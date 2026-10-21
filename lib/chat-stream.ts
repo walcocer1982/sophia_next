@@ -1,7 +1,9 @@
 import type { PlannerAttachment } from '@/types/planner'
 
 export interface StreamEvent {
-  type: 'content' | 'done' | 'error' | 'activity_completed'
+  type: 'content' | 'done' | 'error' | 'activity_completed' | 'subrayado'
+  /** Evento «subrayado»: lo que se guardó en el mensaje del alumno (con su resultado). */
+  material?: unknown
   text?: string
   message?: string
   // Activity completion data
@@ -41,7 +43,9 @@ export async function streamChatResponse(
   /** Estado de los ecualizadores del panel: Sophia lee lo que el alumno movió (spec §16.3). */
   materialState?: Record<string, unknown>,
   /** «Probar como estudiante»: el servidor oculta el material sin validar (lib/vista-estudiante.ts). */
-  comoEstudiante?: boolean
+  comoEstudiante?: boolean,
+  /** El servidor revisó lo subrayado: llega con su resultado para mostrarlo bajo la respuesta. */
+  onSubrayado?: (material: unknown) => void
 ) {
   try {
     const response = await fetch('/api/chat/stream', {
@@ -102,6 +106,8 @@ export async function streamChatResponse(
                 completedAt: data.completedAt,
               }
               onActivityCompleted(progressData)
+            } else if (data.type === 'subrayado') {
+              onSubrayado?.(data.material)
             } else if (data.type === 'done') {
               onDone()
               return

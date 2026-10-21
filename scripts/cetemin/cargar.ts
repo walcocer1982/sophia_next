@@ -19,7 +19,7 @@ import { resumen, validarSesion } from './validar'
 import type { CursoSpec, SesionSpec, Subida } from './tipos'
 
 /** El proyecto de diseño es SOLO LECTURA: de aquí salen los archivos de imagen. */
-export const FUENTE = 'C:/Users/LEGION/Claude/diseño-ppt-cetemin'
+export const FUENTE = 'C:/Users/LEGION/Claude/cetemin/diseño-ppt-cetemin'
 
 // tsx no carga .env (Prisma lo hace solo; Cloudinary no).
 for (const linea of readFileSync('.env', 'utf8').split(/\r?\n/)) {

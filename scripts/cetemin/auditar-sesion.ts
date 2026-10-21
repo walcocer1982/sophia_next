@@ -9,6 +9,8 @@
  *  R3  Sophia nunca nombró los casos del equipo.
  *  R4  La sesión terminó y cupo en el presupuesto de turnos.
  *  R5  Sophia no dijo «lee el texto» de otra actividad en vez de enseñar (aviso).
+ *  R6  Sophia no dio por buena una respuesta sobre su propio ejemplo en vez del caso (20 oct 2026).
+ *  R7  Después de enseñar, la repregunta no repite la regla (aviso).
  * Sale con código 1 si alguna regla dura falla.
  */
 import { prisma } from '../../lib/prisma'
@@ -16,10 +18,11 @@ import { agruparPorActividad } from '../../lib/cuaderno'
 import type { Activity, LessonContent } from '../../types/lesson'
 import { REGISTRO } from './cursos/registro'
 import { idsDePuntosClave } from './plantillas'
-import { MAX_TURNOS } from './validar'
+import { MAX_TURNOS, turnosPosibles } from './validar'
 import type { SesionSpec } from './tipos'
 
-const CALIFICA = /\b(correcto|exacto|perfecto|excelente|muy bien|bien pensado|bien observado|buena observación)\b/i
+// «Bien,» al inicio y «eso es parte de la respuesta» también califican (prueba del 20 oct 2026).
+const CALIFICA = /\b(correcto|exacto|perfecto|excelente|muy bien|bien pensado|bien observado|buena observación|es parte de la respuesta)\b|^\s*bien[,.:]/i
 
 function escapar(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -95,6 +98,33 @@ async function main() {
   })
   if (!r2) ok.push('R2 en cada punto clave el ejemplo resuelto fue antes de la pregunta')
 
+  // R6: una respuesta sobre el ejemplo de Sophia no se califica como buena.
+  // R7: después del primer mensaje, Sophia no vuelve a decir la regla dentro de la repregunta.
+  let r6 = 0
+  const trigramas = (s: string) => {
+    const w = s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ\s]/g, ' ').split(/\s+/).filter(Boolean)
+    return new Set(w.slice(0, -2).map((_, i) => `${w[i]} ${w[i + 1]} ${w[i + 2]}`))
+  }
+  idsDePuntosClave(spec).forEach((id, i) => {
+    const p = spec.puntosClave[i]
+    const grupo = grupos.find((g) => g.actividadId === id)
+    if (!grupo) return
+    const ms = grupo.mensajes
+    for (let k = 0; k < ms.length; k++) {
+      const m = ms[k]
+      if (m.role !== 'user' || !m.content.toLowerCase().includes(p.ejemploClave.toLowerCase())) continue
+      const respuesta = ms.slice(k + 1).find((x) => x.role === 'assistant')
+      const hit = respuesta?.content.match(CALIFICA)
+      if (hit && respuesta) { r6++; fallas.push(`R6 ${id}: el alumno habló del ejemplo («${p.ejemploClave}») y Sophia calificó («${hit[0]}»): «${corto(respuesta.content)}»`) }
+    }
+    const regla = trigramas(p.regla)
+    ms.filter((m) => m.role === 'assistant').slice(1).forEach((m) => {
+      const comunes = [...trigramas(m.content)].filter((g) => regla.has(g)).length
+      if (comunes >= 4) avisos.push(`R7 ${id}: la repregunta repite la regla: «${corto(m.content)}»`)
+    })
+  })
+  if (!r6) ok.push('R6 Sophia no dio por buena una respuesta sobre su ejemplo')
+
   // R3: los casos del equipo no se nombran
   let r3 = 0
   for (const m of mensajes) {
@@ -108,8 +138,10 @@ async function main() {
   // R4: terminó y cupo
   const turnos = mensajes.filter((m) => m.role === 'user').length
   if (!sesion.completedAt) fallas.push(`R4 la sesión no terminó (${grupos.length} de ${actividades.length} actividades con mensajes)`)
-  if (turnos > MAX_TURNOS) fallas.push(`R4 ${turnos} turnos del alumno; el tope es ${MAX_TURNOS}`)
-  if (sesion.completedAt && turnos <= MAX_TURNOS) ok.push(`R4 terminó en ${turnos} turnos (tope ${MAX_TURNOS})`)
+  // Con un turno de subrayar por actividad que lo pide, el tope crece en uno por cada una.
+  const tope = Math.max(MAX_TURNOS, turnosPosibles(actividades))
+  if (turnos > tope) fallas.push(`R4 ${turnos} turnos del alumno; el tope es ${tope}`)
+  if (sesion.completedAt && turnos <= tope) ok.push(`R4 terminó en ${turnos} turnos (tope ${tope})`)
 
   console.log(`Sesión ${sessionId}${sesion.isTest ? ' (prueba)' : ''} · ${sesion.lesson.title}`)
   console.log('Turnos por actividad: ' + grupos.map((g) => `${g.actividadId.replace(`${spec.idPrefijo}-`, '')}:${g.mensajes.filter((m) => m.role === 'user').length}`).join(' · '))

@@ -103,7 +103,11 @@ export function detectHallucination(message: string): HallucinationCheck {
       const triCounts: Record<string, number> = {}
       for (const t of trigrams) triCounts[t] = (triCounts[t] || 0) + 1
       const maxTri = Math.max(...Object.values(triCounts))
-      if (maxTri >= 3) {
+      // Y que la frase repetida ocupe una parte grande del texto (21 oct 2026):
+      // en una respuesta escrita de cien palabras, «trabajo en altura» tres
+      // veces es natural; las simulaciones marcaban esas respuestas como ruido
+      // y Sophia las trataba como fuera de tema. Un bucle de Whisper llena el texto.
+      if (maxTri >= 3 && (maxTri * 3) / tokens.length > 0.3) {
         const topTri = Object.entries(triCounts).find(([, c]) => c === maxTri)?.[0]
         return { isHallucination: true, reason: `frase "${topTri}" repetida ${maxTri} veces (loop de Whisper)` }
       }

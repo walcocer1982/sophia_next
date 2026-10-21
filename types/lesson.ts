@@ -79,7 +79,7 @@ export interface Teaching {
 // reescribe en el chat; el alumno los tiene a la vista mientras responde.
 // Especificación: investigacion/panel-de-apoyo-especificacion.md
 
-export type SupportBlockType = 'image' | 'compare' | 'formula' | 'table' | 'text' | 'case' | 'diagram' | 'simulator'
+export type SupportBlockType = 'image' | 'compare' | 'formula' | 'table' | 'text' | 'case' | 'diagram' | 'simulator' | 'classify'
 export type ShowWhen = 'on_start' | 'on_reference' | 'on_demand'
 
 export interface SupportBlockBase {
@@ -141,6 +141,10 @@ export interface TextBlock extends SupportBlockBase {
   type: 'text'
   body: string               // Markdown simple (negrita, listas numeradas)
   kind?: 'fragment' | 'consigna' | 'norma' | 'rubrica'
+  /** El alumno puede tocar sus líneas para subrayarlas (lib/subrayado.ts): evidencia de lectura. */
+  subrayable?: boolean
+  /** Índices (de `lineasDelTexto`) de las líneas que respaldan la respuesta de la actividad. Nunca llegan al navegador. */
+  lineasClave?: number[]
 }
 
 export interface CaseBlock extends SupportBlockBase {
@@ -168,6 +172,22 @@ export interface SimulatorBlock extends SupportBlockBase {
   labels?: { pass: string; fail: string }
 }
 
+/**
+ * Clasificar (20 oct 2026): el alumno arrastra tarjetas a columnas. Es
+ * evidencia de lectura: para ubicar bien una tarjeta hay que haber leído el
+ * material. El estado viaja con cada mensaje, como el del ecualizador; Sophia
+ * lo lee y el verificador lo recibe como parte de la respuesta.
+ */
+export interface ClassifyBlock extends SupportBlockBase {
+  type: 'classify'
+  /** Instrucción corta que se ve arriba del bloque («Arrastra cada situación a su columna»). */
+  prompt?: string
+  /** Columnas donde se sueltan las tarjetas, en el orden en que se dibujan. */
+  bins: { id: string; label: string }[]
+  /** Tarjetas. `bin` es la columna correcta: la conocen Sophia y el verificador, nunca el alumno. */
+  cards: { id: string; text: string; bin: string }[]
+}
+
 export interface DiagramBlock extends SupportBlockBase {
   type: 'diagram'
   kind: 'flow' | 'cycle' | 'hierarchy' | 'timeline'
@@ -185,6 +205,7 @@ export type SupportBlock =
   | CaseBlock
   | DiagramBlock
   | SimulatorBlock
+  | ClassifyBlock
 
 /**
  * Hints opcionales para guiar la verificación

@@ -17,3 +17,9 @@ test('la paráfrasis con las palabras clave sí cuenta', () => {
 test('una pregunta sin palabras largas no se puede comprobar: se da por planteada', () => {
   assert.equal(planteaLaPregunta('¿Y qué más?', '¿Por qué esa?'), true)
 })
+
+test('la pregunta interrogativa completa cuenta aunque cambie la introducción (20 oct)', () => {
+  const pregunta = 'De lo que señalaste: ¿Qué hay abajo de cada uno?'
+  assert.equal(planteaLaPregunta('Señalas los bordes.\n\nDe lo que viste en esa obra: **¿Qué hay abajo de cada uno?**', pregunta), true)
+  assert.equal(planteaLaPregunta('Bien. ¿Qué crees que deberías hacer?', pregunta), false)
+})

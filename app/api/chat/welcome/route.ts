@@ -134,7 +134,12 @@ export async function POST(request: Request) {
     // Si el caso o el material de la primera actividad está en el panel, la
     // bienvenida remite a él y no lo recita: en EVA-NOTA (6 oct) copiaba al
     // chat los cinco datos de Luis que el alumno ya tenía a la vista.
-    const materialEnPanel = getActivityBlocks(primera).length > 0
+    // También cuenta lo fijado de actividades anteriores: al probar desde «Me
+    // pregunto» (21 oct 2026), la foto venía fijada de «Veo», esto daba falso
+    // y la bienvenida describía la foto entera.
+    const materialEnPanel =
+      getActivityBlocks(primera).length > 0 ||
+      blocksForActivity(contentJson, firstActivity.activityId, verSinValidar).pinned.length > 0
     const presentarMaterial = materialEnPanel
       ? 'El caso y el material están en la PIZARRA del estudiante (ver MATERIAL DE APOYO): remite a ellos por su título («mira el caso de … en la pizarra»), NUNCA digas «el panel» ni «abajo», y NO copies sus datos en el mensaje'
       : 'Presenta el caso o material que haga falta'

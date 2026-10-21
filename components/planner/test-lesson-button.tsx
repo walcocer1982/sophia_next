@@ -27,7 +27,10 @@ function guardarPreferencia(v: boolean) {
 type Activity = {
   id: string
   type: string
+  /** Nombre de la actividad, como lo ve el alumno (lib/planner/titulos.ts). */
   title: string
+  /** El caso («Caso Rosa») o el paso de la rutina («Veo»). */
+  subtitle?: string
 }
 
 export function TestLessonButton({
@@ -63,15 +66,19 @@ export function TestLessonButton({
 
       const data = await res.json()
       if (res.ok) {
+        // El botón queda bloqueado hasta que la lección abre: router.push no
+        // espera la navegación. Si se reactivaba aquí, un segundo clic durante
+        // la primera compilación creaba otra sesión de prueba, que borraba la
+        // primera, y la pantalla fallaba con «Failed to generate welcome
+        // message» (19 oct 2026).
         router.push(urlDeLaPrueba(data.sessionId, comoEstudiante))
-      } else {
-        toast.error(data.error || 'Error al iniciar prueba')
+        return
       }
+      toast.error(data.error || 'Error al iniciar prueba')
     } catch {
       toast.error('Error de conexión')
-    } finally {
-      setLoading(false)
     }
+    setLoading(false)
   }
 
   const typeLabel: Record<string, string> = {
@@ -110,9 +117,8 @@ export function TestLessonButton({
 
         <div className="mb-4 max-h-72 space-y-1.5 overflow-y-auto">
           {activities.map((activity, idx) => {
-            const preview = activity.title
-              ? activity.title.split(/[.!?]/)[0].slice(0, 80) + (activity.title.length > 80 ? '...' : '')
-              : ''
+            // Antes mostraba el tipo y el inicio de la instrucción interna de Sophia (21 oct 2026).
+            const detalle = [typeLabel[activity.type] || activity.type, activity.subtitle].filter(Boolean).join(' · ')
             return (
               <button
                 key={activity.id}
@@ -127,16 +133,8 @@ export function TestLessonButton({
                   {idx + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-medium text-gray-800">
-                      {typeLabel[activity.type] || activity.type}
-                    </span>
-                  </div>
-                  {preview && (
-                    <p className="text-xs text-gray-500 line-clamp-2">
-                      {preview}
-                    </p>
-                  )}
+                  <p className="font-medium text-gray-800">{activity.title}</p>
+                  <p className="text-xs text-gray-500">{detalle}</p>
                 </div>
               </button>
             )

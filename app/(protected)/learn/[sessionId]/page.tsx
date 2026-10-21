@@ -8,6 +8,7 @@ import type { LessonContent } from '@/types/lesson'
 import { allLessonBlocks, panelInfo } from '@/lib/support-blocks'
 import { PARAM_VISTA, esVistaEstudiante } from '@/lib/vista-estudiante'
 import { nombreDeActividad } from '@/lib/planner/titulos'
+import { ocultarClaves } from '@/lib/subrayado'
 import { cierreDeVentana } from '@/lib/monitor'
 import { formatDateLong, formatTime } from '@/lib/formatters'
 import Link from 'next/link'
@@ -125,11 +126,13 @@ export default async function ChatPage({
     content: msg.content,
     createdAt: msg.timestamp,
     activityId: msg.activityId,
+    material: msg.material,
   }))
 
   // Material de apoyo de toda la lección (bloques + imágenes viejas convertidas).
   // Las imágenes sin validar solo se ven en sesiones de prueba.
-  const allBlocks = allLessonBlocks(contentJson, verSinValidar)
+  // Sin `lineasClave`: el navegador no debe saber qué línea respalda la respuesta.
+  const allBlocks = ocultarClaves(allLessonBlocks(contentJson, verSinValidar))
   const activityOrder = (contentJson?.activities || []).map((a) => a.id)
   const keyPoints = lessonSession.lesson.keyPoints || []
 
