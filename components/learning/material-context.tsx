@@ -236,6 +236,8 @@ export function MaterialProvider({
       setFocus({ id: ids[0], nonce: ++nonce.current, byUser: false })
       setUnseen(true)
     }
+    // Resuelto (línea verde o revelada): el marco amarillo se apaga.
+    if (!ids.length && antes.length) setFocus((f) => (f && antes.includes(f.id) ? null : f))
   }, [])
 
   const value = useMemo(

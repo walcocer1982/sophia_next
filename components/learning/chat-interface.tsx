@@ -10,7 +10,7 @@ import type { ChatMessage, OptimisticMessage } from '@/types/chat'
 import type { PlannerAttachment } from '@/types/planner'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { useMaterial } from './material-context'
-import { paraGuardar, textosPedidosEn } from '@/lib/subrayado'
+import { paraGuardar, pendientesDeSubrayar } from '@/lib/subrayado'
 import { toast } from 'sonner'
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -85,7 +85,7 @@ export function ChatInterface({
 
   // El panel muestra lo que Sophia citó: se calcula de sus mensajes, también
   // mientras escribe, para que el bloque aparezca cuando lo nombra.
-  const { reportMessages, getMaterialState, subrayados, blocksById, reportSubrayadosRevisados, registrarRevisor, setPendienteSubrayar, openBlock } = useMaterial()
+  const { reportMessages, getMaterialState, subrayados, blocksById, reportSubrayadosRevisados, registrarRevisor, setPendienteSubrayar, openBlock, subrayadosRevisados } = useMaterial()
   useEffect(() => {
     reportMessages(messages.filter((m) => m.role === 'assistant').map((m) => m.content))
   }, [messages, reportMessages])
@@ -233,16 +233,25 @@ export function ChatInterface({
   // Sophia, que en ese turno escribe el código con una frase fija
   // (lib/subrayado.ts). Mientras la línea no se toque, la pizarra la ilumina y la
   // caja avisa que no hace falta escribir de nuevo (prueba de Edwin, 21 oct 2026).
+  // Y sigue pendiente mientras la última revisión sea «no respalda» (línea
+  // equivocada), hasta que una salga verde o se revele (lib/subrayado.ts).
   const ultimoDeSophia = [...messages].reverse().find((m) => m.role === 'assistant')
-  const pedidosDeSubrayar = useMemo(() => {
-    if (!ultimoDeSophia || isLoading || cerrada) return []
-    return textosPedidosEn(ultimoDeSophia.content, [...blocksById.values()]).filter((id) => !subrayados[id]?.lineas.length)
-  }, [ultimoDeSophia, isLoading, cerrada, blocksById, subrayados])
+  const actividadActual = progress.currentActivityId
+  const pendientes = useMemo(() => {
+    if (isLoading || cerrada) return { ids: [] as string[], motivo: null }
+    return pendientesDeSubrayar({
+      ultimoMensajeDeSophia: ultimoDeSophia?.content ?? null,
+      bloques: [...blocksById.values()],
+      subrayados,
+      revisados: subrayadosRevisados,
+      actividadActual,
+    })
+  }, [ultimoDeSophia, isLoading, cerrada, blocksById, subrayados, subrayadosRevisados, actividadActual])
   useEffect(() => {
-    setPendienteSubrayar(pedidosDeSubrayar)
-  }, [pedidosDeSubrayar, setPendienteSubrayar])
-  const avisoSubrayar = pedidosDeSubrayar.length
-    ? { titulos: pedidosDeSubrayar.map((id) => blocksById.get(id)?.title ?? '').filter(Boolean), onIr: () => openBlock(pedidosDeSubrayar[0]) }
+    setPendienteSubrayar(pendientes.ids)
+  }, [pendientes, setPendienteSubrayar])
+  const avisoSubrayar = pendientes.ids.length && pendientes.motivo
+    ? { titulos: pendientes.ids.map((id) => blocksById.get(id)?.title ?? '').filter(Boolean), motivo: pendientes.motivo, onIr: () => openBlock(pendientes.ids[0]) }
     : null
 
   const handleSendMessage = async (content: string, attachments?: PlannerAttachment[]) => {

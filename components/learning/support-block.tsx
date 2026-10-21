@@ -263,11 +263,13 @@ function ImageBody({ block, isTest, onAmpliar }: { block: ImageBlock; isTest: bo
           Imagen pendiente de validación: los estudiantes no la ven.
         </p>
       )}
-      {/* Alto limitado (21 oct 2026): en una laptop la lámina ocupaba toda la
-          altura y el texto para subrayar quedaba fuera de vista. El marco se ajusta
-          a la imagen, así las marcas (en % de la imagen) siguen en su lugar.
-          Tocarla la amplía. */}
-      <div className="mx-3 mt-3 flex justify-center rounded-lg bg-[#09222d]">
+      {/* El ancho manda (21 oct 2026): la imagen ocupa todo el ancho de la tarjeta.
+          Solo si la actividad tiene un texto para subrayar, su alto no pasa de la
+          mitad de la pizarra (cqh, ver pizarra.tsx), para que la norma quede a la
+          vista. El marco se ajusta a la imagen, así las marcas (en % de la imagen)
+          siguen en su lugar. Sin fondo: el tema noche volvía amarillo el azul y,
+          con la imagen angosta, se veía un marco amarillo. Tocarla la amplía. */}
+      <div className="mx-3 mt-3 flex justify-center">
         <button
           type="button"
           onClick={onAmpliar}
@@ -276,7 +278,7 @@ function ImageBody({ block, isTest, onAmpliar }: { block: ImageBlock; isTest: bo
           className="relative block max-w-full overflow-hidden rounded-lg enabled:cursor-zoom-in"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={block.url} alt={block.description} className="block h-auto max-h-[40vh] w-auto max-w-full" />
+          <img src={block.url} alt={block.description} className="block h-auto w-auto max-w-full group-data-[con-subrayado=true]/pizarra:max-h-[50cqh]" />
           <Markers block={block} />
         </button>
       </div>
@@ -443,12 +445,20 @@ function TextoSubrayable({ block, large = false }: { block: TextBlock; large?: b
   const enRevision = tocada && tocada.nonce === (revisado?.nonce ?? 0) ? tocada.n : null
   return (
     <div className={cn('px-2.5 py-3 leading-relaxed text-gray-900', large ? 'text-lg' : 'text-[15px]')}>
-      <p className={cn('mb-2 px-1', pendiente ? 'rounded-md bg-[#fbc50b]/25 px-2 py-1.5 text-sm font-semibold text-[#09222d]' : 'text-xs text-gray-600')}>
-        {estado.lineas.length
-          ? `${estado.lineas.length} subrayada${estado.lineas.length > 1 ? 's' : ''}.`
-          : pendiente
-            ? 'Toca aquí la línea que respalda tu respuesta.'
-            : 'Toca la línea que respalda tu respuesta: se revisa al tocarla.'}
+      {/* El rótulo dice en qué estado está (21 oct 2026): «1 subrayada» no servía
+          con la línea ya revisada, revelada o equivocada. */}
+      <p className={cn('mb-2 px-1', pendiente ? 'rounded-md bg-[#fbc50b]/25 px-2 py-1.5 text-sm font-semibold text-[#09222d]' : revisado?.revelada?.length || revisado?.resultado === 'respalda' ? 'text-xs font-semibold text-green-800' : 'text-xs text-gray-600')}>
+        {revisado?.revelada?.length
+          ? 'La línea que respalda tu respuesta está en verde.'
+          : revisado?.resultado === 'respalda' && estado.lineas.length
+            ? 'Tu línea respalda tu respuesta.'
+            : pendiente && revisado?.resultado === 'no_respalda'
+              ? 'Esa línea no respalda tu respuesta. Toca otra.'
+              : pendiente
+                ? 'Toca aquí la línea que respalda tu respuesta.'
+                : estado.lineas.length
+                  ? `${estado.lineas.length} subrayada${estado.lineas.length > 1 ? 's' : ''}.`
+                  : 'Toca la línea que respalda tu respuesta: se revisa al tocarla.'}
       </p>
       <ul className="space-y-1">
         {lineas.map((linea, n) => {

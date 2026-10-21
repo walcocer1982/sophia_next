@@ -23,3 +23,13 @@ test('una respuesta escrita larga que repite una frase técnica no es ruido (sim
   assert.equal(r.isHallucination, false, r.reason)
   assert.equal(detectHallucination('cómo puede ver cómo puede ver cómo puede ver cómo puede ver').isHallucination, true)
 })
+
+test('prueba del 21 oct: repetir la palabra de la pregunta no es ruido', () => {
+  const respuesta = 'Abajo del borde está el piso de la planta de abajo, y abajo de las tablas apiladas hay gente trabajando.'
+  assert.equal(detectHallucination(respuesta, 'De los puntos que señalaste: ¿Qué hay abajo de cada uno?').isHallucination, false)
+  // Aun sin la pregunta: tres veces en once palabras ya no alcanza
+  assert.equal(detectHallucination(respuesta).isHallucination, false)
+  // Una palabra en bucle sigue siendo ruido
+  assert.equal(detectHallucination('flotación flotación flotación flotación cámara flotación').isHallucination, true)
+  assert.equal(detectHallucination('desatado flotación lixiviación desatado flotación lixiviación desatado flotación lixiviación').isHallucination, true)
+})
