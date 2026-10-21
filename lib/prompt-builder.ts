@@ -35,6 +35,14 @@ interface PromptBuilderContext {
   isTest?: boolean
   /** Bloques y señalamientos que Sophia ya mostró en la sesión (marcadores en sus mensajes). */
   cited?: Cited
+  /**
+   * Este turno agota los intentos: el código cierra la actividad sin darla por
+   * lograda (avance forzado). La ruta pasa `ready_to_advance: true` para que
+   * Sophia cierre o haga la transición, y esta marca para que no lo presente
+   * como logro. Antes el prompt contaba los intentos anteriores y le pedía
+   * seguir preguntando mientras el código ya había avanzado (19 oct 2026).
+   */
+  cierraPorTope?: boolean
 }
 
 // La intención del alumno («no sé», «dame una pista») la decide el verificador
@@ -178,6 +186,7 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
     pinnedBlocks = [],
     isTest = false,
     cited,
+    cierraPorTope = false,
   } = context
   const isCodeMethodology = methodology === 'CODE'
 
@@ -262,6 +271,8 @@ REGLAS IMPORTANTES:
 5. ✅ PISTAS PROGRESIVAS: Sutiles primero, luego más directas
 6. ❌ NO REVELES LA RESPUESTA: Guía sin dar respuesta completa
 7. ❌ NO AVANCES SIN VERIFICAR: Confirma comprensión primero
+8. ❌ NO COMPLETES POR EL ESTUDIANTE: si su respuesta está a medias, nombra lo que sí dijo y pide solo lo que falta. Nunca digas tú la decisión, la conclusión o la aplicación al caso que le toca decir a él, ni metas en tu pregunta el dato que tiene que buscar (cifras, umbrales, nombres de norma). Él hace el trabajo; tú das la menor pista posible.
+9. ❌ NO CITES FUENTES QUE NO ESTÁN: nombra solo normas, artículos, cifras o fuentes que aparezcan en el material de la pizarra, en tu instrucción o en el contexto de la lección. Si no está ahí, no lo nombres.
 
 ---
 
@@ -532,8 +543,8 @@ ${optimizedHistory}
         dynamicPrompt += `\n\nESTADO: COMPLETADA (ÚLTIMA ACTIVIDAD — ES EL FINAL DE LA LECCIÓN)
 
 CÓMO RESPONDER (50-70 palabras MÁXIMO):
-1. ${sinVerificar ? 'Cierre neutro en 1 oración: "Gracias, con esto terminamos."' : 'Validación corta en 1 oración: "Exacto." o "Perfecto, lo entendiste."'}
-2. Resumen breve en 2-3 bullets de lo APRENDIDO EN TODA LA LECCIÓN.
+1. ${sinVerificar ? 'Cierre neutro en 1 oración: "Gracias, con esto terminamos."' : cierraPorTope && isEvaluative ? 'Reconoce en 1 oración lo que sí dijo y explica en 1-2 oraciones lo que faltó' + salvoEliminatorios + '. Se acabaron los intentos: NO lo presentes como logrado y NO hagas más preguntas sobre esta actividad.' : isEvaluative ? 'Validación corta en 1 oración: "Exacto." o "Perfecto, lo entendiste."' : 'Recoge lo que respondió en 1 oración neutra, sin calificar (esta actividad no lleva nota). Si nombró una duda, dile que el instructor la verá: NO la respondas ni la expliques tú, aunque sea una pregunta.'}
+2. Resumen breve en 2-3 bullets de lo APRENDIDO EN TODA LA LECCIÓN, tomado de los PUNTOS CLAVE con sus mismas palabras. PROHIBIDO agregar cifras, normas, ejemplos o comparaciones que no estén en ellos: un resumen improvisado enseña cosas falsas al final.
 3. Cierra EXACTAMENTE con: "Gracias por participar." o "¡Gracias por participar!". Una sola oración, sin agregar nada.
 
 ⛔ PROHIBIDO ABSOLUTO EN EL CIERRE:
@@ -545,13 +556,13 @@ CÓMO RESPONDER (50-70 palabras MÁXIMO):
 - Promocionar nada ni sugerir otros cursos
 - Cualquier frase de cierre que no sea literalmente "Gracias por participar"
 
-Si el estudiante escribe DESPUÉS de tu cierre: si pregunta algo de la lección, respóndele en 2-3 oraciones, sin hacerle preguntas; si solo agradece o se despide, contesta en 1 oración. No reabras la evaluación ni propongas actividades nuevas.`
+Si el estudiante escribe DESPUÉS de tu cierre: si pregunta algo de la lección, respóndele en 2-3 oraciones solo con lo que está en el material o en las instrucciones de la lección (si no está ahí, dile que lo verá con el instructor), sin hacerle preguntas; si solo agradece o se despide, contesta en 1 oración. No reabras la evaluación ni propongas actividades nuevas.`
       } else if (nextActivity && nextActivity.checks?.length) {
         // El cierre empieza con una comprobación que el código agrega al final
         // de este mensaje (route.ts, checksIntro): Sophia solo hace la transición.
         dynamicPrompt += `\n\nESTADO: COMPLETADA - TRANSICIÓN AL CIERRE
 
-En UNA o DOS oraciones: reconoce en concreto lo que el estudiante acaba de lograr y anuncia que van a cerrar la lección.
+En UNA o DOS oraciones: ${cierraPorTope && isEvaluative ? 'reconoce lo que sí dijo y di en una frase lo que faltó' + salvoEliminatorios + ' (se acabaron los intentos: no lo presentes como logrado)' : 'reconoce en concreto lo que el estudiante acaba de lograr'} y anuncia que van a cerrar la lección.
 ⛔ PROHIBIDO hacer cualquier pregunta, listar opciones o resumir la lección: el sistema agrega a continuación las preguntas de comprobación.
 ⛔ PROHIBIDO despedirte o decir «Gracias por participar»: la lección todavía no terminó (falta la comprobación y la reflexión final).`
       } else if (nextActivity) {
@@ -566,15 +577,25 @@ En UNA o DOS oraciones: reconoce en concreto lo que el estudiante acaba de logra
         // («para subirlo a Destacado necesita…»). Se nombra explícitamente lo
         // que no se puede adelantar.
         const nextCorrect = nextChoice ? nextChoice.options[nextChoice.answer] : null
+        // Simulaciones del 20 oct 2026: arriba del prompt siguen la instrucción y
+        // el material de la actividad que se cierra, y Sophia los tomaba por los
+        // del tema nuevo: citaba la lámina anterior («Mira "El umbral según el
+        // rubro"» al presentar bordes), volvía a enseñar el tema cerrado o
+        // inventaba una pregunta sobre él. Se nombra lo cerrado y lo que no se cita.
+        const usaLaSiguiente = new Set(nextActivity.teaching?.uses ?? [])
+        const materialCerrado = activityBlocks.filter((b) => !usaLaSiguiente.has(b.id)).map((b) => `«${b.title}»`)
 
         dynamicPrompt += `\n\nESTADO: COMPLETADA - TRANSICIÓN A SIGUIENTE ACTIVIDAD
 
+ACTIVIDAD QUE SE CIERRA: «${activity.title ?? `Actividad ${position}`}». Ya está cerrada: la INSTRUCCIÓN y el MATERIAL de arriba son de ella. No la vuelvas a enseñar, no repitas su ejemplo y no hagas preguntas sobre ella.${materialCerrado.length ? ` No cites su material (${materialCerrado.join(', ')}), tampoco para introducir el tema nuevo.` : ''}
+TEMA NUEVO: «${nextActivity.title ?? `Actividad ${position + 1}`}». Enséñalo con la instrucción y el material de SIGUIENTE ACTIVIDAD, más abajo.
+
 ⚠️ REGLA ANTI-REPETICIÓN: Si ya felicitaste o resumiste en tu mensaje anterior, NO vuelvas a hacerlo. Ve DIRECTO al nuevo tema.
 
-FORMATO DE TRANSICIÓN (máximo 80 palabras total):
-1. ${sinVerificar ? '"Gracias, sigamos." (sin validar la respuesta: no pudo verificarse)' : '"Correcto/Bien." (1 palabra de cierre, NO resumas lo que ya dijiste)'}
+FORMATO DE TRANSICIÓN (máximo 80 palabras total; hasta 130 si la instrucción de la siguiente actividad pide enseñar o resolver un ejemplo antes de preguntar: en ese caso hazlo antes de la pregunta, nunca la saltes):
+1. ${sinVerificar ? '"Gracias, sigamos." (sin validar la respuesta: no pudo verificarse)' : cierraPorTope && isEvaluative ? 'Reconoce en 1 oración lo que sí dijo y explica en 1-2 oraciones lo que faltó' + salvoEliminatorios + '. Se acabaron los intentos: NO lo presentes como logrado y NO hagas más preguntas sobre esta actividad.' : isEvaluative ? '"Correcto/Bien." (1 palabra de cierre, NO resumas lo que ya dijiste)' : 'Recoge lo que dijo en una frase neutra ("Dices que…"), sin calificar: esta actividad no lleva nota, así que PROHIBIDO "correcto", "exacto", "bien", "bien pensado"'}
 2. Introduce el nuevo tema en 2-3 oraciones máximo
-3. ${nextChoiceText ? 'Termina presentando la PREGUNTA CERRADA, con sus opciones y letras EXACTAMENTE como están abajo (una por línea). Pide que elija una letra. NO hagas todavía la pregunta abierta y NO adelantes la respuesta correcta en la introducción (ni el número, ni el nivel, ni la causa): explica la regla general, el caso lo resuelve el estudiante.' : 'Termina con la pregunta de verificación'}
+3. ${nextChoiceText ? 'Termina presentando la PREGUNTA CERRADA, con sus opciones y letras EXACTAMENTE como están abajo (una por línea). Pide que elija una letra. NO hagas todavía la pregunta abierta y NO adelantes la respuesta correcta en la introducción (ni el número, ni el nivel, ni la causa): explica la regla general, el caso lo resuelve el estudiante.' : 'Termina con la pregunta de verificación TAL CUAL, como única pregunta: sin reformularla, sin agregarle una aclaración («es decir, …») ni una segunda pregunta'}
 
 SIGUIENTE ACTIVIDAD:
 Instrucción: ${nextTeaching}${(() => {
@@ -582,11 +603,17 @@ Instrucción: ${nextTeaching}${(() => {
           if (!material.length) return ''
           const visibles = material.filter((b) => (b.showWhen ?? 'on_start') === 'on_start' || cited?.blocks.has(b.id))
           const ocultos = material.filter((b) => b.showWhen === 'on_reference' && !cited?.blocks.has(b.id))
+          // Bloque «clasificar»: la ubicación de las tarjetas es la decisión del estudiante (lib/clasificar.ts).
+          const paraUbicar = material.filter((b) => b.type === 'classify')
+          // Texto subrayable (lib/subrayado.ts): se pide en dos turnos (responde y,
+          // en el siguiente, señala); el turno de subrayar lo pide el código.
           return [
             visibles.length ? `
 Material que aparece en la pizarra al pasar (cítalo por su título, no lo copies): ${visibles.map((b) => `«${b.title}»`).join(', ')}` : '',
             ocultos.length ? `
 Material oculto de la siguiente actividad: muéstralo al presentarlo escribiendo su marcador al final de la oración: ${ocultos.map((b) => `«${b.title}» [[block:${b.id}]]`).join(', ')}` : '',
+            paraUbicar.length ? `
+Al hacer la pregunta, pídele en la misma oración que antes ubique las tarjetas de ${paraUbicar.map((b) => `«${b.title}»`).join(', ')} en la pizarra: dónde las pone es su decisión y la razón la escribe él. No digas dónde va ninguna.` : '',
           ].join('')
         })()}
 ${nextChoiceText ? `PREGUNTA CERRADA (paso 1, copia literal):
@@ -640,6 +667,8 @@ CÓMO RESPONDER (máximo 50-70 palabras):
 - Revelar el nombre del concepto que falta (no digas "te falta hablar de X")
 - Listar opciones para que elija ("¿es A, B o C?")
 - Dar la respuesta dentro de la pregunta misma
+- Decir tú la decisión o la conclusión que falta, o aplicar la regla al caso por él
+- Meter en la pregunta el dato que tiene que buscar (cifras, umbrales, nombres de norma)
 
 Nivel acumulado actual: ${verificationResult.understanding_level}
 
@@ -670,28 +699,33 @@ CÓMO RESPONDER (máximo 60-80 palabras):
 1. "Bien pensado. [Lo que dijo bien] es correcto."
 2. UNA pregunta enfocada en lo que falta
 3. NO repitas lo que ya respondió correctamente
-⛔ NO uses "Perfecto" ni "Exacto" — la respuesta está incompleta`
+⛔ NO uses "Perfecto" ni "Exacto" — la respuesta está incompleta
+⛔ NO digas tú lo que falta ni lo apliques al caso por él, y no metas en la pregunta el dato que tiene que buscar`
           }
           break
         case 'incorrect':
           responseGuidance = `RESPUESTA INCORRECTA — Hay errores conceptuales.
 CÓMO RESPONDER (máximo 60-80 palabras):
-1. "No exactamente." o "Piénsalo de nuevo."
-2. Da UNA pista concreta que guíe hacia la respuesta correcta
-3. Reformula la pregunta de forma más específica
+1. "No exactamente." o "Piénsalo de nuevo." Si la respuesta revela una idea equivocada concreta (sobre a quién, cuándo o dónde aplica algo), nómbrala sin juicio en una frase ("Estás tomando X como si fuera Y").
+2. Da UNA pista concreta que guíe hacia la respuesta correcta: la menor que le sirva
+3. Reformula la pregunta de forma más específica, sin meter en ella el dato que tiene que buscar
 ⛔ NUNCA digas "Perfecto", "Exacto", "Correcto" ni "Muy bien" cuando la respuesta es incorrecta
 ⛔ NUNCA digas "Interesante" como sustituto de señalar el error — sé honesto pero amable`
           break
         case 'off_topic':
-          responseGuidance = `RESPUESTA FUERA DE TEMA — Redirige amablemente.
-CÓMO RESPONDER (máximo 40 palabras):
-1. "Buena observación, pero enfoquémonos en..."
-2. Reformula la pregunta directamente`
+          // Cerrada (20 oct 2026): con la guía suave, Sophia dijo «Bien, eso es
+          // parte de la respuesta» a una respuesta sobre su propio ejemplo y
+          // siguió preguntando por el ejemplo en vez del caso.
+          responseGuidance = `RESPUESTA FUERA DE TEMA — no responde la pregunta de esta actividad.${verificationResult.feedback ? `\nEl evaluador dice: ${verificationResult.feedback}` : ''}
+CÓMO RESPONDER (máximo 40 palabras, dos oraciones):
+1. Di en una frase, sin calificar, sobre qué respondió y que eso no es lo que se pregunta. Si respondió sobre el ejemplo que TÚ diste, dilo así: "Eso es el ejemplo que te di."
+2. Repite la pregunta de la actividad TAL CUAL: "${verification.question}"
+⛔ PROHIBIDO: "bien", "correcto", "exacto", "buena observación", "eso es parte de la respuesta"; seguir el hilo de lo que dijo con otra pregunta; dar pistas; reformular la pregunta.`
           break
         case 'correct':
           responseGuidance = `RESPUESTA CORRECTA.
 CÓMO RESPONDER (máximo 2-3 oraciones):
-1. "Correcto." o "Exacto." + 1 oración de por qué es importante
+1. ${isEvaluative ? '"Correcto." o "Exacto." + 1 oración de por qué es importante' : 'Recoge lo que dijo en una frase neutra ("Dices que…"). Esta actividad no lleva nota: PROHIBIDO calificar ("correcto", "exacto", "bien", "bien pensado", "muy bien")'}
 2. Siguiente pregunta o transición inmediata
 ⛔ NO expandas ni repitas lo que el estudiante ya dijo`
           break
@@ -774,7 +808,7 @@ ESTADO DEL PASO 1: ya resuelto (${choiceState.correct ? 'acertó' : `no acertó;
   // - No tiene base + primer intento + sin explicación previa → MINI-EXPLICACIÓN
   //   didáctica (hay que enseñar antes de seguir preguntando)
   // - Pide ayuda, o segunda vez → reformulación con escenario (sin opciones reveladas)
-  if (studentIsUnsure) {
+  if (studentIsUnsure && !cierraPorTope) {
     const firstTime = (attempts || 0) <= 1
     // Conversación sobre el panel (spec §16.4): el primer «no sé» no se
     // responde explicando, se responde pidiendo la acción. Si después de mover
@@ -855,10 +889,10 @@ CÓMO RESPONDER (máx 60 palabras):
   // Scaffolding docente: progresión por intentos. Ninguna etapa entrega la
   // respuesta a un criterio eliminatorio; y agotar los intentos no es lograr:
   // el código avanza al alumno (avance forzado), pero no lo aprueba.
-  if (attempts >= 1) {
+  if (attempts >= 1 && !cierraPorTope) {
     const hintStrategies: Record<number, string> = {
       1: `INTENTO 2/${maxAttempts} — PISTA SUTIL:
-- Reformula la pregunta de otra manera
+- Reformula la pregunta de otra manera, sin meter en ella el dato que tiene que buscar
 - Da una pista indirecta: "Piensa en..." o "Fíjate en..."
 - NO des la respuesta`,
       2: `INTENTO 3/${maxAttempts} — PISTA DIRECTA:

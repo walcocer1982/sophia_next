@@ -17,6 +17,8 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, useS
 import { citedBlocksInOrder, citedFromTexts, type Cited } from '@/lib/material-markers'
 import type { BlockWithActivity } from '@/lib/support-blocks'
 import type { MaterialState, SimState } from '@/lib/simulator'
+import type { ClasifState } from '@/lib/clasificar'
+import { leerSubrayadoGuardado, type SubrayadoGuardado, type SubrayadoState } from '@/lib/subrayado'
 
 interface Focus {
   id: string
@@ -49,8 +51,21 @@ interface MaterialContextValue {
   setSimState: (blockId: string, state: SimState) => void
   /** Vuelve un ecualizador a su caso inicial (al dejar la actividad que lo usa). */
   resetSimState: (blockId: string) => void
-  /** Lo que el chat manda al servidor con cada mensaje (spec §16.3). */
-  getMaterialState: () => MaterialState
+  /** Estado de cada bloque «clasificar»: qué tarjeta dejó el alumno en qué columna. */
+  clasifStates: Record<string, ClasifState>
+  setClasifState: (blockId: string, state: ClasifState) => void
+  /** Líneas subrayadas de cada texto `subrayable`. */
+  subrayados: Record<string, SubrayadoState>
+  setSubrayado: (blockId: string, state: SubrayadoState) => void
+  /** Lo último que el servidor revisó de cada texto (resultado y línea revelada); `nonce` crece con cada revisión. */
+  subrayadosRevisados: Record<string, SubrayadoGuardado & { nonce?: number }>
+  reportSubrayadosRevisados: (materiales: unknown[]) => void
+  /** La pizarra pide revisar lo subrayado (al tocar una línea); el chat decide si corresponde. */
+  /** true si el chat mandó la revisión (el alumno ya respondió y es su turno). */
+  pedirRevision: () => boolean
+  registrarRevisor: (fn: (() => boolean) | null) => void
+  /** Lo que el chat manda al servidor con cada mensaje (spec §16.3): ecualizadores y clasificaciones, por id de bloque. */
+  getMaterialState: () => Record<string, unknown>
 }
 
 const VACIO: Cited = { blocks: new Set(), markers: new Set() }
@@ -167,11 +182,44 @@ export function MaterialProvider({
     simRef.current = resto
     setSimStates(resto)
   }, [])
-  const getMaterialState = useCallback(() => simRef.current, [])
+  // Clasificaciones: mismo camino que los ecualizadores (viajan con cada mensaje).
+  const [clasifStates, setClasifStates] = useState<Record<string, ClasifState>>({})
+  const clasifRef = useRef<Record<string, ClasifState>>({})
+  const setClasifState = useCallback((blockId: string, state: ClasifState) => {
+    clasifRef.current = { ...clasifRef.current, [blockId]: state }
+    setClasifStates(clasifRef.current)
+  }, [])
+  // Subrayados: mismo camino (viajan con cada mensaje).
+  const [subrayados, setSubrayados] = useState<Record<string, SubrayadoState>>({})
+  const subrRef = useRef<Record<string, SubrayadoState>>({})
+  const setSubrayado = useCallback((blockId: string, state: SubrayadoState) => {
+    subrRef.current = { ...subrRef.current, [blockId]: state }
+    setSubrayados(subrRef.current)
+  }, [])
+  const getMaterialState = useCallback(() => ({ ...simRef.current, ...clasifRef.current, ...subrRef.current }), [])
+
+  const revisor = useRef<(() => boolean) | null>(null)
+  const registrarRevisor = useCallback((fn: (() => boolean) | null) => {
+    revisor.current = fn
+  }, [])
+  // setSubrayado ya dejó el estado en la referencia: el envío lo lee aunque el render no haya llegado.
+  const pedirRevision = useCallback(() => revisor.current?.() ?? false, [])
+
+  const [subrayadosRevisados, setRevisados] = useState<Record<string, SubrayadoGuardado & { nonce?: number }>>({})
+  const revisionesVistas = useRef(0)
+  const reportSubrayadosRevisados = useCallback((materiales: unknown[]) => {
+    // Cuántas revisiones hay en la conversación: si aparece una nueva, la línea vuelve a vibrar.
+    const revisiones = materiales.flatMap((m) => leerSubrayadoGuardado(m)).filter((s) => s.resultado)
+    const ultimo: Record<string, SubrayadoGuardado & { nonce?: number }> = {}
+    for (const s of revisiones) ultimo[s.blockId] = { ...s, nonce: revisiones.length }
+    if (revisiones.length === revisionesVistas.current) return
+    revisionesVistas.current = revisiones.length
+    setRevisados(ultimo)
+  }, [])
 
   const value = useMemo(
-    () => ({ cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, hasProvider: true, simStates, setSimState, resetSimState, getMaterialState }),
-    [cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, simStates, setSimState, resetSimState, getMaterialState],
+    () => ({ cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, hasProvider: true, simStates, setSimState, resetSimState, clasifStates, setClasifState, subrayados, setSubrayado, subrayadosRevisados, reportSubrayadosRevisados, pedirRevision, registrarRevisor, getMaterialState }),
+    [cited, lastCited, opened, focus, unseen, blocksById, reportMessages, openBlock, markSeen, simStates, setSimState, resetSimState, clasifStates, setClasifState, subrayados, setSubrayado, subrayadosRevisados, reportSubrayadosRevisados, pedirRevision, registrarRevisor, getMaterialState],
   )
   return <MaterialContext.Provider value={value}>{children}</MaterialContext.Provider>
 }
@@ -190,6 +238,14 @@ const SIN_PROVEEDOR: MaterialContextValue = {
   simStates: {},
   setSimState: () => {},
   resetSimState: () => {},
+  clasifStates: {},
+  setClasifState: () => {},
+  subrayados: {},
+  setSubrayado: () => {},
+  subrayadosRevisados: {},
+  reportSubrayadosRevisados: () => {},
+  pedirRevision: () => false,
+  registrarRevisor: () => {},
   getMaterialState: () => ({}),
 }
 

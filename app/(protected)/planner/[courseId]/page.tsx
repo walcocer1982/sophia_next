@@ -12,6 +12,7 @@ import { TestLessonButton } from '@/components/planner/test-lesson-button'
 import { DeleteCourseButton } from '@/components/planner/delete-course-button'
 import { CourseCareerSelector } from '@/components/planner/course-career-selector'
 import { CourseConfigPanel } from '@/components/planner/course-config-panel'
+import { nombreDeActividad } from '@/lib/planner/titulos'
 
 type CourseWithLessons = {
   id: string
@@ -233,6 +234,8 @@ export default async function CourseOverviewPage({
           const json = lesson.contentJson as { activities?: Array<{
             id: string
             type: string
+            title?: string
+            subtitle?: string
             verified?: boolean
             teaching?: {
               agent_instruction: string
@@ -386,10 +389,12 @@ export default async function CourseOverviewPage({
                         </Link>
                         <TestLessonButton
                           lessonId={lesson.id}
-                          activities={(json?.activities || []).map((a) => ({
+                          activities={(json?.activities || []).map((a, i) => ({
                             id: a.id,
                             type: a.type,
-                            title: a.teaching?.agent_instruction || '',
+                            // El nombre que ve el alumno (regla de nombres), no la instrucción de Sophia.
+                            title: nombreDeActividad(a, i),
+                            subtitle: a.subtitle,
                           }))}
                         />
                         {/* «Programar» vivía acá como enlace suelto a /programacion:

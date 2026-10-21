@@ -167,6 +167,8 @@ const TextBlockSchema = z.object({
   type: z.literal('text'),
   body: z.string().min(1).refine((b) => contarPalabras(b) <= 400, 'máximo 400 palabras'),
   kind: z.enum(['fragment', 'consigna', 'norma', 'rubrica']).optional(),
+  subrayable: z.boolean().optional(),
+  lineasClave: z.array(z.number().int().min(0)).max(6).optional(),
 })
 
 const CaseBlockSchema = z.object({
@@ -238,6 +240,25 @@ const SimulatorBlockSchema = z.object({
   })
 })
 
+// Clasificar: tarjetas que el alumno arrastra a columnas; cada tarjeta tiene una columna correcta.
+const ID_CORTO = z.string().regex(/^[a-z0-9][a-z0-9-]{0,29}$/, 'id en minúsculas, números y guiones')
+const ClassifyBlockSchema = z.object({
+  ...BlockBase,
+  type: z.literal('classify'),
+  prompt: z.string().max(120).optional(),
+  bins: z.array(z.object({ id: ID_CORTO, label: z.string().min(1).max(60) })).min(2).max(4),
+  cards: z.array(z.object({ id: ID_CORTO, text: z.string().min(3).max(140), bin: z.string() })).min(2).max(8),
+}).superRefine((b, ctx) => {
+  const columnas = new Set(b.bins.map((c) => c.id))
+  if (columnas.size !== b.bins.length) ctx.addIssue({ code: 'custom', message: 'hay columnas con el mismo id', path: ['bins'] })
+  const tarjetas = new Set<string>()
+  b.cards.forEach((c, i) => {
+    if (tarjetas.has(c.id)) ctx.addIssue({ code: 'custom', message: `tarjeta repetida: ${c.id}`, path: ['cards', i, 'id'] })
+    tarjetas.add(c.id)
+    if (!columnas.has(c.bin)) ctx.addIssue({ code: 'custom', message: `la tarjeta «${c.text}» apunta a una columna que no existe: ${c.bin}`, path: ['cards', i, 'bin'] })
+  })
+})
+
 export const SupportBlockSchema = z.union([
   ImageBlockSchema,
   CompareBlockSchema,
@@ -247,6 +268,7 @@ export const SupportBlockSchema = z.union([
   CaseBlockSchema,
   DiagramBlockSchema,
   SimulatorBlockSchema,
+  ClassifyBlockSchema,
 ])
 
 /** El esquema de cada tipo: la unión solo dice «Invalid input»; este dice qué campo falla. */
@@ -259,6 +281,7 @@ export const SupportBlockSchemaByType = {
   case: CaseBlockSchema,
   diagram: DiagramBlockSchema,
   simulator: SimulatorBlockSchema,
+  classify: ClassifyBlockSchema,
 } as const
 
 const TeachingSchema = z.object({

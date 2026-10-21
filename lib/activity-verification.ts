@@ -1,12 +1,15 @@
 import { anthropic, extractJsonFromMarkdown, callAndParseJson } from '@/lib/anthropic'
 import { logger } from '@/lib/logger'
-import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric, SuccessCriteria, SupportBlock } from '@/types/lesson'
+import type { Activity, ActivityCompletionResult, UnderstandingLevel, ResponseType, VerificationHints, Rubric, SuccessCriteria, SupportBlock, CaseBlock } from '@/types/lesson'
 import { exigirCitasDelBloque, textoParaVerificador } from '@/lib/quote-check'
+import { descartarCifrasContradichas } from '@/lib/cifras'
 import { normalizeLevel } from '@/lib/levels'
 import { DEFAULT_MIN_COMPLETENESS } from '@/lib/rubric'
 
 /** Criterios que piden la razón: obligatorios en explicación y práctica. */
 export const RAZON_RE = /raz[oó]n|por\s*qu[eé]|justific|explica|argument|fundament|sustent/i
+/** Criterio que pide decidir o concluir sobre el caso («Decide que sí…», «Concluye que…»). */
+export const DECISION_RE = /^\s*(decide|concluye|elige|determina)\b/i
 
 /**
  * Qué hizo el alumno en el turno. Lo decide el verificador con el contexto
@@ -243,6 +246,7 @@ REGLAS PARA response_type:
 - "partial": Cumple algunos criterios pero falta profundidad (40-79%)
 - "incorrect": Tiene errores conceptuales o información equivocada
 - "off_topic": La respuesta no está relacionada con la pregunta
+- Si responde sobre el EJEMPLO que el instructor ya resolvió (está en la INSTRUCCIÓN DE LA ACTIVIDAD) en vez del caso que plantea la PREGUNTA → "off_topic", y en feedback escribe exactamente: "Respondió sobre el ejemplo del instructor, no sobre el caso de la pregunta."
 - "no sé" / "no conozco" / "es la primera vez" / no responde → "incorrect" (NUNCA "off_topic"): es un no-saber, NO un desvío de tema
 
 REGLAS PARA ready_to_advance (decisión PEDAGÓGICA — que el alumno no se trabe):
@@ -350,6 +354,7 @@ CÓMO EVALUAR:
 - Avanza (ready_to_advance=true) si completeness >= ${minCompleteness}% o el nivel es "${expectedNew}" o superior.
 - "no sé" / "no conozco" / "es la primera vez" / no responde → response_type "incorrect" (NUNCA "off_topic").
 - Si la respuesta trata de OTRO tema distinto al de ESTA pregunta (contesta algo que no se preguntó acá — p.ej. responde sobre el tema de otra actividad) → response_type "off_topic". Distinción: "incorrect" = intento sobre ESTE tema pero equivocado; "off_topic" = habla de un tema diferente al preguntado.
+- Si responde sobre el EJEMPLO que el instructor ya resolvió (está en la INSTRUCCIÓN DE LA ACTIVIDAD) en vez del caso que plantea la PREGUNTA → "off_topic", y en feedback escribe exactamente: "Respondió sobre el ejemplo del instructor, no sobre el caso de la pregunta."
 - Tolera errores de transcripción de voz (Whisper): si una palabra suena parecida a un término del tema, interprétala como ese término.${capClause}
 
 ${STUDENT_INTENT_RULES}
@@ -501,6 +506,39 @@ REGLA POST-EXPLICACIÓN:
     ? `\n\nCRITERIOS ELIMINATORIOS (sin ellos la respuesta NO está completa, aunque cubra el resto): ${criticos.map((c) => `«${c}»`).join(', ')}. Márcalos como cubiertos solo si el estudiante los demuestra sin ambigüedad. Lo demuestra tanto si enuncia la regla como si la APLICA bien (por ejemplo, cuenta como vigente algo que la regla dice que no se borra). Vale aunque lo haya dicho repartido en varios mensajes de esta actividad y con faltas de ortografía. Lo que NO vale: que solo lo haya dicho el instructor, o que el estudiante solo repita la pregunta.`
     : ''
 
+  // Criterios que piden una decisión sobre el caso. Prueba del 19 oct 2026
+  // (SI-ALTORIESGO S1): el alumno recitó la lámina («a cualquier altura sobre
+  // electricidad activa») sin decir si el electricista estaba en trabajo en
+  // altura, y «Decide que sí» se dio por cubierto. Recitar la regla no es decidir.
+  const deDecision = successCriteria.must_include
+    .map((c, i) => ({ c, n: i + 1 }))
+    .filter(({ c }) => DECISION_RE.test(c))
+  const decisionClause = deDecision.length
+    ? `
+
+CRITERIOS DE DECISIÓN: ${deDecision.map(({ c, n }) => `${n}. «${c}»`).join(', ')}. Se cubren solo si el ESTUDIANTE dice la decisión o la conclusión sobre el caso de la pregunta (sí o no, cuál, quién, dónde), con sus palabras. Enunciar la regla general o repetir el material sin aplicarlo al caso NO cubre estos criterios, aunque la regla sea correcta. Si la decisión solo la dijo el instructor, no está cubierta.`
+    : ''
+
+  // Criterios con cifras. Simulación del 21 oct 2026: el alumno decidió bien
+  // («sí está en trabajo en altura») pero dio otro umbral que el del criterio
+  // («dice 1,50 m»), el verificador aprobó el eliminatorio y Sophia repitió el
+  // dato falso como «Exacto». Una decisión correcta con una razón falsa no cubre.
+  const conCifras = successCriteria.must_include
+    .map((c, i) => ({ c, n: i + 1 }))
+    .filter(({ c }) => /\d/.test(c))
+  // Lo que la pregunta y el caso ya le dan al alumno: esas cifras son datos, no algo que sepa.
+  const datosDados = [
+    activity.verification.question,
+    ...(activity.teaching?.blocks ?? [])
+      .filter((b): b is CaseBlock => b.type === 'case')
+      .flatMap((b) => [...b.facts, b.question ?? '']),
+  ].join('\n')
+  const cifrasClause = conCifras.length
+    ? `
+
+CRITERIOS CON CIFRAS: ${conCifras.map(({ c, n }) => `${n}. «${c}»`).join(', ')}. Si el criterio nombra un umbral, límite o valor que el estudiante tiene que saber (no un dato que ya viene en la pregunta), solo se cubre si el ESTUDIANTE da ese valor o su equivalente. Si da OTRO valor para lo mismo, el criterio NO está cubierto, aunque su decisión final coincida: una decisión correcta con una razón falsa no cubre el criterio. Si en mensajes distintos dio valores distintos, vale el último.`
+    : ''
+
   // Fase B: si la actividad tiene rúbrica pre-generada, usamos el prompt corto
   // basado en referencias. Si no, el camino tradicional (manual genérico).
   const rubric = activity.verification.rubric
@@ -541,7 +579,7 @@ EVIDENCIA OBLIGATORIA: agrega al JSON el campo "evidence", un objeto que asigna 
   const materialClause = bloquesParaVerificador.length
     ? `\n\nMATERIAL QUE EL ESTUDIANTE TIENE A LA VISTA (puede citarlo; úsalo para comprobar sus datos y frases):\n${textoDelMaterial}${reglasTexto ? `\n${reglasTexto}` : ''}`
     : ''
-  const verificationPrompt = basePrompt + criticalClause + materialClause + evidenceClause
+  const verificationPrompt = basePrompt + criticalClause + decisionClause + cifrasClause + materialClause + evidenceClause
 
   // Una consulta al modelo verificador, con el JSON ya parseado.
   const consultar = async (): Promise<ActivityCompletionResult> => {
@@ -593,6 +631,12 @@ EVIDENCIA OBLIGATORIA: agrega al JSON el campo "evidence", un objeto que asigna 
       result as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown; evidence?: unknown },
       successCriteria.must_include,
       textosDelAlumno,
+    ) + descartarCifrasContradichas(
+      // Un umbral distinto al del criterio no lo cubre, aunque la decisión coincida (lib/cifras.ts).
+      result as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown },
+      successCriteria.must_include,
+      textosDelAlumno,
+      datosDados,
     ) + exigirCitasDelBloque(
       // Un criterio de «frases del fragmento» con frases que no están en él pasa a «falta».
       result as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown },
@@ -630,6 +674,12 @@ EVIDENCIA OBLIGATORIA: agrega al JSON el campo "evidence", un objeto que asigna 
             segunda as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown; evidence?: unknown },
             successCriteria.must_include,
             textosDelAlumno,
+          )
+          descartarCifrasContradichas(
+            segunda as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown },
+            successCriteria.must_include,
+            textosDelAlumno,
+            datosDados,
           )
           exigirCitasDelBloque(
             segunda as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown },

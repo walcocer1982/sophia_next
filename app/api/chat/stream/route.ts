@@ -15,6 +15,7 @@ import { applyPick, esEleccionConRazon, newChoiceState, parseChoicePick, renderC
 import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/support-blocks'
 import { citedFromTexts, createMarkerFilter, stripMarkers, type MarkerCheck } from '@/lib/material-markers'
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
+import { crearQuitadorDeCalificacionInicial } from '@/lib/calificacion'
 import { planteaLaPregunta } from '@/lib/planteo'
 import type { ChoiceTurn } from '@/lib/prompt-builder'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
@@ -22,11 +23,13 @@ import { classifyIntent } from '@/lib/services/intent-classification'
 import { compressMessagesForAPI } from '@/lib/message-summarizer'
 import { generateLessonReport } from '@/lib/lesson-report'
 import { processPlannerAttachments } from '@/lib/planner/attachments'
-import type { LessonContent, ModerationResult, IntentClassification, ActivityCompletionResult } from '@/types/lesson'
+import type { LessonContent, ModerationResult, IntentClassification, ActivityCompletionResult, ClassifyBlock, TextBlock } from '@/types/lesson'
 import type { Message, Prisma } from '@prisma/client'
 import type Anthropic from '@anthropic-ai/sdk'
 import { checkReply, checksIntro, newChecksState, readCheck, type ChecksState, type CheckTurn } from '@/lib/checks'
-import { describeStateForPrompt, directivaSiYaMovio, initialState, sanitizeState, type MaterialState, type SimState } from '@/lib/simulator'
+import { describeStateForPrompt, directivaSiYaMovio, initialState, sanitizeState, type SimState } from '@/lib/simulator'
+import { describeClasifForPrompt, describeClasifForVerifier, sanitizeClasif, vacio as clasificacionVacia, type ClasifState } from '@/lib/clasificar'
+import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, guiaRevelarSubrayado, leerSubrayadoGuardado, lineasClaveTexto, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -93,8 +96,8 @@ export async function POST(request: Request) {
     sessionId: string
     message: string
     attachments?: Array<{ name: string; mimeType: string; dataBase64: string }>
-    /** Estado de los ecualizadores del panel (spec del panel §16.3). Se valida contra la lección. */
-    materialState?: MaterialState
+    /** Estado de ecualizadores y clasificaciones de la pizarra, por id de bloque. Se valida contra la lección. */
+    materialState?: Record<string, unknown>
     /** «Probar como estudiante»: el material sin validar se oculta, como para el alumno. */
     comoEstudiante?: boolean
   }
@@ -254,8 +257,17 @@ export async function POST(request: Request) {
   // recibía los últimos mensajes de la sesión entera y acumulaba respuestas de
   // actividades anteriores: así una actividad que nunca se planteó (la rúbrica
   // de EVA-NOTA) se dio por cumplida con la respuesta al cálculo de la anterior.
+  // La respuesta a la bienvenida solo se excluye si la bienvenida NO planteó la
+  // pregunta de esta actividad (lecciones viejas, turno de conexión). Si la
+  // planteó, esa respuesta ES la respuesta de la actividad (21 oct 2026: al
+  // probar desde la actividad 4, el «listo» posterior no tenía respuesta previa
+  // y el verificador nunca veía lo que el alumno había contestado).
+  const bienvenidaPlanteaEsta = !!bienvenida && planteaLaPregunta(
+    bienvenida.content,
+    currentActivity.choice?.prompt ?? currentActivity.teaching?.first_question ?? currentActivity.verification.question,
+  )
   const activityHistory = sessionWithMessages.messages
-    .filter((m) => m.activityId === currentActivity.id && m !== bienvenida && m !== respuestaABienvenida)
+    .filter((m) => m.activityId === currentActivity.id && m !== bienvenida && (bienvenidaPlanteaEsta || m !== respuestaABienvenida))
     .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
   // Sin mensajes archivados bajo la actividad (datos viejos): el último par basta.
   const verifierHistory = activityHistory.length > 0 ? activityHistory : conversationHistory.slice(-2)
@@ -325,7 +337,7 @@ export async function POST(request: Request) {
     checkTurn = leido.turn
     logger.info('chat.stream.check_turn', { sessionId, activityId: currentActivity.id, checkTurn })
   }
-  const respuestaFija = checkTurn && checks && checksState
+  let respuestaFija: string | null = checkTurn && checks && checksState
     ? checkReply(checks, checksState, checkTurn, currentActivity.verification.question)
     : null
 
@@ -397,6 +409,85 @@ export async function POST(request: Request) {
     next_subquestion: undefined,
   }
 
+  // Rutina y cierre sin nota, de un solo turno: se aceptan sin verificador.
+  // Prueba del 19 oct 2026: «todo está claro» en el cierre salió «incorrecto»,
+  // Sophia volvió a preguntar y el código terminó la lección con la pregunta
+  // colgada. Con un turno y sin nota, el código avanzaba igual; el verificador
+  // solo agregaba ~5 s y la posibilidad de contradecirse.
+  const sinNotaDeUnTurno =
+    currentActivity.verification.is_evaluative === false &&
+    (currentActivity.verification.max_attempts ?? 3) <= 1
+  const ACEPTADA_SIN_NOTA: ActivityCompletionResult = {
+    completed: true,
+    criteriaMatched: [],
+    criteriaMissing: [],
+    completeness_percentage: 100,
+    understanding_level: 'achieved',
+    response_type: 'correct',
+    feedback: '',
+    confidence: 'high',
+    ready_to_advance: true,
+    needs_scaffolding: false,
+    next_subquestion: undefined,
+  }
+
+  // Clasificaciones de la pizarra (lib/clasificar.ts): dónde dejó cada tarjeta es
+  // parte de su respuesta, así que el verificador lo recibe junto con el mensaje.
+  const estadosDeClasificacion: { b: ClassifyBlock; state: ClasifState }[] = [
+    ...blocksForActivity(contentJson, currentActivity.id, verSinValidar).pinned,
+    ...getActivityBlocks(currentActivity),
+  ]
+    .filter((b): b is ClassifyBlock => b.type === 'classify')
+    .map((b) => ({ b, state: sanitizeClasif(b, materialState?.[b.id]) ?? clasificacionVacia() }))
+  // Textos subrayables (lib/subrayado.ts): lo subrayado es la evidencia que eligió del material.
+  // Solo los de esta actividad y los fijados que ella declara en `uses`: un
+  // subrayado de la actividad 4 no debe viajar a la 6.
+  const estadosDeSubrayado: { b: TextBlock; state: SubrayadoState }[] = [
+    ...blocksForActivity(contentJson, currentActivity.id, verSinValidar).pinned.filter((b) => currentActivity.teaching?.uses?.includes(b.id)),
+    ...getActivityBlocks(currentActivity),
+  ]
+    .filter((b): b is TextBlock => b.type === 'text' && b.subrayable === true)
+    .map((b) => ({ b, state: sanitizeSubrayado(b, materialState?.[b.id]) ?? sinSubrayar() }))
+  const clasifParaVerificador = [
+    ...estadosDeClasificacion.map(({ b, state }) => describeClasifForVerifier(b, state)),
+    ...estadosDeSubrayado.map(({ b, state }) => describeSubrayadoForVerifier(b, state)),
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const mensajeParaVerificar = clasifParaVerificador ? `${message}\n\n${clasifParaVerificador}` : message
+
+  // Textos para subrayar propios de esta actividad y la primera línea que no respalda.
+  const idsPropios = new Set(getActivityBlocks(currentActivity).map((b) => b.id))
+  const subrayablesPropios = estadosDeSubrayado.filter(({ b }) => idsPropios.has(b.id))
+  const fallosDeSubrayado = (existingEvidence as { subrayadoFallos?: number }).subrayadoFallos ?? 0
+  // Solo cuenta lo subrayado que CAMBIÓ desde la última vez en esta actividad: la
+  // línea sigue marcada en el navegador y viaja en cada mensaje. Antes se volvía
+  // a revisar y guardar en cada turno, y bajo cada respuesta aparecía otra vez
+  // «Subrayaste… ✓ respalda tu respuesta» (21 oct 2026).
+  const ultimoSubrayadoGuardado = new Map<string, string>()
+  for (const m of sessionWithMessages.messages) {
+    if (m.role !== 'user' || m.activityId !== currentActivity.id) continue
+    // Los mensajes están en orden cronológico: el último que se vea queda.
+    for (const s of leerSubrayadoGuardado((m as { material?: unknown }).material)) ultimoSubrayadoGuardado.set(s.blockId, s.lineas.join('|'))
+  }
+  const esSubrayadoNuevo = ({ b, state }: { b: TextBlock; state: SubrayadoState }) =>
+    state.lineas.length > 0 && (paraGuardar(b, state)?.lineas.join('|') ?? '') !== ultimoSubrayadoGuardado.get(b.id)
+  const subrayadoQueNoRespalda = subrayablesPropios.find((e) => esSubrayadoNuevo(e) && evaluarSubrayado(e.b, e.state) === 'no_respalda')
+  // Revisión al tocar (21 oct 2026): el navegador manda «listo» apenas el alumno
+  // toca una línea, si ya respondió. Si la línea no respalda y es el primer
+  // error, no hace falta verificador ni modelo: la línea se pone roja y Sophia
+  // dice «inténtalo de nuevo» en menos de un segundo.
+  const revisionRapida =
+    !!subrayadoQueNoRespalda &&
+    fallosDeSubrayado < 1 &&
+    isContinuationMessage &&
+    activityHistory.some((m) => m.role === 'user') &&
+    !choiceTurn &&
+    !checkTurn &&
+    !esTurnoDeConexion &&
+    !activityAlreadyCompleted &&
+    lessonSession.lesson.course?.methodology !== 'CODE'
+
   const [moderation, intent, verification] = await Promise.all([
     isContinuationMessage || choiceTurn || checkTurn
       ? Promise.resolve(SAFE_MODERATION)
@@ -408,9 +499,12 @@ export async function POST(request: Request) {
           currentActivity: currentActivityInstruction,
           lastInstructorQuestion: lastInstructorMessage?.content || undefined
         }),
+    // Revisión al tocar: el código ya sabe que la línea no respalda.
+    revisionRapida
+      ? Promise.resolve<ActivityCompletionResult>({ ...SIN_VERIFICAR, response_type: 'partial' })
     // Hallucination de voz: skip AI verifier (caro), tratar como off_topic
     // suave para que Sophia pida repetir sin contar como intento real.
-    hallucinationCheck.isHallucination
+    : hallucinationCheck.isHallucination
       ? Promise.resolve<ActivityCompletionResult>({
           completed: false,
           criteriaMatched: [] as string[],
@@ -455,11 +549,13 @@ export async function POST(request: Request) {
           needs_scaffolding: false,
           next_subquestion: undefined,
         })
+      : sinNotaDeUnTurno
+        ? Promise.resolve<ActivityCompletionResult>(ACEPTADA_SIN_NOTA)
       // Continuaciones ("sí", "listo"): verificar acumulativamente.
       // CODE: verificación binaria (¿completó el paso?). REFLECTIVE: socrática.
       : (lessonSession.lesson.course?.methodology === 'CODE'
           ? verifyStepCompletion(message, currentActivity, verifierHistory)
-          : verifyActivityCompletion(message, currentActivity, verifierHistory, wasExplained, allLessonBlocks(contentJson, verSinValidar)))
+          : verifyActivityCompletion(mensajeParaVerificar, currentActivity, verifierHistory, wasExplained, allLessonBlocks(contentJson, verSinValidar)))
   ])
   marcar('gate')
 
@@ -519,6 +615,85 @@ export async function POST(request: Request) {
     }
   }
 
+  // En una continuación («listo») el intento guarda lo dicho en toda la actividad:
+  // si no, el reporte mostraría «listo» como la respuesta del alumno.
+  const respuestaParaGuardar = isContinuationMessage
+    ? [...activityHistory.filter((m) => m.role === 'user').map((m) => m.content), message].join(' · ')
+    : message
+
+  // ── Turno de subrayar (investigacion/turno-de-subrayar-2026-10-20.md) ──────
+  // La actividad tiene un texto propio para subrayar, el alumno respondió sin
+  // subrayar nada y todavía no se le pidió: este turno no se evalúa ni cuenta
+  // intento; Sophia solo pide la línea. Una sola vez por actividad. No se
+  // intercepta un «no sé», una ayuda, un fuera de tema ni una continuación.
+  const turnoDeSubrayar =
+    subrayablesPropios.length > 0 &&
+    subrayablesPropios.every(({ state }) => state.lineas.length === 0) &&
+    (existingEvidence as { subrayadoPedido?: boolean }).subrayadoPedido !== true &&
+    lessonSession.lesson.course?.methodology !== 'CODE' &&
+    !choiceTurn &&
+    !checkTurn &&
+    !esTurnoDeConexion &&
+    !activityAlreadyCompleted &&
+    !hallucinationCheck.isHallucination &&
+    verification.unverified !== true &&
+    verification.response_type !== 'off_topic' &&
+    verification.response_type !== 'continuation' &&
+    verification.student_intent !== 'does_not_know' &&
+    verification.student_intent !== 'asks_for_help'
+  if (turnoDeSubrayar) {
+    verification.ready_to_advance = false
+    verification.completed = false
+    willScaffold = false
+    // Mensaje fijo, sin modelo: no califica, no insinúa la línea ni cambia de tema.
+    respuestaFija = mensajeTurnoDeSubrayar(subrayablesPropios.map(({ b }) => b.title))
+    logger.info('chat.stream.subrayado_pedido', { sessionId, activityId: currentActivity.id })
+  }
+
+  // ── Revisar el subrayado (21 oct 2026) ─────────────────────────────────
+  // La lección declara la línea que respalda (`lineasClave`). Si la respuesta
+  // escrita aprobó pero lo subrayado no la respalda: la primera vez la actividad
+  // no avanza ni cuenta intento y Sophia pide cambiarlo; la segunda, se sigue y
+  // Sophia muestra la línea que respaldaba. Antes decía «Correcto» igual.
+  const revisarSubrayado =
+    !turnoDeSubrayar &&
+    !!subrayadoQueNoRespalda &&
+    fallosDeSubrayado < 1 &&
+    (revisionRapida || (verification.ready_to_advance === true && verification.unverified !== true)) &&
+    !choiceTurn &&
+    !checkTurn &&
+    !esTurnoDeConexion &&
+    !activityAlreadyCompleted &&
+    lessonSession.lesson.course?.methodology !== 'CODE'
+  if (revisarSubrayado) {
+    verification.ready_to_advance = false
+    verification.completed = false
+    willScaffold = false
+    // Mensaje fijo, sin modelo: no puede insinuar la línea correcta.
+    respuestaFija = mensajeRevisarSubrayado(subrayadoQueNoRespalda!.b)
+    logger.info('chat.stream.subrayado_revisar', { sessionId, activityId: currentActivity.id })
+  }
+  // Segundo error (o primero que ya no puede retener): se revela la línea.
+  const revelarSubrayado = !!subrayadoQueNoRespalda && !revisarSubrayado && !turnoDeSubrayar && fallosDeSubrayado >= 1
+  // Turnos que no evalúan ni cuentan intento.
+  const turnoSinEvaluar = turnoDeSubrayar || revisarSubrayado
+
+  // ¿Este turno agota los intentos? Misma condición que el avance forzado de
+  // más abajo (bloque «intento fallido»: ni paso cerrado, ni comprobación, ni
+  // continuación, ni ruido de voz; attempts + 1 >= tope). Se calcula ANTES del
+  // prompt para que Sophia cierre o haga la transición en vez de seguir
+  // preguntando sobre una actividad que el código ya cerró (19 oct 2026).
+  const cierraPorTope =
+    !choiceTurn &&
+    !checkTurn &&
+    !activityAlreadyCompleted &&
+    !verification.ready_to_advance &&
+    verification.unverified !== true &&
+    verification.response_type !== 'continuation' &&
+    !hallucinationCheck.isHallucination &&
+    attempts + 1 >= (currentActivity.verification.max_attempts || 3) &&
+    !turnoSinEvaluar
+
   // ═══════════════════════════════════════════════════════════════
   // 4. VERIFICAR MODERACIÓN - Intervenir sin guardar en BD
   // ═══════════════════════════════════════════════════════════════
@@ -575,7 +750,7 @@ export async function POST(request: Request) {
 
   // 🔥 NUEVO: Obtener siguiente actividad cuando ready_to_advance para transición fluida
   let nextActivityData = undefined
-  if (verification.ready_to_advance && !currentActivityContext.isLastActivity) {
+  if ((verification.ready_to_advance || cierraPorTope) && !currentActivityContext.isLastActivity) {
     const nextActivityRef = getNextActivity(contentJson, currentActivity.id)
     if (nextActivityRef) {
       nextActivityData = getActivityById(contentJson, nextActivityRef.activityId)
@@ -633,7 +808,26 @@ export async function POST(request: Request) {
   const panelGuardable = Object.fromEntries(estadosDelPanel.filter((e) => !e.state.own).map((e) => [e.id, e.state]))
   // Va dentro de la evidencia que escriba este turno (antes se leía y
   // reescribía la fila al final: dos idas y vueltas más por mensaje).
-  const panelExtra = Object.keys(panelGuardable).length ? { panelState: panelGuardable } : {}
+  const clasifGuardable = Object.fromEntries(
+    estadosDeClasificacion.filter(({ state }) => Object.keys(state.placements).length).map(({ b, state }) => [b.id, state]),
+  )
+  const panelExtra = {
+    ...(Object.keys(panelGuardable).length ? { panelState: panelGuardable } : {}),
+    ...(Object.keys(clasifGuardable).length ? { clasificaciones: clasifGuardable } : {}),
+    ...(estadosDeSubrayado.some(({ state }) => state.lineas.length)
+      ? { subrayados: Object.fromEntries(estadosDeSubrayado.filter(({ state }) => state.lineas.length).map(({ b, state }) => [b.id, state])) }
+      : {}),
+  }
+  // Revisar manda sobre todo lo demás del turno; revelar se suma a la guía normal.
+  const guiaDeSubrayado = revelarSubrayado && subrayadoQueNoRespalda
+    ? `\n\n${guiaRevelarSubrayado(subrayadoQueNoRespalda.b)}`
+    : ''
+  const estadoSubrayadoClause = estadosDeSubrayado.length
+    ? `\n\nESTADO DEL SUBRAYADO (lo que el estudiante marcó AHORA en los textos de la pizarra):\n${estadosDeSubrayado.map(({ b, state }) => `- ${describeSubrayadoForPrompt(b, state)}`).join('\n')}`
+    : ''
+  const estadoClasifClause = estadosDeClasificacion.length
+    ? `\n\nESTADO DE LA CLASIFICACIÓN (lo que el estudiante ubicó AHORA en la pizarra):\n${estadosDeClasificacion.map(({ b, state }) => `- ${describeClasifForPrompt(b, state)}`).join('\n')}`
+    : ''
   let evidenciaEscrita = false
 
   const { staticBlocks, dynamicPrompt: dynamicPromptBase } = buildSystemPrompt({
@@ -641,7 +835,8 @@ export async function POST(request: Request) {
     recentMessages: sessionWithMessages.messages,
     tangentCount,
     attempts,
-    verificationResult: verification,
+    verificationResult: cierraPorTope ? { ...verification, ready_to_advance: true } : verification,
+    cierraPorTope,
     completedActivities: completedActivityIds,
     intentClassification: intent,
     lessonContext,
@@ -699,9 +894,27 @@ CÓMO RESPONDER (máximo 90 palabras):
         ]
       : message
 
+  // Lo subrayado en este turno, ya revisado: queda en el mensaje del alumno (se
+  // ve en la conversación, en la ficha y en la transcripción) y se manda al
+  // navegador ANTES del texto de Sophia, para que la línea vibre y se ponga
+  // roja mientras ella responde.
+  const subrayadoDelTurno = estadosDeSubrayado
+    .filter(esSubrayadoNuevo)
+    .map(({ b, state }) => {
+      const r = evaluarSubrayado(b, state)
+      const resultado = r === 'respalda' || r === 'no_respalda' ? r : undefined
+      const revelada = resultado === 'no_respalda' && revelarSubrayado && subrayadoQueNoRespalda?.b.id === b.id ? lineasClaveTexto(b) : undefined
+      const respaldan = resultado === 'respalda' ? subrayadasQueRespaldan(b, state) : undefined
+      return paraGuardar(b, state, { ...(resultado ? { resultado } : {}), ...(revelada ? { revelada } : {}), ...(respaldan ? { respaldan } : {}) })
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x)
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        if (subrayadoDelTurno.length) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'subrayado', material: { subrayado: subrayadoDelTurno } })}\n\n`))
+        }
         // Stream from Claude con bloques cacheables
         // maxTokens dinámico basado en complexity de la actividad
         const maxTokens = getMaxTokensForActivity(currentActivity.complexity)
@@ -712,7 +925,7 @@ CÓMO RESPONDER (máximo 90 palabras):
           max_tokens: maxTokens,
           system: [
             ...staticBlocks,
-            { type: 'text', text: dynamicPrompt + estadoPanelClause }
+            { type: 'text', text: dynamicPrompt + estadoPanelClause + estadoClasifClause + estadoSubrayadoClause + guiaDeSubrayado }
           ],
           messages: [
             ...compressedHistory,  // Historial comprimido (preguntas visibles)
@@ -745,12 +958,18 @@ CÓMO RESPONDER (máximo 90 palabras):
         const filtroMarcadores = createMarkerFilter(marcadorValido)
         // Voseo corregido en el código (lib/voseo.ts): «Mirá» → «Mira».
         const correctorVoseo = crearCorrectorDeVoseo()
+        // En un paso sin nota, la calificación con que abre («Exacto.») se quita
+        // en el código (lib/calificacion.ts): el prompt no bastó.
+        const quitador = currentActivity.verification.is_evaluative === false && respuestaFija === null
+          ? crearQuitadorDeCalificacionInicial()
+          : null
+        const limpiar = (trozo: string) => (quitador ? quitador.push(trozo) : trozo)
 
         for await (const event of claudeStream) {
           if (event.type === 'content_block_delta') {
             if (event.delta.type === 'text_delta') {
               if (marcas.primer_token === undefined) marcar('primer_token')
-              const text = correctorVoseo.push(filtroMarcadores.push(event.delta.text))
+              const text = limpiar(correctorVoseo.push(filtroMarcadores.push(event.delta.text)))
               if (!text) continue
               fullResponse += text
               if (suppressFurther) continue
@@ -781,7 +1000,7 @@ CÓMO RESPONDER (máximo 90 palabras):
         marcar('stream')
 
         // Lo que retuvo el filtro de marcadores al final del texto.
-        const restoMarcadores = correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()
+        const restoMarcadores = limpiar(correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()) + (quitador?.flush() ?? '')
         if (restoMarcadores) {
           fullResponse += restoMarcadores
           if (!suppressFurther) unsent += restoMarcadores
@@ -831,12 +1050,13 @@ CÓMO RESPONDER (máximo 90 palabras):
         // Segunda vez: se avanza y se agrega la pregunta siguiente al mensaje.
         // Cierre con comprobación: la primera pregunta la agrega el código, igual
         // en orden y letras a como la va a corregir (newChecksState es determinista).
-        if (verification.ready_to_advance && !activityAlreadyCompleted && verification.unverified !== true && nextActivityData?.checks?.length) {
+        const avanzaEsteTurno = verification.ready_to_advance || cierraPorTope
+        if (avanzaEsteTurno && !activityAlreadyCompleted && verification.unverified !== true && nextActivityData?.checks?.length) {
           const intro = `\n\n${checksIntro(nextActivityData.checks, newChecksState(sessionSeed, nextActivityData.id, nextActivityData.checks))}`
           flushToClient(intro)
           cleanedAssistantContent += intro
         }
-        if (verification.ready_to_advance && !activityAlreadyCompleted && verification.unverified !== true) {
+        if (avanzaEsteTurno && !activityAlreadyCompleted && verification.unverified !== true) {
           const siguioElGuion = currentActivityContext.isLastActivity
             ? !cleanedAssistantContent.includes('?')
             : nextActivityData
@@ -849,7 +1069,9 @@ CÓMO RESPONDER (máximo 90 palabras):
             // Si Sophia no dejó ninguna pregunta abierta (cerró, agradeció), no hay
             // conversación que desfasar: se avanza ya y se agrega la pregunta
             // siguiente. Retener solo tiene sentido cuando pidió OTRA cosa.
-            if (retenciones < 1 && terminaEnPregunta(cleanedAssistantContent)) {
+            // En un paso sin nota de un turno (rutina) tampoco: no hay tema que
+            // cerrar, y retener le costaba al alumno un turno (20 oct 2026).
+            if (!cierraPorTope && !sinNotaDeUnTurno && retenciones < 1 && terminaEnPregunta(cleanedAssistantContent)) {
               verification.ready_to_advance = false
               verification.completed = false
               retenido = true
@@ -887,6 +1109,7 @@ CÓMO RESPONDER (máximo 90 palabras):
           respuestaFija === null &&
           !choiceTurn &&
           !avanzaPorIntentos &&
+          !turnoSinEvaluar &&
           !terminaEnPregunta(cleanedAssistantContent)
         ) {
           // Sin intentos todavía, una actividad que abre con otra pregunta (la
@@ -926,6 +1149,7 @@ CÓMO RESPONDER (máximo 90 palabras):
               role: 'user',
               content: message,
               activityId: answeredActivityId,
+              ...(subrayadoDelTurno.length ? { material: { subrayado: subrayadoDelTurno } } : {}),
               timestamp: userTimestamp,
             },
           }),
@@ -1100,7 +1324,7 @@ const allActivities = await prisma.activityProgress.findMany({
           // Marcar actividad como completada
           // Construir evidenceData con historial de intentos (como Instructoria)
           const newAttempt = {
-            studentResponse: message,
+            studentResponse: respuestaParaGuardar,
             analysis: {
               ready_to_advance: verification.ready_to_advance,
               completed: verification.completed,
@@ -1249,7 +1473,7 @@ const allActivities = await prisma.activityProgress.findMany({
           // Solo incrementamos attempts cuando es un RETRY real del criterio
           // (sin scaffolding en curso).
           const failedAttempt = {
-            studentResponse: message,
+            studentResponse: respuestaParaGuardar,
             analysis: {
               ready_to_advance: verification.ready_to_advance,
               completed: verification.completed,
@@ -1270,7 +1494,7 @@ const allActivities = await prisma.activityProgress.findMany({
           // contador, para que no arrastre el promedio de la nota.
           const isOffTopic = verification.response_type === 'off_topic'
           const failedEvidence = JSON.parse(JSON.stringify({
-            attempts: isOffTopic
+            attempts: isOffTopic || turnoSinEvaluar
               ? (existingEvidence.attempts || [])
               : [...(existingEvidence.attempts || []), failedAttempt],
             // Conservar y avanzar el contador de desglose si Sophia va a desglosar
@@ -1279,6 +1503,9 @@ const allActivities = await prisma.activityProgress.findMany({
             wasExplained: wasExplained || willExplainThisTurn,
             // Veces que se retuvo el avance por desfase con la conversación
             heldBack: ((existingEvidence as { heldBack?: number }).heldBack ?? 0) + (retenido ? 1 : 0),
+            // Ya se pidió subrayar en esta actividad: no se vuelve a pedir.
+            ...((existingEvidence as { subrayadoPedido?: boolean }).subrayadoPedido || turnoDeSubrayar ? { subrayadoPedido: true } : {}),
+            ...(fallosDeSubrayado || revisarSubrayado ? { subrayadoFallos: fallosDeSubrayado + (revisarSubrayado ? 1 : 0) } : {}),
             ...(choiceState ? { choice: choiceState } : {}),
             ...(checksState ? { checks: checksState } : {}),
             ...panelExtra,
@@ -1286,7 +1513,7 @@ const allActivities = await prisma.activityProgress.findMany({
 
           // Scaffolding y off_topic NO cuentan attempt — solo evidencia/contexto.
           // Retenido: el alumno cumplió, solo se esperó a que Sophia cerrara el tema.
-          const attemptsIncrement = (willScaffold || isOffTopic || retenido) ? 0 : 1
+          const attemptsIncrement = (willScaffold || isOffTopic || retenido || turnoSinEvaluar) ? 0 : 1
 
           evidenciaEscrita = true
           await prisma.activityProgress.upsert({
@@ -1326,7 +1553,12 @@ const allActivities = await prisma.activityProgress.findMany({
           const forcedAdvanceLimit = currentActivity.verification.max_attempts || 3
           const newAttemptCount = attempts + 1
 
-          if (newAttemptCount >= forcedAdvanceLimit) {
+          // Si este turno retuvo el avance (Sophia no planteó la actividad
+          // siguiente), no se fuerza aquí: el turno que viene avanza con la
+          // pregunta. 20 oct 2026: en una actividad de un intento se retuvo y se
+          // forzó en el mismo turno; el puntero pasó a la actividad siguiente
+          // sin que Sophia la enseñara.
+          if (newAttemptCount >= forcedAdvanceLimit && !retenido && !turnoSinEvaluar) {
             // Buscar el mejor intento (mayor completeness_percentage)
             type AttemptAnalysis = { understanding_level?: string; completeness_percentage?: number }
             type AttemptRecord = { analysis?: AttemptAnalysis }
@@ -1486,7 +1718,7 @@ const allActivities = await prisma.activityProgress.findMany({
  * último faltaba: el 13 oct «reescribe…» se tomó por cierre y se le pegó
  * debajo la pregunta de la actividad siguiente.
  */
-const PEDIDO_IMPERATIVO = /(^|[.:;!]\s+)(reescribe|redacta|escribe|explica|describe|dime|cuéntame|indica|menciona|calcula|propón|elige|compara|identifica|señala|completa|resume|mueve|baja|sube|carga|prueba|lee|mira|ubica|justifica)\b/i
+const PEDIDO_IMPERATIVO = /(^|[.:;!]\s+)(reescribe|redacta|escribe|explica|describe|dime|cuéntame|indica|menciona|calcula|propón|elige|compara|identifica|señala|completa|resume|mueve|baja|sube|carga|prueba|lee|mira|ubica|justifica|toca|subraya|marca)\b/i
 function terminaEnPregunta(texto: string): boolean {
   const lineas = stripMarkers(texto).split('\n').map((l) => l.trim()).filter(Boolean)
   const ultima = lineas.at(-1) ?? ''

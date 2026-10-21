@@ -196,7 +196,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
     : isStreaming
     ? 'Sophia está escribiendo...'
     : voz.escuchando
-    ? 'Te escucho… habla y luego revisa el texto'
+    ? 'Te escucho… puedes hacer pausas. Toca el micrófono para terminar'
     : placeholder || 'Escribe tu mensaje...'
 
   const hasContent = message.trim() || attachments.length > 0

@@ -10,8 +10,22 @@ import type { Activity } from '../../types/lesson'
 import type { SesionSpec } from './tipos'
 import { idDelCasoCorto, idsDePuntosClave } from './plantillas'
 
-export const MAX_TURNOS = 16
+// 24 desde el 21 oct 2026: cada punto clave suma un turno para señalar en el texto
+// de la norma la línea que respalda la respuesta (subrayado).
+export const MAX_TURNOS = 24
 export const MAX_PALABRAS_INSTRUCCION = 90
+
+/**
+ * Turnos que admite la sesión: los intentos de cada actividad más uno por cada
+ * actividad con un texto propio para subrayar (el turno de subrayar no cuenta
+ * intento, pero sí es un mensaje del alumno).
+ */
+export function turnosPosibles(actividades: Activity[]): number {
+  return actividades.reduce(
+    (s, a) => s + (a.verification.max_attempts ?? 3) + (a.teaching.blocks?.some((b) => b.type === 'text' && b.subrayable) ? 1 : 0),
+    0,
+  )
+}
 export const MIN_DESCRIPCION_IMAGEN = 60
 
 function palabras(t: string): number {
@@ -72,8 +86,20 @@ export function validarSesion(spec: SesionSpec, actividades: Activity[]): string
   const ultima = actividades[actividades.length - 1]
   if (ultima.type !== 'closing' || ultima.verification.is_evaluative !== false) err(`${ultima.id}: la última actividad es un cierre sin nota`)
 
+  // 5a. Todo punto clave pide señalar en la norma la línea que respalda (lectura comprobada)
+  for (const p of spec.puntosClave) {
+    if (!p.subrayar) err(`${p.id}: falta subrayar.respalda (la línea de la norma que respalda la respuesta)`)
+  }
+
+  // 5b. Un texto subrayable declara la línea que respalda la respuesta (si no, nadie puede revisarlo)
+  for (const a of actividades) {
+    for (const b of a.teaching.blocks ?? []) {
+      if (b.type === 'text' && b.subrayable && !b.lineasClave?.length) err(`${a.id}: «${b.title}» es subrayable pero no se encontró la línea que respalda (subrayar.respalda)`)
+    }
+  }
+
   // 6. Presupuesto de turnos: 45 minutos
-  const turnos = actividades.reduce((s, a) => s + (a.verification.max_attempts ?? 3), 0)
+  const turnos = turnosPosibles(actividades)
   if (turnos > MAX_TURNOS) err(`la sesión admite hasta ${turnos} turnos; el tope es ${MAX_TURNOS} (45 min)`)
   if (actividades.length > 10) err(`${actividades.length} actividades; máximo 10`)
 
@@ -107,6 +133,6 @@ export function validarSesion(spec: SesionSpec, actividades: Activity[]): string
 export function resumen(actividades: Activity[]): string {
   const sinNota = actividades.filter((a) => a.verification.is_evaluative === false).length
   const bloques = actividades.reduce((n, a) => n + (a.teaching.blocks?.length ?? 0), 0)
-  const turnos = actividades.reduce((s, a) => s + (a.verification.max_attempts ?? 3), 0)
+  const turnos = turnosPosibles(actividades)
   return `${actividades.length} actividades (${sinNota} sin nota), ${bloques} bloques de material, hasta ${turnos} turnos; sin alternativas; un pedido por pregunta`
 }

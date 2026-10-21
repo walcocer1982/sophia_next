@@ -7,8 +7,9 @@
  *  - cierre que alimenta al instructor.
  * Si algo de la forma está mal, se corrige aquí y vale para todas las sesiones.
  */
-import type { Activity, CaseBlock, ImageBlock, SupportBlock, TextBlock } from '../../types/lesson'
+import type { Activity, CaseBlock, ClassifyBlock, ImageBlock, SupportBlock, TextBlock } from '../../types/lesson'
 import type { PuntoClaveSpec, RutinaSpec, SesionSpec, Subida } from './tipos'
+import { lineasDelTexto, textoPlano } from '../../lib/subrayado'
 
 export const RUTINA_BLOCK_ID = 'rutina-veo'
 
@@ -117,7 +118,7 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
       complexity: 'simple',
       keyPointIndex: null,
       teaching: {
-        agent_instruction: `Tercer paso de la rutina: Me pregunto. Haz la pregunta tal cual. No la respondas tú: si dice «no sé», eso es lo que buscamos; recógelo como su pregunta («eso lo vemos ahora») sin calificar. Luego anuncia en una oración los puntos de hoy: ${spec.keyPoints.join('; ')}.`,
+        agent_instruction: `Tercer paso de la rutina: Me pregunto. Haz la pregunta tal cual. No la respondas tú: si dice «no sé», eso es lo que buscamos; recógelo como su pregunta («eso lo vemos ahora») sin calificar. No anuncies temas ni hagas otra pregunta: la bienvenida ya presentó los temas de hoy.`,
         target_length: '40-70 palabras',
         uses: usa,
       },
@@ -128,9 +129,19 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
 
 function puntoClave(spec: SesionSpec, subidas: Subida, prefijo: string, n: number, p: PuntoClaveSpec): Activity {
   const norma: TextBlock = { id: p.norma.id, type: 'text', kind: 'norma', title: p.norma.title, source: p.norma.source, pinned: true, body: p.norma.body }
+  if (p.subrayar) {
+    // Las líneas que respaldan se declaran por fragmentos de su texto. Si alguno
+    // no aparece, quedan vacías y el validador no deja cargar la sesión.
+    const lineas = lineasDelTexto(p.norma.body).map((l) => textoPlano(l).toLowerCase())
+    const fragmentos = ([] as string[]).concat(p.subrayar.respalda)
+    const claves = fragmentos.map((f) => lineas.findIndex((l) => l.includes(f.toLowerCase())))
+    norma.subrayable = true
+    norma.lineasClave = claves.every((i) => i >= 0) ? [...new Set(claves)] : []
+  }
   const blocks: SupportBlock[] = [
     bloqueImagen(spec, subidas, p.lamina.imagenId, p.lamina.title, 'on_start'),
     norma,
+    ...(p.clasificar ? [{ ...p.clasificar, type: 'classify', showWhen: 'on_start' } as ClassifyBlock] : []),
     ...(p.apoyo ?? []).map((a) => bloqueImagen(spec, subidas, a.imagenId, a.title, 'on_reference')),
   ]
   return {

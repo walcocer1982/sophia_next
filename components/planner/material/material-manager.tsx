@@ -21,6 +21,7 @@ import {
   GitBranch,
   ImageIcon,
   SlidersHorizontal,
+  Columns3,
   Library,
   Pin,
   Plus,
@@ -63,6 +64,7 @@ const ICONO: Record<SupportBlockType, typeof ImageIcon> = {
   case: UserRound,
   diagram: GitBranch,
   simulator: SlidersHorizontal,
+  classify: Columns3,
 }
 
 const TIPOS: SupportBlockType[] = ['image', 'table', 'formula', 'simulator', 'text', 'case', 'compare', 'diagram']

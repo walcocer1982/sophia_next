@@ -18,6 +18,7 @@ import {
   ImageIcon,
   Pin,
   SlidersHorizontal,
+  Columns3,
   Maximize2,
   Sigma,
   Table2,
@@ -31,6 +32,8 @@ import { isMarkerVisible } from '@/lib/support-blocks'
 import { useMaterial } from './material-context'
 import { DiagramSvg } from './diagram-svg'
 import { SimulatorBody } from './simulator-block'
+import { ClassifyBody } from './classify-block'
+import { alternar, lineasDelTexto, sinSubrayar, textoPlano } from '@/lib/subrayado'
 import type {
   CaseBlock,
   CompareBlock,
@@ -52,6 +55,7 @@ const ICONO: Record<SupportBlock['type'], typeof ImageIcon> = {
   case: UserRound,
   diagram: GitBranch,
   simulator: SlidersHorizontal,
+  classify: Columns3,
 }
 
 interface SupportBlockCardProps {
@@ -77,7 +81,7 @@ export function SupportBlockCard({ block, pinned = false, startCollapsed = false
     if (!abierto) setAbierto(true)
   }
   const Icono = ICONO[block.type]
-  const ampliable = block.type === 'image' || block.type === 'compare' || block.type === 'text' || block.type === 'table' || block.type === 'diagram' || block.type === 'simulator'
+  const ampliable = block.type === 'image' || block.type === 'compare' || block.type === 'text' || block.type === 'table' || block.type === 'diagram' || block.type === 'simulator' || block.type === 'classify'
 
   return (
     <section
@@ -151,6 +155,8 @@ function BlockBody({ block, isTest }: { block: SupportBlock; isTest: boolean }) 
       return <DiagramBody block={block} />
     case 'simulator':
       return <SimulatorBody block={block} />
+    case 'classify':
+      return <ClassifyBody block={block} />
   }
 }
 
@@ -380,6 +386,8 @@ function TableBody({ block }: { block: TableBlock }) {
 // ── Texto ───────────────────────────────────────────────────────────────
 
 function TextBody({ block, large = false }: { block: TextBlock; large?: boolean }) {
+  const { hasProvider } = useMaterial()
+  if (block.subrayable && hasProvider) return <TextoSubrayable block={block} large={large} />
   return (
     <div className={cn('px-3.5 py-3 leading-relaxed text-gray-900', large ? 'text-lg' : 'text-[15px]')}>
       <ReactMarkdown
@@ -393,6 +401,89 @@ function TextBody({ block, large = false }: { block: TextBlock; large?: boolean 
       >
         {block.body}
       </ReactMarkdown>
+    </div>
+  )
+}
+
+/**
+ * Texto subrayable (lib/subrayado.ts): cada línea es un botón; tocarla la
+ * subraya y tocarla otra vez la quita. Lo subrayado viaja a Sophia.
+ */
+function TextoSubrayable({ block, large = false }: { block: TextBlock; large?: boolean }) {
+  const { subrayados, setSubrayado, subrayadosRevisados, pedirRevision } = useMaterial()
+  const estado = subrayados[block.id] ?? sinSubrayar()
+  const lineas = lineasDelTexto(block.body)
+  // Lo revisado por el servidor (21 oct 2026): nunca antes de enviar, para que
+  // no se pueda tocar hasta que salga verde.
+  const revisado = subrayadosRevisados[block.id]
+  // Verde solo lo que respalda: si marcó una de más, esa no se pinta (21 oct 2026: se pintaban las dos).
+  const respalda = new Set(revisado?.resultado === 'respalda' ? revisado.respaldan ?? revisado.lineas : revisado?.revelada ?? [])
+  const noRespalda = new Set(revisado?.resultado === 'no_respalda' ? revisado.lineas : [])
+  // Cada revisión que no respalda hace vibrar la línea: la clave cambia con cada una.
+  const vibracion = revisado?.resultado === 'no_respalda' ? revisado.nonce ?? 0 : 0
+  // La línea tocada mientras viaja la revisión (medio segundo): gris neutro que
+  // parpadea, no amarillo, que se leía como «aceptada» antes de pasar a rojo (21 oct 2026).
+  // Se apaga sola cuando llega la revisión (cambia el nonce).
+  const [tocada, setTocada] = useState<{ n: number; nonce: number } | null>(null)
+  const enRevision = tocada && tocada.nonce === (revisado?.nonce ?? 0) ? tocada.n : null
+  return (
+    <div className={cn('px-2.5 py-3 leading-relaxed text-gray-900', large ? 'text-lg' : 'text-[15px]')}>
+      <p className="mb-2 px-1 text-xs text-gray-600">
+        {estado.lineas.length
+          ? `${estado.lineas.length} subrayada${estado.lineas.length > 1 ? 's' : ''}.`
+          : 'Toca la línea que respalda tu respuesta: se revisa al tocarla.'}
+      </p>
+      <ul className="space-y-1">
+        {lineas.map((linea, n) => {
+          const marcada = estado.lineas.includes(n)
+          const plana = textoPlano(linea)
+          const verde = respalda.has(plana)
+          // Roja mientras siga marcada; gris tachada cuando ya se reveló la correcta.
+          const roja = !verde && noRespalda.has(plana) && marcada && !revisado?.revelada
+          const gris = !verde && noRespalda.has(plana) && marcada && !!revisado?.revelada
+          const esItem = /^(\d+[.)]|[-*•])\s+/.test(linea)
+          return (
+            <li key={roja ? `${n}:${vibracion}` : n} className={cn(roja && vibracion > 0 && 'animate-vibrar')}>
+              <button
+                type="button"
+                aria-pressed={marcada}
+                onClick={() => {
+                  if (marcada) {
+                    setSubrayado(block.id, alternar(estado, n))
+                    return
+                  }
+                  // Si ya respondió, cada toque es una respuesta: se revisa sola esa línea.
+                  // Si no, se suma a lo marcado y viaja con la respuesta que escriba.
+                  setSubrayado(block.id, { lineas: [n] })
+                  if (pedirRevision()) setTocada({ n, nonce: revisado?.nonce ?? 0 })
+                  else setSubrayado(block.id, alternar(estado, n))
+                }}
+                className={cn(
+                  'flex w-full gap-2 rounded-md px-1.5 py-1 text-left transition-colors',
+                  enRevision === n
+                    ? 'animate-pulse bg-gray-100 text-gray-700'
+                    : verde
+                    ? 'bg-green-50 text-green-900 underline decoration-green-600 decoration-2 underline-offset-4'
+                    : roja
+                      ? 'bg-red-50 text-red-900 underline decoration-red-500 decoration-2 underline-offset-4'
+                      : gris
+                        ? 'text-gray-500 line-through decoration-gray-400'
+                        : marcada
+                        ? 'bg-amber-100 underline decoration-[#fbc50b] decoration-2 underline-offset-4'
+                        : 'hover:bg-gray-100',
+                )}
+              >
+                {esItem && <span aria-hidden className="select-none">•</span>}
+                <span>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ p: ({ children }) => <>{children}</>, strong: ({ children }) => <strong className="font-bold">{children}</strong> }}>
+                    {linea.replace(/^(\d+[.)]|[-*•])\s+/, '')}
+                  </ReactMarkdown>
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
@@ -491,6 +582,11 @@ function BlockModal({ block, onClose }: { block: SupportBlock; onClose: () => vo
             {block.type === 'simulator' && (
               <div className="mx-auto max-w-2xl">
                 <SimulatorBody block={block} large />
+              </div>
+            )}
+            {block.type === 'classify' && (
+              <div className="mx-auto max-w-2xl">
+                <ClassifyBody block={block} />
               </div>
             )}
           </div>

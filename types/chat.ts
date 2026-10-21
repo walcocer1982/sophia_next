@@ -13,6 +13,8 @@ export interface ChatMessage {
   outputTokens?: number | null
   /** Actividad a la que pertenece (la vista Cuaderno agrupa por esto). */
   activityId?: string | null
+  /** Lo que el alumno hizo en la pizarra al enviar (`Message.material`): por ahora, lo subrayado. */
+  material?: unknown
 }
 
 // ⭐ Optimistic UI: Extender con propiedades para estado en tiempo real

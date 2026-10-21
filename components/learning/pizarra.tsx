@@ -48,6 +48,9 @@ export function useShownBlocks(blocks: BlockWithActivity[], activityOrder: strin
   }, [blocks, activityOrder, currentActivityId, cited, lastCited, opened])
 }
 
+/** Una o dos columnas según el ancho; las tarjetas no se estiran a la altura de la fila. */
+const REJILLA = 'grid items-start gap-3.5 grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))]'
+
 interface PizarraProps {
   blocks: BlockWithActivity[]
   activityOrder: string[]
@@ -106,35 +109,50 @@ export function Pizarra({ blocks, activityOrder, currentActivityId, activityInfo
         ) : (
           /* Cuando la pizarra es ancha (más de ~700 px), las tarjetas van en dos
              columnas: la fórmula y el ecualizador lado a lado, sin desplazarse.
-             Con un solo bloque, ocupa todo el ancho. */
-          <div className="grid content-start gap-3.5 grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))]">
-            {current.map((b) => (
-              <SupportBlockCard key={`${currentActivityId}:${b.id}`} block={b} isTest={isTest} />
-            ))}
-            {onDemand.length > 0 && (
-              <button
-                type="button"
-                onClick={() => onDemand.forEach((b) => openBlock(b.id))}
-                className="col-span-full w-full min-h-11 rounded-xl border border-dashed border-white/25 px-3 text-sm font-semibold text-[#e6edf1] flex items-center justify-center gap-1.5 hover:bg-white/5"
-              >
-                <Plus className="h-4 w-4" aria-hidden /> Ver material disponible ({onDemand.length})
-              </button>
+             Lo actual y lo anterior van en rejillas separadas (19 oct 2026): en una
+             sola, un bloque actual solo dejaba media pizarra vacía al lado, y una
+             tarjeta plegada se estiraba a la altura de su vecina (items-start). */
+          <div className="space-y-3.5">
+            {(current.length > 0 || onDemand.length > 0) && (
+              <div className={REJILLA}>
+                {current.map((b) =>
+                  // Un espacio de trabajo (clasificar) ocupa todo el ancho, debajo del material a leer.
+                  b.type === 'classify' ? (
+                    <div key={`${currentActivityId}:${b.id}`} className="col-span-full">
+                      <SupportBlockCard block={b} isTest={isTest} />
+                    </div>
+                  ) : (
+                    <SupportBlockCard key={`${currentActivityId}:${b.id}`} block={b} isTest={isTest} />
+                  ),
+                )}
+                {onDemand.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onDemand.forEach((b) => openBlock(b.id))}
+                    className="col-span-full w-full min-h-11 rounded-xl border border-dashed border-white/25 px-3 text-sm font-semibold text-[#e6edf1] flex items-center justify-center gap-1.5 hover:bg-white/5"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden /> Ver material disponible ({onDemand.length})
+                  </button>
+                )}
+              </div>
             )}
             {pinned.length > 0 && (
-              <>
+              <div>
                 {current.length > 0 && (
-                  <p className="col-span-full pt-1 text-[11px] font-semibold uppercase tracking-wide text-[#7f909b]">De actividades anteriores</p>
+                  <p className="pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-[#7f909b]">De actividades anteriores</p>
                 )}
-                {pinned.map((b) => (
-                  <SupportBlockCard
-                    key={`${currentActivityId}:${b.id}`}
-                    block={b}
-                    pinned
-                    startCollapsed={!pinnedStaysOpen(info, b.id)}
-                    isTest={isTest}
-                  />
-                ))}
-              </>
+                <div className={REJILLA}>
+                  {pinned.map((b) => (
+                    <SupportBlockCard
+                      key={`${currentActivityId}:${b.id}`}
+                      block={b}
+                      pinned
+                      startCollapsed={!pinnedStaysOpen(info, b.id)}
+                      isTest={isTest}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}

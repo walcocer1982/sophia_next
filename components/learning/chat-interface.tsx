@@ -10,6 +10,7 @@ import type { ChatMessage, OptimisticMessage } from '@/types/chat'
 import type { PlannerAttachment } from '@/types/planner'
 import { streamChatResponse } from '@/lib/chat-stream'
 import { useMaterial } from './material-context'
+import { paraGuardar } from '@/lib/subrayado'
 import { toast } from 'sonner'
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -84,10 +85,14 @@ export function ChatInterface({
 
   // El panel muestra lo que Sophia citó: se calcula de sus mensajes, también
   // mientras escribe, para que el bloque aparezca cuando lo nombra.
-  const { reportMessages, getMaterialState } = useMaterial()
+  const { reportMessages, getMaterialState, subrayados, blocksById, reportSubrayadosRevisados, registrarRevisor } = useMaterial()
   useEffect(() => {
     reportMessages(messages.filter((m) => m.role === 'assistant').map((m) => m.content))
   }, [messages, reportMessages])
+  // La pizarra marca en verde o gris lo revisado (lib/subrayado.ts): se lee de las respuestas del alumno.
+  useEffect(() => {
+    reportSubrayadosRevisados(messages.filter((m) => m.role === 'user').map((m) => m.material))
+  }, [messages, reportSubrayadosRevisados])
 
   // Generate welcome message if chat is empty
   useEffect(() => {
@@ -206,6 +211,24 @@ export function ChatInterface({
     }
   }
 
+  // Al tocar una línea en la pizarra se revisa enseguida (21 oct 2026), si es su
+  // turno y ya respondió la pregunta de esta actividad. Si no respondió, la línea
+  // queda marcada y viaja con la respuesta que escriba.
+  const revisarAlTocar = useRef<() => boolean>(() => false)
+  useEffect(() => {
+    revisarAlTocar.current = () => {
+      if (isLoading || isGeneratingWelcome || cerrada) return false
+      const actual = progress.currentActivityId
+      if (!messages.some((m) => m.role === 'user' && m.activityId === actual)) return false
+      void handleSendMessage('listo')
+      return true
+    }
+  })
+  useEffect(() => {
+    registrarRevisor(() => revisarAlTocar.current())
+    return () => registrarRevisor(null)
+  }, [registrarRevisor])
+
   const handleSendMessage = async (content: string, attachments?: PlannerAttachment[]) => {
     if ((!content.trim() && (!attachments || attachments.length === 0)) || isLoading) return
 
@@ -221,6 +244,17 @@ export function ChatInterface({
       status: 'completed',
       isOptimistic: false,
       activityId: progress.currentActivityId,
+      // Lo subrayado en los textos de esta actividad se ve bajo la respuesta al
+      // enviar; el servidor guarda lo mismo en el mensaje (Message.material).
+      material: (() => {
+        const subrayado = Object.entries(subrayados)
+          .map(([id, s]) => {
+            const b = blocksById.get(id)
+            return b?.type === 'text' && b.activityId === progress.currentActivityId ? paraGuardar(b, s) : null
+          })
+          .filter((x): x is NonNullable<typeof x> => !!x)
+        return subrayado.length ? { subrayado } : undefined
+      })(),
     }
 
     // 2. Crear placeholder optimistic para respuesta del instructor
@@ -335,7 +369,9 @@ export function ChatInterface({
         },
         attachments,
         getMaterialState(),
-        comoEstudiante
+        comoEstudiante,
+        // El servidor revisó el subrayado: la respuesta del alumno muestra el resultado.
+        (material) => setMessages((prev) => prev.map((m) => (m.id === userMessage.id ? { ...m, material } : m))),
       )
     } catch (error) {
       console.error('Error sending message:', error)

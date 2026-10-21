@@ -11,6 +11,7 @@
 import type { Activity, ImageBlock, ImageMarker, LessonContent, SupportBlock } from '@/types/lesson'
 import type { Cited } from '@/lib/material-markers'
 import { serializeSimulatorForPrompt } from '@/lib/simulator'
+import { serializeClassifyForPrompt } from '@/lib/clasificar'
 
 /** Bloque con la actividad que lo declara (para filtrar en el cliente). */
 export type BlockWithActivity = SupportBlock & { activityId: string }
@@ -123,6 +124,7 @@ const TIPO: Record<SupportBlock['type'], string> = {
   case: 'CASO',
   diagram: 'DIAGRAMA',
   simulator: 'ECUALIZADOR',
+  classify: 'CLASIFICAR',
 }
 
 const palabras = (s: string) => s.trim().split(/\s+/).filter(Boolean).length
@@ -205,6 +207,8 @@ export function serializeBlockForPrompt(b: SupportBlock, cited?: Cited): string 
     }
     case 'simulator':
       return serializeSimulatorForPrompt(b)
+    case 'classify':
+      return serializeClassifyForPrompt(b)
   }
 }
 

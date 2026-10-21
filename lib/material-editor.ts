@@ -17,6 +17,7 @@ export const BLOCK_TYPE_LABELS: Record<SupportBlockType, string> = {
   case: 'Caso',
   diagram: 'Diagrama',
   simulator: 'Ecualizador',
+  classify: 'Clasificar',
 }
 
 export const BLOCK_TYPE_HINTS: Record<SupportBlockType, string> = {
@@ -28,6 +29,7 @@ export const BLOCK_TYPE_HINTS: Record<SupportBlockType, string> = {
   case: 'Un personaje con datos que se usan en varios turnos',
   diagram: 'Un flujo, ciclo, jerarquía o línea de tiempo (nunca un equipo)',
   simulator: 'Barras que el alumno mueve para ver cómo cambia un resultado ponderado (una nota)',
+  classify: 'Tarjetas que el alumno arrastra a columnas: prueba que leyó el material',
 }
 
 const quitarTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -68,6 +70,7 @@ const TITULO_NUEVO: Record<SupportBlockType, string> = {
   case: 'Caso nuevo',
   diagram: 'Diagrama nuevo',
   simulator: 'Ecualizador nuevo',
+  classify: 'Clasificación nueva',
 }
 
 /** Bloque nuevo con contenido mínimo de ejemplo; el editor lo completa. */
@@ -100,6 +103,12 @@ export function newBlock(type: SupportBlockType, existingIds: Iterable<string>):
         scale: { min: 0, max: 20, pass: 13, round: 'half_up' },
         presets: [{ label: 'Ejemplo', values: { cv: 12, ep: 12, ef: 12, tc1: 14, tc2: 14 } }],
         allowOwnValues: true,
+      }
+    case 'classify':
+      return {
+        id, type, title, prompt: 'Arrastra cada tarjeta a su columna',
+        bins: [{ id: 'a', label: 'Columna A' }, { id: 'b', label: 'Columna B' }],
+        cards: [{ id: 'uno', text: 'Tarjeta uno', bin: 'a' }, { id: 'dos', text: 'Tarjeta dos', bin: 'b' }],
       }
   }
 }

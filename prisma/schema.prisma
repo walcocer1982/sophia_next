@@ -416,6 +416,9 @@ model Message {
   activityId   String?  // Referencia a contentJson.activities[].id
   inputTokens  Int?
   outputTokens Int?
+  // Lo que el alumno hizo en la pizarra al enviar este mensaje (20 oct 2026):
+  // { subrayado: [{ blockId, titulo, lineas: string[] }] }. Solo mensajes del alumno.
+  material     Json?
 
   // Relaciones
   session LessonSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

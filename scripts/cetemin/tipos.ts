@@ -10,7 +10,7 @@
  * Fuente de los datos: SOLO `05_Base-de-datos` del proyecto diseño-ppt-cetemin
  * (solo lectura). Lo que falte se pide allá, no se saca de los guiones.
  */
-import type { ImageBlock, LessonContent } from '../../types/lesson'
+import type { ClassifyBlock, ImageBlock, LessonContent } from '../../types/lesson'
 
 /** Una imagen aprobada de `imagenes.csv`. `description` lleva el texto escrito en ella: Sophia no ve imágenes. */
 export interface ImagenSpec {
@@ -64,6 +64,17 @@ export interface PuntoClaveSpec {
   ejemplo: string
   /** Palabra que identifica el ejemplo en la transcripción (la busca el auditor). */
   ejemploClave: string
+  /**
+   * Tarjetas para ubicar en la pizarra antes de responder (bloque «clasificar»):
+   * la ubicación es la decisión y prueba que leyó; la razón la escribe. Opcional.
+   */
+  clasificar?: Omit<ClassifyBlock, 'type' | 'showWhen' | 'pinned'>
+  /**
+   * El texto de la norma se puede subrayar. `respalda`: un fragmento de la línea
+   * que respalda la respuesta (o varios, si más de una línea la respalda). El
+   * código compara contra ellas. Obligatorio en todo punto clave (validar.ts).
+   */
+  subrayar?: { respalda: string | string[] }
   /** UNA pregunta sobre una situación propia: una decisión con su porqué. */
   pregunta: string
   criterios: string[]
