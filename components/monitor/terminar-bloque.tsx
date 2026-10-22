@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { formatTime } from '@/lib/formatters'
 
 /**
  * El botón del instructor para terminar el bloque de Sophia (22 oct 2026).
@@ -21,7 +20,11 @@ export function TerminarBloque({
   courseId: string
   sectionId: string
   lessonId: string
-  /** ISO; null si la sesión no tiene horario. */
+  /**
+   * La hora de cierre ya formateada en el servidor («12:23 p. m.»); null si la
+   * sesión no tiene horario. Se formatea allá porque la ICU de Node y la del
+   * navegador escriben distinto «p. m.» y eso rompía la hidratación.
+   */
   cierre: string | null
   cerradoPorInstructor: boolean
   /** La ventana está abierta ahora mismo. */
@@ -60,7 +63,7 @@ export function TerminarBloque({
       {cerradoPorInstructor ? (
         <>
           <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700">
-            Bloque terminado a las {formatTime(cierre)}
+            Bloque terminado a las {cierre}
           </span>
           <button onClick={() => enviar('reabrir')} disabled={ocupado} className="text-sm text-blue-600 hover:underline disabled:opacity-50">
             Reabrir
@@ -68,7 +71,7 @@ export function TerminarBloque({
         </>
       ) : abierta ? (
         <>
-          <span className="text-sm text-gray-600">La ventana cierra a las {formatTime(cierre)}</span>
+          <span className="text-sm text-gray-600">La ventana cierra a las {cierre}</span>
           <button
             onClick={() => enviar('cerrar')}
             disabled={ocupado}
@@ -78,7 +81,7 @@ export function TerminarBloque({
           </button>
         </>
       ) : (
-        <span className="text-sm text-gray-500">Cerró a las {formatTime(cierre)}</span>
+        <span className="text-sm text-gray-500">Cerró a las {cierre}</span>
       )}
       {error && <span className="text-sm text-red-700">{error}</span>}
     </div>

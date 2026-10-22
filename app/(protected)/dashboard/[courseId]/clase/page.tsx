@@ -6,6 +6,7 @@ import { seccionesVisibles } from '@/lib/alcance'
 import { alcanceEfectivo } from '@/lib/ver-como'
 import { cargarReporteDeClase } from '@/lib/reporte-clase-datos'
 import { SIN_REFUERZO } from '@/lib/reporte-clase-ia'
+import { formatTime } from '@/lib/formatters'
 import { Migas } from '@/components/programacion/breadcrumb'
 import { TerminarBloque } from '@/components/monitor/terminar-bloque'
 import { RedaccionIA } from '@/components/monitor/redaccion-ia'
@@ -129,7 +130,7 @@ export default async function ReporteDeClasePage({
           courseId={courseId}
           sectionId={seccion.id}
           lessonId={leccion.id}
-          cierre={seccion.tieneHorario && seccion.cierre ? seccion.cierre.toISOString() : null}
+          cierre={seccion.tieneHorario && seccion.cierre ? formatTime(seccion.cierre) : null}
           cerradoPorInstructor={seccion.cerradoPorInstructor}
           abierta={seccion.abierta}
         />
