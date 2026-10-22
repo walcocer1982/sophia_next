@@ -80,11 +80,14 @@ export function MatrizTabla({ matriz, courseId }: { matriz: Matriz; courseId: st
                   className="px-2 py-2.5 text-center text-xs font-semibold text-gray-600"
                   title={l.title}
                 >
+                  {/* El número de sesión manda (21 oct 2026): el título truncado
+                      («Riesgos en trabajo…») no decía cuál era. */}
                   <Link
                     href={`/dashboard/${courseId}`}
-                    className="block max-w-[7rem] truncate hover:text-gray-900 hover:underline"
+                    className="block max-w-[7rem] hover:text-gray-900 hover:underline"
                   >
-                    {l.title}
+                    <span className="block text-sm font-bold text-gray-800">S{l.order}</span>
+                    <span className="block truncate text-[11px] font-normal text-gray-400">{l.title}</span>
                   </Link>
                 </th>
               ))}

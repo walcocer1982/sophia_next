@@ -13,6 +13,7 @@ plantillas.ts                cómo se vuelven actividades (la forma vive UNA vez
 validar.ts                   reglas que bloquean la carga
 cargar.ts                    validar → imágenes al banco → curso y lección en la base
 auditar-sesion.ts            revisa la transcripción de una sesión de prueba
+simular-alumnos.ts           alumnos ficticios con sesiones reales, para ver el Monitor y la ficha
 ```
 
 ## Flujo
@@ -25,6 +26,26 @@ npx tsx scripts/cetemin/auditar-sesion.ts <sessionId>               # la transcr
 ```
 
 La lección se publica solo cuando la auditoría de las dos pruebas pasa sin fallas.
+
+## Alumnos simulados (Monitor y ficha)
+
+```bash
+npx tsx scripts/cetemin/simular-alumnos.ts si-altoriesgo/1                       # bueno, apurado y flojo, de corrido
+npx tsx scripts/cetemin/simular-alumnos.ts si-altoriesgo/1 bueno:12 apurado:45 atascado:75 --en-vivo
+    # clase en vivo: a la vez, cada uno a su ritmo (segundos por mensaje); perfiles: bueno, apurado, flojo, atascado, equivoca
+npx tsx scripts/cetemin/simular-alumnos.ts --limpiar si-altoriesgo/1             # borra alumnos, sesiones y sección
+```
+
+La lección se nombra por id o como `<slug del curso>/<número de sesión>`. **El servidor local y producción
+comparten la base de datos**: una clase corrida desde la laptop (con `npm run dev` levantado) se ve en el
+Monitor de producción al momento. Para una demostración: levantar `npm run dev`, correr la línea `--en-vivo`
+y abrir el Monitor del curso; en unos cinco minutos hay uno por terminar, uno a medias y uno atascado.
+
+Crea la sección «Práctica (simulados)» en el curso de la lección, matricula alumnos
+`<perfil>@simulado.local` (rol STUDENT, nombre con «(simulado)») y corre la lección por
+las rutas reales de chat con el usuario de prueba; al terminar, la sesión pasa al alumno
+simulado y deja de ser de prueba, así el Monitor y la ficha la cuentan como una clase
+real. Requiere `npm run dev` corriendo. La transcripción queda en `logs/simulados/`.
 
 ## Reglas que el validador bloquea
 

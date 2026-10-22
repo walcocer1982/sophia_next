@@ -4,20 +4,22 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { seccionesVisibles } from '@/lib/alcance'
 import { alcanceEfectivo } from '@/lib/ver-como'
-import { tituloActividad } from '@/lib/actividad-titulo'
-import { normalizeLevel } from '@/lib/levels'
 import { otrosCursosDelAlumno } from '@/lib/asistencia'
 import { formatDate, formatDateLong } from '@/lib/formatters'
 import { ESTADOS, MOTIVOS, historialDeSeguimiento } from '@/lib/seguimiento'
+import { ventanaCerrada } from '@/lib/monitor'
+import { reporteDeSesion, NIVEL_TEXTO } from '@/lib/reporte-sesion'
 import { SeguimientoForm } from '@/components/monitor/seguimiento-form'
+import { ReporteSesionView } from '@/components/monitor/reporte-sesion'
+import type { Activity } from '@/types/lesson'
 
 export const dynamic = 'force-dynamic'
 
-const NIVEL: Record<string, { texto: string; clase: string }> = {
-  outstanding: { texto: 'Destacado', clase: 'bg-indigo-50 text-indigo-700' },
-  achieved: { texto: 'Logrado', clase: 'bg-emerald-50 text-emerald-700' },
-  developing: { texto: 'En proceso', clase: 'bg-amber-50 text-amber-700' },
-  beginning: { texto: 'En inicio', clase: 'bg-red-50 text-red-700' },
+const CLASE_NIVEL: Record<string, string> = {
+  logrado_destacado: 'bg-indigo-50 text-indigo-700',
+  logrado: 'bg-emerald-50 text-emerald-700',
+  en_proceso: 'bg-amber-50 text-amber-700',
+  en_inicio: 'bg-red-50 text-red-700',
 }
 
 /**
@@ -50,7 +52,7 @@ export default async function EstudiantePage({
     }),
     prisma.course.findFirst({
       where: { id: courseId, deletedAt: null },
-      select: { id: true, title: true },
+      select: { id: true, title: true, methodology: true },
     }),
   ])
   if (!alumno || !curso) notFound()
@@ -102,7 +104,9 @@ export default async function EstudiantePage({
     select: {
       id: true,
       title: true,
+      order: true,
       contentJson: true,
+      keyPoints: true,
       sessions: {
         where: { userId: studentId, isTest: false },
         orderBy: { startedAt: 'desc' },
@@ -120,6 +124,12 @@ export default async function EstudiantePage({
               passedCriteria: true,
               evidenceData: true,
             },
+          },
+          // Lo que escribió, por actividad: de aquí salen las citas del reporte.
+          messages: {
+            where: { role: 'user' },
+            orderBy: { timestamp: 'asc' },
+            select: { activityId: true, content: true },
           },
         },
       },
@@ -144,8 +154,23 @@ export default async function EstudiantePage({
             ? 'no-entro'
             : 'pendiente'
 
-    const acts = (l.contentJson as { activities?: { id: string; verification?: { question?: string } }[] } | null)?.activities ?? []
-    return { leccion: l, ses, estado, cierre, acts }
+    const acts = (l.contentJson as { activities?: Activity[] } | null)?.activities ?? []
+    // El reporte de la sesión (lib/reporte-sesion.ts): qué logró y qué le falta.
+    // «Cerrada» = terminó o su ventana pasó; solo entonces se le reclama lo que
+    // no alcanzó. Lo que no hizo en esta sesión queda fijo: la siguiente no lo cierra.
+    const reporte =
+      ses && acts.length > 0
+        ? reporteDeSesion({
+            actividades: acts,
+            keyPoints: l.keyPoints,
+            progresos: ses.activities,
+            terminada: !!ses.completedAt,
+            cerrada: !!ses.completedAt || ventanaCerrada(cierre, ses.lastActivityAt, ahora),
+            metodologia: curso.methodology,
+            mensajes: ses.messages,
+          })
+        : null
+    return { leccion: l, ses, estado, cierre, acts, reporte }
   })
 
   // Solo cuentan las sesiones que su sección programó: el resto no se le puede
@@ -245,7 +270,7 @@ export default async function EstudiantePage({
       </section>
 
       <div className="space-y-3">
-        {filas.map(({ leccion, ses, estado, cierre, acts }) => {
+        {filas.map(({ leccion, ses, estado, cierre, reporte }) => {
           if (estado === 'no-programada') {
             return (
               <div
@@ -253,7 +278,7 @@ export default async function EstudiantePage({
                 className="rounded-xl border border-dashed border-gray-200 px-5 py-3"
               >
                 <p className="text-sm text-gray-400">
-                  {leccion.title} — no programada para {matricula.section.name}
+                  S{leccion.order} · {leccion.title} — no programada para {matricula.section.name}
                 </p>
               </div>
             )
@@ -267,7 +292,10 @@ export default async function EstudiantePage({
             <div key={leccion.id} className="rounded-xl border border-gray-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
                 <div className="min-w-0">
-                  <h2 className="font-semibold text-gray-900">{leccion.title}</h2>
+                  <h2 className="font-semibold text-gray-900">
+                    <span className="mr-1.5 text-gray-400">S{leccion.order}</span>
+                    {leccion.title}
+                  </h2>
                   <p className="mt-0.5 text-sm text-gray-500">
                     {estado === 'no-entro' &&
                       `No entró · cerró el ${cierre ? formatDateLong(cierre) : '—'}`}
@@ -301,46 +329,45 @@ export default async function EstudiantePage({
                 </div>
               </div>
 
-              {ses && acts.length > 0 && (
-                <div className="divide-y divide-gray-50">
-                  {acts.map((a, i) => {
-                    const p = ses.activities.find((x) => x.activityId === a.id)
-                    const ev = p?.evidenceData as
-                      | { attempts?: { analysis?: { understanding_level?: string } }[] }
-                      | null
-                    const ultimo = ev?.attempts?.at(-1)?.analysis?.understanding_level
-                    const nivel = ultimo ? NIVEL[normalizeLevel(ultimo)] : null
-
-                    return (
-                      <div key={a.id} className="flex items-center gap-3 px-5 py-2.5">
-                        <span className="w-5 shrink-0 text-xs tabular-nums text-gray-400">
-                          {i + 1}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
-                          {tituloActividad(a, i)}
-                        </span>
-                        {p?.attempts ? (
-                          <span className="shrink-0 text-xs text-gray-400">
-                            {p.attempts} {p.attempts === 1 ? 'intento' : 'intentos'}
-                          </span>
-                        ) : null}
-                        {p?.status === 'COMPLETED' && p.passedCriteria === false ? (
-                          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                            por límite
-                          </span>
-                        ) : nivel ? (
-                          <span
-                            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${nivel.clase}`}
-                          >
-                            {nivel.texto}
-                          </span>
-                        ) : (
-                          <span className="shrink-0 text-xs text-gray-300">sin llegar</span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+              {ses && reporte && (
+                <>
+                  <div className="px-5 py-4">
+                    <ReporteSesionView reporte={reporte} nombre={alumno.name ?? alumno.email ?? ''} />
+                  </div>
+                  <details className="border-t border-gray-100">
+                    <summary className="cursor-pointer px-5 py-2.5 text-xs font-medium text-gray-500 hover:text-gray-900">
+                      Actividad por actividad
+                    </summary>
+                    <div className="divide-y divide-gray-50 border-t border-gray-100">
+                      {reporte.actividades.map((a) => (
+                        <div key={a.id} className="flex items-center gap-3 px-5 py-2.5">
+                          <span className="w-5 shrink-0 text-xs tabular-nums text-gray-400">{a.indice}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{a.titulo}</span>
+                          {a.intentos ? (
+                            <span className="shrink-0 text-xs text-gray-400">
+                              {a.intentos} {a.intentos === 1 ? 'intento' : 'intentos'}
+                            </span>
+                          ) : null}
+                          {a.estado === 'sin_llegar' ? (
+                            <span className="shrink-0 text-xs text-gray-300">sin llegar</span>
+                          ) : a.estado === 'en_curso' ? (
+                            <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">en curso</span>
+                          ) : !a.evaluativa ? (
+                            <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">sin nota</span>
+                          ) : a.porLimite ? (
+                            <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">por límite</span>
+                          ) : a.nivel ? (
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${CLASE_NIVEL[a.nivel]}`}>
+                              {NIVEL_TEXTO[a.nivel]}
+                            </span>
+                          ) : (
+                            <span className="shrink-0 text-xs text-gray-400">sin evaluar</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </>
               )}
             </div>
           )

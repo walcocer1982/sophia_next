@@ -1783,6 +1783,23 @@ export default function LoginPage() {
 
 ---
 
+### Reporte por alumno y por sesión (21 oct 2026)
+
+**Qué es:** en la ficha del alumno (`/dashboard/[courseId]/[studentId]`), cada sesión muestra un reporte con vocabulario de evaluación, no de chat: **Avance de la sesión** (actividades hechas, con y sin nota), **Logro de aprendizaje** (puntos clave logrados sobre el total), **Nivel de logro** (En inicio · En proceso · Logrado · Destacado), **Desempeño** (la nota en /20), **Dominio de criterios** (cubiertos sobre evaluados) y **Lectura comprobada**; después, una tabla por punto clave con su evidencia, **Fortalezas**, **Oportunidades de mejora** y **Acciones** para el instructor. Lo arma `lib/reporte-sesion.ts` (función pura, pruebas en `tests/reporte-sesion.test.ts`) y lo pinta `components/monitor/reporte-sesion.tsx`. Lienzo del diseño: https://claude.ai/artifact/Egmc8jP5bM6aNhiD93d3aj.
+
+**Reglas:**
+- El nivel de cada actividad sale de `calculateRubricLevel(enriquecerConPlan(...))`, la misma función de la nota: tope por límite, eliminatorio nunca cubierto → En inicio, penalidad por intentos. La ficha antes mostraba el `understanding_level` crudo del último intento, que no coincidía con la nota.
+- **Un punto clave toma el nivel más bajo de sus actividades con nota** (`keyPointIndex`); «logrado» exige además que todas estén completadas. Las actividades sin nota (`is_evaluative: false`: rutina y cierre) no entran en ningún conteo del logro.
+- **El resultado de una sesión queda fijo** (decisión de Walther, 21 oct 2026): lo que el alumno haga en la S2 no cierra las brechas de la S1. Las acciones se derivan solo de esa sesión.
+- Lo que no alcanzó se reclama solo si la sesión está **cerrada** (terminó o su ventana pasó, `ventanaCerrada` de `lib/monitor.ts`); con la ventana abierta no es brecha.
+- La lectura comprobada se lee de `lecturaNoComprobada` en la evidencia, solo en actividades con una norma que declara `lineasClave`. Todavía no baja el nivel (pendiente de decidir: «sin lectura no hay Destacado»).
+- La duda que dejó en el cierre (`closing`) es la respuesta literal del alumno y se vuelve una acción, salvo «ninguna / nada / todo claro».
+- Alumnos ficticios para ver el Monitor con datos: `scripts/cetemin/simular-alumnos.ts` (sección «Práctica (simulados)», correos `@simulado.local`, sesiones reales reasignadas, `--limpiar` para borrarlos).
+- **El Monitor del curso (`/dashboard/[courseId]`, componente de cliente) expulsaba al instructor que entraba por URL o recargaba:** `useSession` empieza en `loading` con `data` vacío, el rol caía al valor por defecto `STUDENT` y el efecto mandaba a `/lessons`. Ahora espera `status !== 'loading'`. Si una página de cliente decide por rol, espera el `status` antes de redirigir. Ahora se llega desde la franja «En vivo» de la portada y desde «Ver en vivo →» en la matriz.
+- **La portada del Monitor se recorre como Programación (21 oct 2026, pedido de Walther):** árbol admisión ▸ sede ▸ carrera a la izquierda (`components/monitor/arbol-monitor.tsx`, reglas puras en `lib/monitor-arbol.ts` con pruebas: un curso sirve a una carrera por su lista m:n o por ser transversal, igual que `sirveA` en Programación) y, a la derecha, los cursos de esa rama con «necesitan atención». La selección va en la URL (`/dashboard?admision=&sede=&carrera=`, ids), no en segmentos de ruta, porque `/dashboard/[courseId]` ya ocupa el primer segmento y Next no admite dos nombres de slug al mismo nivel. Las matrices se calculan una vez por (curso, admisión, sede) y se reparten a los nodos del árbol. El instructor con una sola carrera entra directo (`unicaRama`). La matriz recibe la rama (`admision`, `sede`) y acepta `seccion` para mirar una sola; muestra fichas por sección cuando hay más de una.
+
+---
+
 ### Sesiones de curso con Sophia: enseñar primero, sin alternativas, caso corto (15 oct 2026)
 
 **Contexto:** en los cursos de CETEMIN (primero SI-ALTORIESGO), Sophia es el **primer bloque de 45 min de la clase virtual** de 3 horas pedagógicas. Después el instructor aclara unos 15 min con el Monitor delante y los equipos resuelven el caso de la sesión en sala. La plantilla de tutoría (alternativas + justificación) no sirve aquí: con un alumno simulado se vio que Sophia preguntaba el 85 % del tiempo a alumnos que recién estaban aprendiendo. Walther fijó estas reglas, que valen **cada vez que se diseñe una sesión de curso** (manual, cargador o planner):
