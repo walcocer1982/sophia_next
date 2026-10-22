@@ -34,7 +34,25 @@ type Intento = {
   analysis?: { criteriaMatched?: string[]; criteriaMissing?: string[]; unverified?: boolean }
 }
 
-export type ProgresoReporte = ProgresoGuardado & { status: string }
+export type ProgresoReporte = ProgresoGuardado & {
+  status: string
+  startedAt?: Date | string | null
+  completedAt?: Date | string | null
+}
+
+export type MensajeDelAlumno = { activityId: string | null; content: string; timestamp?: Date | string }
+
+/** Dónde está el alumno ahora mismo (22 oct 2026): lo que la ficha no decía. */
+export type Ubicacion = {
+  estado: 'terminada' | 'escribiendo' | 'en_pausa' | 'lo_dejo' | 'cerro_sin_terminar'
+  actividad: ActividadDelReporte | null
+  /** Minutos desde su último mensaje; null si no escribió nada. */
+  minutosSinEscribir: number | null
+}
+
+/** Con la ventana abierta: menos de 2 min es escribiendo, hasta 10 es pausa, más es que lo dejó. */
+export const ESCRIBIENDO_HASTA_MIN = 2
+export const PAUSA_HASTA_MIN = 10
 
 export type ActividadDelReporte = {
   id: string
@@ -58,6 +76,10 @@ export type ActividadDelReporte = {
   turnos: number
   /** La respuesta de fondo: el primer mensaje con contenido que escribió en la actividad. */
   cita: string | null
+  /** Línea de tiempo: cuántos mensajes escribió en la actividad y cuánto estuvo en ella. */
+  mensajes: number
+  palabras: number
+  minutos: number | null
 }
 
 export type PuntoClaveReporte = {
@@ -78,7 +100,17 @@ export type Oportunidad = {
 }
 
 export type ReporteSesion = {
-  avance: { hechas: number; total: number; conNotaHechas: number; conNota: number; terminada: boolean }
+  avance: {
+    hechas: number
+    total: number
+    conNotaHechas: number
+    conNota: number
+    terminada: boolean
+    /** Participación: cuánto escribió. */
+    mensajes: number
+    palabrasPorMensaje: number | null
+  }
+  ubicacion: Ubicacion
   logro: {
     puntosLogrados: number
     puntosTotal: number
@@ -126,6 +158,14 @@ function masBajo(niveles: RubricLevel[]): RubricLevel | null {
   return niveles.reduce((m, n) => (ORDEN.indexOf(n) < ORDEN.indexOf(m) ? n : m))
 }
 
+const fecha = (v: Date | string | null | undefined): number | null => {
+  if (!v) return null
+  const t = new Date(v).getTime()
+  return Number.isNaN(t) ? null : t
+}
+const minutosEntre = (a: number | null, b: number | null): number | null => (a !== null && b !== null ? Math.max(0, Math.round((b - a) / 60_000)) : null)
+const palabrasDe = (t: string) => t.trim().split(/\s+/).filter(Boolean).length
+
 export function reporteDeSesion(input: {
   actividades: Activity[]
   keyPoints: string[]
@@ -135,10 +175,15 @@ export function reporteDeSesion(input: {
   /** Terminó o su ventana ya cerró: lo que no hizo ya no lo va a hacer en esta sesión. */
   cerrada: boolean
   metodologia?: string | null
-  /** Mensajes del alumno (solo `role: 'user'`), con la actividad bajo la que quedaron: de aquí sale la cita. */
-  mensajes?: { activityId: string | null; content: string }[]
+  /** Mensajes del alumno (solo `role: 'user'`), con la actividad bajo la que quedaron: de aquí salen la cita y la línea de tiempo. */
+  mensajes?: MensajeDelAlumno[]
+  /** Puntero de la sesión (`LessonSession.activityId`) y su último movimiento, para decir dónde está. */
+  actividadActualId?: string | null
+  lastActivityAt?: Date | string | null
+  ahora?: Date
 }): ReporteSesion {
-  const { actividades, keyPoints, progresos, terminada, cerrada, metodologia, mensajes } = input
+  const { actividades, keyPoints, progresos, terminada, cerrada, metodologia, mensajes, actividadActualId, lastActivityAt } = input
+  const ahora = input.ahora ?? new Date()
   const porId = new Map(progresos.map((p) => [p.activityId, p]))
 
   const acts: ActividadDelReporte[] = actividades.map((a, i) => {
@@ -156,8 +201,16 @@ export function reporteDeSesion(input: {
     // La cita sale de lo que escribió, no de la evidencia: el turno de tocar la
     // línea guarda «la línea tres» como respuesta verificada, y la respuesta real
     // (que no se evaluó porque faltaba la línea) solo está en los mensajes.
-    const escritos = (mensajes ?? []).filter((m) => m.activityId === a.id).map((m) => m.content.replace(/\s+/g, ' ').trim()).filter(Boolean)
+    const propios = (mensajes ?? []).filter((m) => m.activityId === a.id)
+    const escritos = propios.map((m) => m.content.replace(/\s+/g, ' ').trim()).filter(Boolean)
     const deFondo = escritos.find((t) => t.split(' ').length >= 4 && !CONTINUACION_RE.test(t)) ?? [...escritos].sort((x, y) => y.length - x.length)[0]
+    // Línea de tiempo: desde que entró a la actividad (o su primer mensaje) hasta
+    // que la completó (o su último mensaje, si sigue ahí).
+    const marcas = propios.map((m) => fecha(m.timestamp)).filter((t): t is number => t !== null)
+    const inicio = [fecha(p?.startedAt), marcas[0]].filter((t): t is number => t !== null).sort((x, y) => x - y)[0] ?? null
+    // Hasta lo último que pasó en ella: completarla o su último mensaje (el toque
+    // de la línea puede llegar después de que el verificador la dio por hecha).
+    const fin = [fecha(p?.completedAt), marcas.length ? marcas[marcas.length - 1] : null].filter((t): t is number => t !== null).sort((x, y) => y - x)[0] ?? null
     return {
       id: a.id,
       indice: i + 1,
@@ -175,8 +228,30 @@ export function reporteDeSesion(input: {
       normaTitulo,
       turnos: intentos.length,
       cita: recortar(deFondo) ?? recortar(intentos[0]?.studentResponse),
+      mensajes: escritos.length,
+      palabras: escritos.reduce((n, t) => n + palabrasDe(t), 0),
+      minutos: estado === 'sin_llegar' ? null : minutosEntre(inicio, fin),
     }
   })
+
+  // ── Dónde está ahora ─────────────────────────────────────────────────────
+  const actual = acts.find((x) => x.id === actividadActualId) ?? acts.find((x) => x.estado === 'en_curso') ?? acts.find((x) => x.estado === 'sin_llegar') ?? null
+  const ultimoMensaje = (mensajes ?? []).map((m) => fecha(m.timestamp)).filter((t): t is number => t !== null).sort((x, y) => y - x)[0] ?? fecha(lastActivityAt)
+  const minutosSinEscribir = minutosEntre(ultimoMensaje, ahora.getTime())
+  const ubicacion: Ubicacion = terminada
+    ? { estado: 'terminada', actividad: null, minutosSinEscribir }
+    : cerrada
+      ? { estado: 'cerro_sin_terminar', actividad: actual, minutosSinEscribir }
+      : {
+          estado:
+            minutosSinEscribir !== null && minutosSinEscribir < ESCRIBIENDO_HASTA_MIN
+              ? 'escribiendo'
+              : minutosSinEscribir !== null && minutosSinEscribir < PAUSA_HASTA_MIN
+                ? 'en_pausa'
+                : 'lo_dejo',
+          actividad: actual,
+          minutosSinEscribir,
+        }
 
   // ── Puntos clave: el nivel más bajo de sus actividades con nota ──────────
   const puntosClave: PuntoClaveReporte[] = keyPoints
@@ -264,6 +339,15 @@ export function reporteDeSesion(input: {
   const sinLlegar = oportunidades.filter((o) => o.tipo === 'sin_llegar')
   if (sinLlegar.length) acciones.push(`Revisar con él lo que no alcanzó: ${sinLlegar.map((o) => o.actividad.titulo).join(', ')}.`)
   if (duda && !/^(ninguna|nada|no|todo (está )?claro)[.!]?$/i.test(duda)) acciones.push(`Responder su duda al cerrar: «${duda}».`)
+  // La ventana sigue abierta y dejó de escribir: la acción es ahora, no el martes.
+  if (ubicacion.estado === 'lo_dejo' && ubicacion.actividad) {
+    acciones.unshift(
+      `Escribirle ahora: dejó la sesión en la actividad ${ubicacion.actividad.indice}${ubicacion.minutosSinEscribir !== null ? ` hace ${ubicacion.minutosSinEscribir} min` : ''} y la ventana sigue abierta.`
+    )
+  }
+
+  const totalMensajes = acts.reduce((n, x) => n + x.mensajes, 0)
+  const totalPalabras = acts.reduce((n, x) => n + x.palabras, 0)
 
   return {
     avance: {
@@ -272,7 +356,10 @@ export function reporteDeSesion(input: {
       conNotaHechas: evaluativas.filter((x) => x.estado === 'completada').length,
       conNota: evaluativas.length,
       terminada,
+      mensajes: totalMensajes,
+      palabrasPorMensaje: totalMensajes ? Math.round(totalPalabras / totalMensajes) : null,
     },
+    ubicacion,
     logro: {
       puntosLogrados,
       puntosTotal,
