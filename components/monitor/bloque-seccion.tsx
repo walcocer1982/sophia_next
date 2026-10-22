@@ -6,9 +6,8 @@ import { TerminarBloque } from '@/components/monitor/terminar-bloque'
 import { RedaccionIA } from '@/components/monitor/redaccion-ia'
 
 /**
- * El bloque con Sophia de una sección, dentro de la matriz (22 oct 2026).
- * Mientras la ventana está abierta: cuántos van y el botón para terminarlo.
- * Cuando cierra: los puntos de repaso (qué reforzar, con citas y la redacción
+ * Los puntos de repaso de una sección, dentro de la matriz (22 oct 2026).
+ * Solo cuando el bloque cerró: los puntos de repaso (qué reforzar, con citas y la redacción
  * de la IA) y el logro por punto clave, con enlace al reporte completo.
  */
 export function BloqueSeccion({ courseId, datos }: { courseId: string; datos: DatosReporteClase }) {
@@ -18,38 +17,9 @@ export function BloqueSeccion({ courseId, datos }: { courseId: string; datos: Da
   const cierre = seccion.cierre ? formatTime(seccion.cierre) : null
   const titulo = `S${leccion.order} · ${leccion.title} · ${seccion.name}`
 
-  if (seccion.abierta) {
-    return (
-      <section className="rounded-xl border-2 border-emerald-200 bg-emerald-50 px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-              En clase con Sophia · {titulo}
-            </p>
-            <p className="mt-0.5 text-xs text-gray-600">
-              {r.entraron} de {r.matriculados} entraron · {r.enCurso} escribiendo o en pausa · {r.terminaron} terminaron · {r.loDejaron} lo dejaron
-              {r.noEntraron > 0 && ` · ${r.noEntraron} no entraron`}
-            </p>
-          </div>
-          <TerminarBloque
-            courseId={courseId}
-            sectionId={seccion.id}
-            lessonId={leccion.id}
-            cierre={cierre}
-            cerradoPorInstructor={seccion.cerradoPorInstructor}
-            abierta
-          />
-        </div>
-        <p className="mt-2 text-xs text-gray-500">
-          Al terminar el bloque, aquí aparecen los puntos de repaso para los 15 minutos.{' '}
-          <Link href={`/dashboard/${courseId}`} className="text-blue-600 hover:underline">
-            Ver en vivo →
-          </Link>
-        </p>
-      </section>
-    )
-  }
+  // Con la ventana abierta no se muestra nada aquí: el botón para terminar va
+  // en el encabezado de la matriz, junto a «Ver en vivo» (22 oct 2026, Walther).
+  if (seccion.abierta) return null
 
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

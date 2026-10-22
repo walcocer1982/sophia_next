@@ -8,6 +8,8 @@ import { matrizDelCurso, type EstadoSesion } from '@/lib/asistencia'
 import { enlaceRama, seleccionDe, SIN_SEDE } from '@/lib/monitor-arbol'
 import { MatrizTabla } from '@/components/monitor/matriz-tabla'
 import { BloqueSeccion } from '@/components/monitor/bloque-seccion'
+import { TerminarBloque } from '@/components/monitor/terminar-bloque'
+import { formatTime } from '@/lib/formatters'
 import { cargarReporteDeClase, type DatosReporteClase } from '@/lib/reporte-clase-datos'
 import { Migas, type Miga } from '@/components/programacion/breadcrumb'
 import type { Prisma } from '@prisma/client'
@@ -125,12 +127,34 @@ export default async function MatrizPage({
             {matriz.alumnos.length} estudiantes · {matriz.lecciones.length} sesiones programadas
           </p>
         </div>
-        <Link
-          href={`/dashboard/${courseId}`}
-          className="text-sm font-medium text-blue-600 hover:underline"
-        >
-          Ver en vivo →
-        </Link>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {/* Terminar el bloque de Sophia, junto a «Ver en vivo», mientras la ventana está abierta */}
+          {bloques
+            .filter((d) => d.seccion.abierta)
+            .map((d) => (
+              <div key={`${d.seccion.id}-${d.leccion.id}`} className="flex items-center gap-2">
+                {bloques.filter((x) => x.seccion.abierta).length > 1 && (
+                  <span className="text-xs text-gray-500">
+                    {d.seccion.name} · S{d.leccion.order}
+                  </span>
+                )}
+                <TerminarBloque
+                  courseId={courseId}
+                  sectionId={d.seccion.id}
+                  lessonId={d.leccion.id}
+                  cierre={d.seccion.cierre ? formatTime(d.seccion.cierre) : null}
+                  cerradoPorInstructor={false}
+                  abierta
+                />
+              </div>
+            ))}
+          <Link
+            href={`/dashboard/${courseId}`}
+            className="text-sm font-medium text-blue-600 hover:underline"
+          >
+            Ver en vivo →
+          </Link>
+        </div>
       </div>
 
       {seccionesDelCurso.length > 1 && (
