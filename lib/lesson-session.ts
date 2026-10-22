@@ -28,3 +28,17 @@ export async function getLessonSessionSafe(
       : undefined,
   })
 }
+
+/**
+ * El próximo `sessionAttempt` de un alumno en una lección: evita violar el
+ * único [userId, lessonId, sessionAttempt] cuando ya hay sesiones (de prueba,
+ * terminadas o de cualquier estado).
+ */
+export async function nextSessionAttempt(userId: string, lessonId: string): Promise<number> {
+  const last = await prisma.lessonSession.findFirst({
+    where: { userId, lessonId },
+    orderBy: { sessionAttempt: 'desc' },
+    select: { sessionAttempt: true },
+  })
+  return (last?.sessionAttempt ?? 0) + 1
+}

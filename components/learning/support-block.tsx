@@ -5,7 +5,7 @@
  * Siete tipos: imagen, comparación, fórmula, tabla, texto, caso y diagrama.
  * Especificación y lienzos: investigacion/panel-de-apoyo-especificacion.md §6.
  */
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -443,6 +443,13 @@ function TextoSubrayable({ block, large = false }: { block: TextBlock; large?: b
   // Se apaga sola cuando llega la revisión (cambia el nonce).
   const [tocada, setTocada] = useState<{ n: number; nonce: number } | null>(null)
   const enRevision = tocada && tocada.nonce === (revisado?.nonce ?? 0) ? tocada.n : null
+  // Si la revisión no llega (la línea no cambió para el servidor), el gris se
+  // apaga solo: a Maritza le quedó «en revisión» para siempre (21 oct 2026).
+  useEffect(() => {
+    if (!tocada) return
+    const t = setTimeout(() => setTocada(null), 6000)
+    return () => clearTimeout(t)
+  }, [tocada])
   return (
     <div className={cn('px-2.5 py-3 leading-relaxed text-gray-900', large ? 'text-lg' : 'text-[15px]')}>
       {/* El rótulo dice en qué estado está (21 oct 2026): «1 subrayada» no servía

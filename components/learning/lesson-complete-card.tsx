@@ -18,11 +18,14 @@ interface LessonCompleteCardProps {
   exitLabel: string
   /** Vista Tutor: abre el cajón con toda la conversación. */
   onReread?: () => void
-  /** Reabre la caja de texto para una pregunta suelta. */
-  onAskMore: () => void
+  /** Reabre la caja de texto para una pregunta suelta. Sin esto no se ofrece (prueba cerrada). */
+  onAskMore?: () => void
+  /** Otro título y detalle: «Esta prueba quedó guardada» en una prueba cerrada (21 oct 2026). */
+  titulo?: string
+  detalle?: string
 }
 
-export function LessonCompleteCard({ lessonTitle, exitHref, exitLabel, onReread, onAskMore }: LessonCompleteCardProps) {
+export function LessonCompleteCard({ lessonTitle, exitHref, exitLabel, onReread, onAskMore, titulo = 'Terminaste la lección', detalle }: LessonCompleteCardProps) {
   return (
     <section
       aria-label="Lección completada"
@@ -31,8 +34,8 @@ export function LessonCompleteCard({ lessonTitle, exitHref, exitLabel, onReread,
       <div className="flex items-start gap-3">
         <CheckCircle2 className="mt-0.5 h-7 w-7 shrink-0 text-[#fbc50b]" aria-hidden />
         <div className="min-w-0">
-          <p className="text-lg font-bold leading-tight text-white">Terminaste la lección</p>
-          <p className="mt-1 text-sm text-[#a9b8c2]">{tituloParaAlumno(lessonTitle)}. Tu avance quedó guardado.</p>
+          <p className="text-lg font-bold leading-tight text-white">{titulo}</p>
+          <p className="mt-1 text-sm text-[#a9b8c2]">{tituloParaAlumno(lessonTitle)}. {detalle ?? 'Tu avance quedó guardado.'}</p>
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -51,13 +54,15 @@ export function LessonCompleteCard({ lessonTitle, exitHref, exitLabel, onReread,
             <ScrollText className="h-4 w-4" aria-hidden /> Releer la conversación
           </button>
         )}
-        <button
-          type="button"
-          onClick={onAskMore}
-          className="inline-flex min-h-11 items-center gap-1.5 px-2 text-sm text-[#a9b8c2] underline-offset-2 hover:text-white hover:underline sm:ml-auto"
-        >
-          <MessageSquareText className="h-4 w-4" aria-hidden /> Hacer una pregunta más
-        </button>
+        {onAskMore && (
+          <button
+            type="button"
+            onClick={onAskMore}
+            className="inline-flex min-h-11 items-center gap-1.5 px-2 text-sm text-[#a9b8c2] underline-offset-2 hover:text-white hover:underline sm:ml-auto"
+          >
+            <MessageSquareText className="h-4 w-4" aria-hidden /> Hacer una pregunta más
+          </button>
+        )}
       </div>
     </section>
   )

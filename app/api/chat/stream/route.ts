@@ -30,7 +30,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { checkReply, checksIntro, newChecksState, readCheck, type ChecksState, type CheckTurn } from '@/lib/checks'
 import { describeStateForPrompt, directivaSiYaMovio, initialState, sanitizeState, type SimState } from '@/lib/simulator'
 import { describeClasifForPrompt, describeClasifForVerifier, sanitizeClasif, vacio as clasificacionVacia, type ClasifState } from '@/lib/clasificar'
-import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, guiaRevelarSubrayado, leerSubrayadoGuardado, lineasClaveTexto, mensajeRecordatorioSubrayado, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
+import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, guiaRevelarSubrayado, guiaLineaCorrecta, leerSubrayadoGuardado, lineasClaveTexto, mensajeRecordatorioSubrayado, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, hayQueRevisarSubrayado, esRepeticionEquivocada, type UltimoSubrayado, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
 import { resumenDeCierre } from '@/lib/cierre'
 import { pideAclaracion } from '@/lib/aclaracion'
 
@@ -471,21 +471,37 @@ export async function POST(request: Request) {
   // línea sigue marcada en el navegador y viaja en cada mensaje. Antes se volvía
   // a revisar y guardar en cada turno, y bajo cada respuesta aparecía otra vez
   // «Subrayaste… ✓ respalda tu respuesta» (21 oct 2026).
-  const ultimoSubrayadoGuardado = new Map<string, string>()
+  const ultimoSubrayadoGuardado = new Map<string, UltimoSubrayado>()
   for (const m of sessionWithMessages.messages) {
     if (m.role !== 'user' || m.activityId !== currentActivity.id) continue
     // Los mensajes están en orden cronológico: el último que se vea queda.
-    for (const s of leerSubrayadoGuardado((m as { material?: unknown }).material)) ultimoSubrayadoGuardado.set(s.blockId, s.lineas.join('|'))
+    for (const s of leerSubrayadoGuardado((m as { material?: unknown }).material)) {
+      ultimoSubrayadoGuardado.set(s.blockId, { lineas: s.lineas.join('|'), resultado: s.resultado, revelada: !!s.revelada?.length })
+    }
   }
+  const lineasDe = (b: TextBlock, state: SubrayadoState) => paraGuardar(b, state)?.lineas.join('|') ?? ''
+  // …y también si vuelve a tocar la misma línea equivocada (lib/subrayado.ts):
+  // antes no se respondía nada y quedaba en gris «en revisión» (Maritza, 21 oct).
   const esSubrayadoNuevo = ({ b, state }: { b: TextBlock; state: SubrayadoState }) =>
-    state.lineas.length > 0 && (paraGuardar(b, state)?.lineas.join('|') ?? '') !== ultimoSubrayadoGuardado.get(b.id)
+    hayQueRevisarSubrayado(lineasDe(b, state), ultimoSubrayadoGuardado.get(b.id), isContinuationMessage)
   const subrayadoQueNoRespalda = subrayablesPropios.find((e) => esSubrayadoNuevo(e) && evaluarSubrayado(e.b, e.state) === 'no_respalda')
+  // Tocó otra vez la misma línea equivocada: se repite «inténtalo de nuevo» (rojo
+  // y mensaje fijo), sin verificador, sin contar intento ni falla.
+  const repiteLineaEquivocada =
+    !!subrayadoQueNoRespalda &&
+    esRepeticionEquivocada(lineasDe(subrayadoQueNoRespalda.b, subrayadoQueNoRespalda.state), ultimoSubrayadoGuardado.get(subrayadoQueNoRespalda.b.id), isContinuationMessage) &&
+    !choiceTurn &&
+    !checkTurn &&
+    !esTurnoDeConexion &&
+    !activityAlreadyCompleted &&
+    lessonSession.lesson.course?.methodology !== 'CODE'
   // Revisión al tocar (21 oct 2026): el navegador manda «listo» apenas el alumno
   // toca una línea, si ya respondió. Si la línea no respalda y es el primer
   // error, no hace falta verificador ni modelo: la línea se pone roja y Sophia
   // dice «inténtalo de nuevo» en menos de un segundo.
   const revisionRapida =
     !!subrayadoQueNoRespalda &&
+    !repiteLineaEquivocada &&
     fallosDeSubrayado < 1 &&
     isContinuationMessage &&
     activityHistory.some((m) => m.role === 'user') &&
@@ -518,8 +534,8 @@ export async function POST(request: Request) {
         }),
     pidioAclaracion
       ? Promise.resolve<ActivityCompletionResult>(SIN_VERIFICAR)
-    // Revisión al tocar: el código ya sabe que la línea no respalda.
-    : revisionRapida
+    // Revisión al tocar, o la misma línea equivocada otra vez: el código ya sabe que no respalda.
+    : revisionRapida || repiteLineaEquivocada
       ? Promise.resolve<ActivityCompletionResult>({ ...SIN_VERIFICAR, response_type: 'partial' })
     // Hallucination de voz: skip AI verifier (caro), tratar como off_topic
     // suave para que Sophia pida repetir sin contar como intento real.
@@ -687,8 +703,16 @@ export async function POST(request: Request) {
   // escrita aprobó pero lo subrayado no la respalda: la primera vez la actividad
   // no avanza ni cuenta intento y Sophia pide cambiarlo; la segunda, se sigue y
   // Sophia muestra la línea que respaldaba. Antes decía «Correcto» igual.
+  if (repiteLineaEquivocada) {
+    verification.ready_to_advance = false
+    verification.completed = false
+    willScaffold = false
+    respuestaFija = mensajeRevisarSubrayado(subrayadoQueNoRespalda!.b)
+    logger.info('chat.stream.subrayado_repetido', { sessionId, activityId: currentActivity.id })
+  }
   const revisarSubrayado =
     !turnoDeSubrayar &&
+    !repiteLineaEquivocada &&
     !!subrayadoQueNoRespalda &&
     fallosDeSubrayado < 1 &&
     (revisionRapida || (verification.ready_to_advance === true && verification.unverified !== true)) &&
@@ -712,6 +736,7 @@ export async function POST(request: Request) {
   // trabaja la respuesta como siempre y el pedido de tocar sigue pendiente.
   const revelarSubrayado =
     !!subrayadoQueNoRespalda &&
+    !repiteLineaEquivocada &&
     !revisarSubrayado &&
     !turnoDeSubrayar &&
     fallosDeSubrayado >= 1 &&
@@ -721,7 +746,7 @@ export async function POST(request: Request) {
   // pero el toque no cuenta como intento ni cierra la actividad por tope.
   const lineaEquivocadaSola = isContinuationMessage && !!subrayadoQueNoRespalda && !revisarSubrayado && !turnoDeSubrayar && !revelarSubrayado
   // Turnos que no evalúan ni cuentan intento.
-  const turnoSinEvaluar = turnoDeSubrayar || recordarSubrayado || revisarSubrayado || pidioAclaracion
+  const turnoSinEvaluar = turnoDeSubrayar || recordarSubrayado || revisarSubrayado || repiteLineaEquivocada || pidioAclaracion
 
   // ¿Este turno agota los intentos? Misma condición que el avance forzado de
   // más abajo (bloque «intento fallido»: ni paso cerrado, ni comprobación, ni
@@ -877,9 +902,15 @@ export async function POST(request: Request) {
       : {}),
   }
   // Revisar manda sobre todo lo demás del turno; revelar se suma a la guía normal.
+  // La línea correcta recién tocada: la primera oración la fija el código
+  // (lib/subrayado.ts), porque con «inténtalo de nuevo» en la historia Sophia
+  // la trataba como otra equivocada (21 oct 2026).
+  const subrayadoCorrectoNuevo = subrayablesPropios.some((e) => esSubrayadoNuevo(e) && evaluarSubrayado(e.b, e.state) === 'respalda')
   const guiaDeSubrayado = revelarSubrayado && subrayadoQueNoRespalda
     ? `\n\n${guiaRevelarSubrayado(subrayadoQueNoRespalda.b)}`
-    : ''
+    : subrayadoCorrectoNuevo && respuestaFija === null
+      ? `\n\n${guiaLineaCorrecta(verification.ready_to_advance === true || cierraPorTope)}`
+      : ''
   const estadoSubrayadoClause = estadosDeSubrayado.length
     ? `\n\nESTADO DEL SUBRAYADO (lo que el estudiante marcó AHORA en los textos de la pizarra):\n${estadosDeSubrayado.map(({ b, state }) => `- ${describeSubrayadoForPrompt(b, state)}`).join('\n')}`
     : ''

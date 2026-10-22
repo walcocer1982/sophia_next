@@ -74,9 +74,11 @@ export function TestModeBanner({
       })
 
       if (res.ok) {
+        // La prueba actual queda guardada; se abre otra desde esa actividad (21 oct 2026).
+        const { sessionId: nueva } = (await res.json()) as { sessionId: string }
         toast.success('Saltando a actividad...')
         setShowSkipTo(false)
-        window.location.reload()
+        window.location.assign(`/learn/${nueva}${window.location.search}`)
       } else {
         toast.error('Error al saltar')
       }
@@ -88,11 +90,11 @@ export function TestModeBanner({
   }
 
   const handleReset = async () => {
-    if (!confirm('¿Reiniciar la prueba? Se borrarán todos los mensajes y progreso.')) return
+    if (!confirm('¿Reiniciar la prueba? Esta queda guardada y empiezas otra desde el inicio.')) return
 
     setLoading('reset')
     try {
-      // Delete this test session and redirect back to planner
+      // Cierra esta prueba y abre otra desde la primera actividad
       const res = await fetch('/api/session/skip-to-activity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,8 +105,9 @@ export function TestModeBanner({
       })
 
       if (res.ok) {
+        const { sessionId: nueva } = (await res.json()) as { sessionId: string }
         toast.success('Prueba reiniciada')
-        window.location.reload()
+        window.location.assign(`/learn/${nueva}${window.location.search}`)
       } else {
         toast.error('Error al reiniciar')
       }

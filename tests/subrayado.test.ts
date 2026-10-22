@@ -96,3 +96,27 @@ test('prueba de Walther (21 oct): una línea equivocada deja el pedido pendiente
   // En otra actividad, la revisión vieja no cuenta
   assert.deepEqual(pendientesDeSubrayar({ ...base, actividadActual: 'a5', ultimoMensajeDeSophia: 'x', subrayados: { 'norma-x': { lineas: [0] } }, revisados: mal }).ids, [])
 })
+
+test('prueba de Maritza (21 oct): tocar otra vez la misma línea equivocada se vuelve a revisar', async () => {
+  const { hayQueRevisarSubrayado, esRepeticionEquivocada } = await import('../lib/subrayado')
+  const mal = { lineas: '0', resultado: 'no_respalda', revelada: false }
+  // La misma línea equivocada, en un toque: sí
+  assert.equal(hayQueRevisarSubrayado('0', mal, true), true)
+  assert.equal(esRepeticionEquivocada('0', mal, true), true)
+  // La misma línea, pero en un mensaje escrito (sigue marcada en el navegador): no
+  assert.equal(hayQueRevisarSubrayado('0', mal, false), false)
+  // La misma línea ya revelada, o ya correcta: no (antes se repetía «✓ respalda» bajo cada mensaje)
+  assert.equal(hayQueRevisarSubrayado('0', { ...mal, revelada: true }, true), false)
+  assert.equal(hayQueRevisarSubrayado('2', { lineas: '2', resultado: 'respalda', revelada: false }, true), false)
+  // Una línea distinta: siempre; nada marcado: nunca
+  assert.equal(hayQueRevisarSubrayado('1', mal, false), true)
+  assert.equal(hayQueRevisarSubrayado('', mal, true), false)
+})
+
+test('línea correcta: la primera oración la fija el código, con y sin respuesta aprobada', async () => {
+  const { guiaLineaCorrecta } = await import('../lib/subrayado')
+  const a = guiaLineaCorrecta(true)
+  const b = guiaLineaCorrecta(false)
+  assert.ok(a.includes('"Esa es la línea."') && a.includes('PROHIBIDO pedirle otra línea') && a.includes('transición'))
+  assert.ok(b.includes('"Esa es la línea."') && b.includes('lo que falta de su respuesta escrita') && !b.includes('transición'))
+})

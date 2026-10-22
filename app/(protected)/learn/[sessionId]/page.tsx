@@ -181,6 +181,9 @@ export default async function ChatPage({
         }))}
         exitHref={testMode ? `/planner/${testMode.courseId}` : '/lessons'}
         exitLabel={testMode ? 'Volver al curso' : 'Volver a mis lecciones'}
+        // Prueba cerrada por «Probar», «Reiniciar» o «Ir a actividad» (21 oct 2026):
+        // se puede releer, pero el chat ya no acepta mensajes.
+        pruebaCerrada={lessonSession.isTest && !!lessonSession.endedAt}
         voiceEnabled={lessonSession.lesson.course?.voiceEnabled ?? true}
         allowPaste={
           lessonSession.lesson.course?.allowPaste === true ||

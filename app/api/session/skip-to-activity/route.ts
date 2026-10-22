@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-utils'
 import { parseContentJson } from '@/lib/lesson-parser'
+import { nextSessionAttempt } from '@/lib/lesson-session'
 import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
@@ -50,42 +51,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Activity not found' }, { status: 404 })
   }
 
-  // Clear existing progress and messages, then set up new state
-  await prisma.$transaction([
-    // Delete all existing progress
-    prisma.activityProgress.deleteMany({
-      where: { lessonSessionId: sessionId },
-    }),
-    // Delete all messages (fresh start for the target activity)
-    prisma.message.deleteMany({
-      where: { sessionId },
-    }),
-    // Mark previous activities as completed
-    ...activities.slice(0, targetIdx).map((a) =>
-      prisma.activityProgress.create({
-        data: {
-          lessonSessionId: sessionId,
-          activityId: a.id,
-          status: 'COMPLETED',
-          completedAt: new Date(),
-        },
-      })
-    ),
-    // Update session to point to target activity
-    prisma.lessonSession.update({
-      where: { id: sessionId },
+  // No se borra nada (21 oct 2026): la prueba actual se cierra y queda como
+  // evidencia, y se abre otra desde la actividad pedida. Antes se borraban los
+  // mensajes y el progreso, y con ellos lo que el probador había hecho.
+  const sessionAttempt = await nextSessionAttempt(session.user.id, lessonSession.lessonId)
+  const [, nueva] = await prisma.$transaction([
+    prisma.lessonSession.update({ where: { id: sessionId }, data: { endedAt: new Date() } }),
+    prisma.lessonSession.create({
       data: {
-        activityId,
+        userId: session.user.id,
+        lessonId: lessonSession.lessonId,
+        sessionAttempt,
+        startedAt: new Date(),
         lastActivityAt: new Date(),
-        completedAt: null,
-        passed: false,
+        activityId,
+        isTest: true,
         progress: Math.round((targetIdx / activities.length) * 100),
       },
     }),
   ])
+  if (targetIdx > 0) {
+    await prisma.activityProgress.createMany({
+      data: activities.slice(0, targetIdx).map((a) => ({
+        lessonSessionId: nueva.id,
+        activityId: a.id,
+        status: 'COMPLETED' as const,
+        completedAt: new Date(),
+      })),
+    })
+  }
 
   return NextResponse.json({
     success: true,
+    sessionId: nueva.id,
     activityId,
     activityIndex: targetIdx,
   })

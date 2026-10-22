@@ -53,7 +53,9 @@ interface CuadernoProps {
   cerrada: boolean
   exitHref: string
   exitLabel: string
-  onAskMore: () => void
+  onAskMore?: () => void
+  /** Prueba cerrada: la tarjeta de cierre lo dice y no ofrece «una pregunta más». */
+  pruebaCerrada?: boolean
   chatInputRef: React.RefObject<ChatInputRef | null>
   /**
    * Falta tocar una línea en la pizarra (lectura comprobada). Aviso sobre la caja,
@@ -79,6 +81,7 @@ export function Cuaderno({
   exitHref,
   exitLabel,
   onAskMore,
+  pruebaCerrada = false,
   chatInputRef,
   avisoSubrayar = null,
 }: CuadernoProps) {
@@ -181,6 +184,9 @@ export function Cuaderno({
       requestAnimationFrame(() => desplazarDentro(hoja, hoja.querySelector(`[data-inicio-sophia="${id}"]`), 'inicio'))
     }
   }, [messages, ultimo])
+  // El riel muestra la lección terminada solo si de verdad terminó: una prueba
+  // cerrada a medias se lee con su avance real (21 oct 2026).
+  const terminada = cerrada && !pruebaCerrada
   const irA = (id: string) => {
     setAbiertas((prev) => new Set(prev).add(id))
     requestAnimationFrame(() => desplazarDentro(hojaRef.current, document.getElementById(`seccion-${id}`), 'inicio'))
@@ -197,15 +203,15 @@ export function Cuaderno({
           <QueVasALograr lessonTitle={lessonTitle} objective={objective} keyPoints={keyPoints} forma="icono" className="xl:hidden" />
         </div>
         <p className="mb-2 px-2 text-center text-[11px] font-bold uppercase tracking-wider text-[#7f909b] xl:text-left">
-          <span className="xl:hidden">{cerrada ? actividades.length : indiceActual + 1}/{actividades.length}</span>
-          <span className="hidden xl:inline">Tu avance · {cerrada ? actividades.length : indiceActual + 1} de {actividades.length}</span>
+          <span className="xl:hidden">{terminada ? actividades.length : indiceActual + 1}/{actividades.length}</span>
+          <span className="hidden xl:inline">Tu avance · {terminada ? actividades.length : indiceActual + 1} de {actividades.length}</span>
         </p>
         {/* Segmentos de avance, uno por actividad (como el kiosko del WMC); antes
             iban en la barra de arriba, donde competían con el título. */}
         <div className="mb-3 hidden gap-1 px-2 xl:flex" aria-hidden>
           {actividades.map((a, i) => {
-            const hecha = cerrada || i < indiceActual
-            const actual = !cerrada && i === indiceActual
+            const hecha = terminada || i < indiceActual
+            const actual = !terminada && i === indiceActual
             return (
               <span
                 key={a.id}
@@ -221,8 +227,8 @@ export function Cuaderno({
         </div>
         <ol className="space-y-0.5">
           {actividades.map((a, i) => {
-            const hecha = cerrada || i < indiceActual
-            const actual = !cerrada && i === indiceActual
+            const hecha = terminada || i < indiceActual
+            const actual = !terminada && i === indiceActual
             const conMensajes = secciones.some((s) => s.actividadId === a.id)
             return (
               <li key={a.id}>
@@ -340,7 +346,13 @@ export function Cuaderno({
             })}
 
             {cerrada && (
-              <LessonCompleteCard lessonTitle={lessonTitle} exitHref={exitHref} exitLabel={exitLabel} onAskMore={onAskMore} />
+              <LessonCompleteCard
+                lessonTitle={lessonTitle}
+                exitHref={exitHref}
+                exitLabel={exitLabel}
+                onAskMore={onAskMore}
+                {...(pruebaCerrada ? { titulo: 'Esta prueba quedó guardada', detalle: 'Es solo lectura: la cerraste al empezar otra prueba.' } : {})}
+              />
             )}
           </div>
         </div>
