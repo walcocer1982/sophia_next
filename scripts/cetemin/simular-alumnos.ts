@@ -196,9 +196,18 @@ async function simular(perfil: string, alumnoId: string, o: Opciones): Promise<s
   const sessionId = sesion.id
   const turnos: Turno[] = []
   let subrayado: Record<string, { lineas: number[] }> = {}
+  // Con varios alumnos a la vez, la base puede tardar en dar conexión
+  // (P2024): se reintenta en vez de cortar la clase entera (22 oct 2026).
   const actual = async () => {
-    const s = await prisma.lessonSession.findUnique({ where: { id: sessionId }, select: { activityId: true, completedAt: true } })
-    return { id: s?.activityId ?? null, terminada: !!s?.completedAt }
+    for (let intento = 1; ; intento++) {
+      try {
+        const s = await prisma.lessonSession.findUnique({ where: { id: sessionId }, select: { activityId: true, completedAt: true } })
+        return { id: s?.activityId ?? null, terminada: !!s?.completedAt }
+      } catch (e) {
+        if (intento >= 5) throw e
+        await esperar(3000 * intento)
+      }
+    }
   }
   const indice = (id: string | null) => (id ? o.acts.findIndex((a) => a.id === id) + 1 : 0)
   const pausa = () => (o.ritmo > 0 ? esperar(o.ritmo * 1000 * (0.5 + Math.random())) : esperar(1500))
@@ -345,7 +354,11 @@ async function main() {
       pedidos.map(async ({ perfil, ritmo: propio }, i) => {
         const alumnoId = await preparar(perfil)
         await esperar(i * 40_000)
-        await simular(perfil, alumnoId, { ...opciones, ritmo: propio ?? ritmo })
+        // Si un alumno falla, los demás siguen en clase.
+        await simular(perfil, alumnoId, { ...opciones, ritmo: propio ?? ritmo }).catch((e: unknown) => {
+          const ultima = e instanceof Error ? e.message.trim().split(/\r?\n/).pop() : String(e)
+          console.log(`[${hora()}] ${PERFILES[perfil].nombre}: se cortó por un error (${ultima})`)
+        })
       })
     )
   } else {
