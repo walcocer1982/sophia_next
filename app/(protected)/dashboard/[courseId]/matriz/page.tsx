@@ -7,6 +7,8 @@ import { alcanceEfectivo } from '@/lib/ver-como'
 import { matrizDelCurso, type EstadoSesion } from '@/lib/asistencia'
 import { enlaceRama, seleccionDe, SIN_SEDE } from '@/lib/monitor-arbol'
 import { MatrizTabla } from '@/components/monitor/matriz-tabla'
+import { BloqueSeccion } from '@/components/monitor/bloque-seccion'
+import { cargarReporteDeClase, type DatosReporteClase } from '@/lib/reporte-clase-datos'
 import { Migas, type Miga } from '@/components/programacion/breadcrumb'
 import type { Prisma } from '@prisma/client'
 
@@ -68,6 +70,23 @@ export default async function MatrizPage({
     AND: [filtro, rama, ...(soloSeccion ? [{ id: soloSeccion }] : [])],
   })
 
+  // El bloque con Sophia de cada sección a la vista (22 oct 2026): la última
+  // sesión que ya abrió. Abierta: el botón para terminarla. Cerrada: los puntos
+  // de repaso para los 15 minutos del instructor.
+  const ahora = new Date()
+  const enVista = soloSeccion ? seccionesDelCurso.filter((s) => s.id === soloSeccion) : seccionesDelCurso
+  const ultimas = await prisma.sectionLessonSchedule.findMany({
+    where: { sectionId: { in: enVista.map((s) => s.id) }, availableAt: { lte: ahora } },
+    orderBy: { availableAt: 'desc' },
+    select: { sectionId: true, lessonId: true },
+  })
+  const unaPorSeccion = enVista
+    .map((s) => ultimas.find((u) => u.sectionId === s.id))
+    .filter((u): u is { sectionId: string; lessonId: string } => !!u)
+  const bloques = (
+    await Promise.all(unaPorSeccion.map((u) => cargarReporteDeClase({ courseId, lessonId: u.lessonId, sectionId: u.sectionId, filtro, ahora })))
+  ).filter((d): d is DatosReporteClase => d !== null)
+
   const base = `/dashboard/${courseId}/matriz`
   const conSeccion = (id: string | null) => {
     const u = new URLSearchParams(enlaceRama(seleccion, '').replace(/^\?/, ''))
@@ -126,6 +145,10 @@ export default async function MatrizPage({
           ))}
         </div>
       )}
+
+      {bloques.map((d) => (
+        <BloqueSeccion key={`${d.seccion.id}-${d.leccion.id}`} courseId={courseId} datos={d} />
+      ))}
 
       {matriz.alumnos.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-10 text-center shadow-sm">

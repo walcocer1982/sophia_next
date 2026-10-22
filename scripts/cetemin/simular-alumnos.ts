@@ -235,6 +235,11 @@ async function simular(perfil: string, alumnoId: string, o: Opciones): Promise<s
     if (!r.ok) console.log(`[${hora()}] ${nombre}: ${respuesta.slice(0, 160)}`)
     const despues = await actual()
     turnos.push({ quien: 'Sophia', texto: respuesta, actividad: despues.id, nota: eventos.length ? `eventos: ${eventos.join(', ')}` : undefined })
+    // El instructor terminó el bloque (mensaje fijo de lib/ventana-alumno.ts): el alumno se retira.
+    if (respuesta.startsWith('El bloque con Sophia terminó')) {
+      console.log(`[${hora()}] ${nombre}: el instructor terminó el bloque; se retira en la actividad ${indice(despues.id)}`)
+      break
+    }
   }
 
   mkdirSync(SALIDA, { recursive: true })
@@ -312,7 +317,8 @@ async function main() {
   const abreEn = new Date(Date.now() - 5 * 60_000)
   await prisma.sectionLessonSchedule.upsert({
     where: { sectionId_lessonId: { sectionId: seccion.id, lessonId } },
-    update: { availableAt: abreEn, closesAfterHours: 2 },
+    // Reabre aunque el instructor la haya terminado con el botón en la corrida anterior.
+    update: { availableAt: abreEn, closesAfterHours: 2, closedAt: null, closedById: null },
     create: { sectionId: seccion.id, lessonId, availableAt: abreEn, closesAfterHours: 2 },
   })
 

@@ -8,18 +8,17 @@ import { Input } from '@/components/ui/input'
 import { ArrowLeft, Search, AlertTriangle, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { formatDate, formatTime, hace } from '@/lib/formatters'
-import type { FilaMonitor, PendienteMonitor, RespuestaMonitor } from '@/types/monitor'
+import type { FilaMonitor, RespuestaMonitor } from '@/types/monitor'
 
 /**
  * Monitor por curso.
  *
  * Una sola definición de estado, la misma que la matriz (lib/monitor.ts):
  * activa · en pausa (ventana abierta, sin escribir) · sin terminar (ventana
- * cerrada: a medias o sin avanzar) · terminó. Arriba, «pendientes de llamar»:
- * lo que quedó sin terminar o sin abrir y nadie marcó todavía en seguimiento.
+ * cerrada: a medias o sin avanzar) · terminó. «Pendientes de llamar» se quitó
+ * de esta pantalla (22 oct 2026, Walther): el en vivo es para la clase en curso;
+ * a quién llamar está en el reporte de la sesión y en la matriz.
  */
-
-const VISIBLE_PENDIENTES = 10
 
 const ESTADO_FILA: Record<
   FilaMonitor['estado'],
@@ -47,12 +46,6 @@ const ESTADO_FILA: Record<
   },
 }
 
-const ESTADO_PENDIENTE: Record<PendienteMonitor['lecciones'][number]['estado'], string> = {
-  'no-entro': 'no entró',
-  'sin-avanzar': 'abrió sin avanzar',
-  'a-medias': 'a medias',
-}
-
 export default function CourseDashboardPage() {
   const { data: session, status: estadoSesion } = useSession()
   const router = useRouter()
@@ -65,7 +58,6 @@ export default function CourseDashboardPage() {
   const [search, setSearch] = useState('')
   const [expandedFunnel, setExpandedFunnel] = useState<string | null>(null)
   const [selectedSection, setSelectedSection] = useState<string>('')
-  const [showAllPendientes, setShowAllPendientes] = useState(false)
 
   const role = session?.user?.role || 'STUDENT'
 
@@ -141,14 +133,12 @@ export default function CourseDashboardPage() {
 
   if (!data) return null
 
-  const { course, filas, pendientes, funnels } = data
+  const { course, filas, funnels } = data
   const q = search.trim().toLowerCase()
   const coincide = (name: string | null, email: string | null) =>
     !q || name?.toLowerCase().includes(q) || email?.toLowerCase().includes(q)
   const filasVisibles = filas.filter((f) => coincide(f.name, f.email))
   const activos = filas.filter((f) => f.estado === 'activa').length
-  const pendientesVisibles = showAllPendientes ? pendientes : pendientes.slice(0, VISIBLE_PENDIENTES)
-  const ocultos = pendientes.length - VISIBLE_PENDIENTES
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
@@ -175,79 +165,6 @@ export default function CourseDashboardPage() {
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           {error} Se muestra lo último que cargó.
         </p>
-      )}
-
-      {pendientes.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2 text-amber-800">
-              <AlertTriangle className="h-4 w-4" />
-              Pendientes de llamar
-              <span className="text-xs bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full font-normal">
-                {pendientes.length}
-              </span>
-              <span className="text-xs font-normal text-amber-700">
-                sesiones cerradas sin terminar o sin abrir, sin marca de seguimiento
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {pendientesVisibles.map((p) => (
-                <div
-                  key={p.userId}
-                  className="flex flex-wrap items-start justify-between gap-3 p-3 bg-white rounded-lg border border-amber-100"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{p.name || p.email}</p>
-                    <ul className="mt-0.5 space-y-0.5 text-xs text-gray-600">
-                      {p.lecciones.map((l) => (
-                        <li key={l.lessonId}>
-                          <span className="text-gray-900">{l.lessonTitle}</span>
-                          {' — '}
-                          {ESTADO_PENDIENTE[l.estado]}
-                          {l.activityIndex && l.activityTotal && (
-                            <> · Act {l.activityIndex}/{l.activityTotal}</>
-                          )}
-                          {' · '}
-                          {l.estado === 'no-entro' ? 'cerró el ' : 'último mensaje '}
-                          {formatDate(l.fecha)}
-                        </li>
-                      ))}
-                    </ul>
-                    {p.seguimiento && (
-                      <p className="mt-1 text-xs text-gray-500">Última marca: {p.seguimiento.texto}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {p.phone && (
-                      <a
-                        href={`https://wa.me/51${p.phone.replace(/\D/g, '').slice(-9)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-blue-600 hover:underline"
-                      >
-                        WhatsApp
-                      </a>
-                    )}
-                    <Link href={`/dashboard/${courseId}/${p.userId}`} className="text-xs text-blue-600 hover:underline">
-                      Ficha y seguimiento
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {ocultos > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowAllPendientes((v) => !v)}
-                className="mt-3 w-full text-sm text-amber-800 hover:text-amber-900 hover:bg-amber-100 py-2 rounded-lg border border-amber-200 transition-colors font-medium"
-              >
-                {showAllPendientes ? `Mostrar solo ${VISIBLE_PENDIENTES}` : `Ver ${ocultos} más`}
-              </button>
-            )}
-          </CardContent>
-        </Card>
       )}
 
       <Card>
