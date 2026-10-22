@@ -5,7 +5,10 @@ import Link from 'next/link'
 import { seccionesVisibles } from '@/lib/alcance'
 import { alcanceEfectivo } from '@/lib/ver-como'
 import { matrizDelCurso, type EstadoSesion } from '@/lib/asistencia'
+import { enlaceRama, seleccionDe, SIN_SEDE } from '@/lib/monitor-arbol'
 import { MatrizTabla } from '@/components/monitor/matriz-tabla'
+import { Migas, type Miga } from '@/components/programacion/breadcrumb'
+import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,8 +21,10 @@ export const dynamic = 'force-dynamic'
  */
 export default async function MatrizPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const session = await auth()
   if (!session?.user) redirect('/login')
@@ -27,6 +32,7 @@ export default async function MatrizPage({
   if (role !== 'ADMIN' && role !== 'SUPERADMIN' && role !== 'INSTRUCTOR') redirect('/lessons')
 
   const { courseId } = await params
+  const q = await searchParams
   const { alcance } = await alcanceEfectivo(session)
 
   const curso = await prisma.course.findFirst({
@@ -36,7 +42,49 @@ export default async function MatrizPage({
   if (!curso) notFound()
 
   const filtro = alcance.role === 'SUPERADMIN' ? {} : seccionesVisibles(alcance)
-  const matriz = await matrizDelCurso(courseId, filtro)
+
+  // La rama con la que se llegó desde la portada (admisión y sede) acota las
+  // secciones; la carrera no hace falta, el curso ya está elegido. Encima, se
+  // puede mirar una sola sección (21 oct 2026).
+  const seleccion = seleccionDe(q)
+  const rama: Prisma.SectionWhereInput = {
+    ...(seleccion.admision ? { periodId: seleccion.admision } : {}),
+    ...(seleccion.sede ? { sedeId: seleccion.sede === SIN_SEDE.id ? null : seleccion.sede } : {}),
+  }
+  const seccionesDelCurso = await prisma.section.findMany({
+    where: { AND: [{ courseId }, { isArchived: false }, filtro, rama] },
+    select: {
+      id: true,
+      name: true,
+      _count: { select: { enrollments: true } },
+      period: { select: { name: true } },
+      sede: { select: { code: true } },
+    },
+    orderBy: { name: 'asc' },
+  })
+  const pedida = typeof q.seccion === 'string' ? q.seccion : null
+  const soloSeccion = pedida && seccionesDelCurso.some((s) => s.id === pedida) ? pedida : null
+  const matriz = await matrizDelCurso(courseId, {
+    AND: [filtro, rama, ...(soloSeccion ? [{ id: soloSeccion }] : [])],
+  })
+
+  const base = `/dashboard/${courseId}/matriz`
+  const conSeccion = (id: string | null) => {
+    const u = new URLSearchParams(enlaceRama(seleccion, '').replace(/^\?/, ''))
+    if (id) u.set('seccion', id)
+    const s = u.toString()
+    return s ? `${base}?${s}` : base
+  }
+  const carrera = seleccion.carrera
+    ? await prisma.career.findUnique({ where: { id: seleccion.carrera }, select: { name: true } })
+    : null
+  const migas: Miga[] = [{ label: 'Monitor', href: '/dashboard' }]
+  if (seleccion.admision && seccionesDelCurso[0]) {
+    migas.push({ label: seccionesDelCurso[0].period.name, href: '/dashboard' })
+    migas.push({ label: seccionesDelCurso[0].sede?.code ?? SIN_SEDE.code, href: '/dashboard' })
+  }
+  if (carrera) migas.push({ label: carrera.name, href: enlaceRama(seleccion) })
+  migas.push({ label: curso.title })
 
   // Los que desertaron salen del denominador: «uno de cada tres abandona»
   // pasa a ser abandono de la tutoría, no del instituto.
@@ -50,15 +98,34 @@ export default async function MatrizPage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-8">
-      <div className="space-y-1">
-        <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-900">
-          ← Monitor
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1">
+          <Migas items={migas} />
+          <h1 className="text-2xl font-bold tracking-tight">{curso.title}</h1>
+          <p className="text-sm text-gray-500">
+            {matriz.alumnos.length} estudiantes · {matriz.lecciones.length} sesiones programadas
+          </p>
+        </div>
+        <Link
+          href={`/dashboard/${courseId}`}
+          className="text-sm font-medium text-blue-600 hover:underline"
+        >
+          Ver en vivo →
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight">{curso.title}</h1>
-        <p className="text-sm text-gray-500">
-          {matriz.alumnos.length} estudiantes · {matriz.lecciones.length} sesiones programadas
-        </p>
       </div>
+
+      {seccionesDelCurso.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Ficha href={conSeccion(null)} activa={!soloSeccion}>
+            Todas las secciones ({seccionesDelCurso.reduce((n, s) => n + s._count.enrollments, 0)})
+          </Ficha>
+          {seccionesDelCurso.map((s) => (
+            <Ficha key={s.id} href={conSeccion(s.id)} activa={soloSeccion === s.id}>
+              {s.name} · {s.sede?.code ?? '—'} · {s.period.name} ({s._count.enrollments})
+            </Ficha>
+          ))}
+        </div>
+      )}
 
       {matriz.alumnos.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-10 text-center shadow-sm">
@@ -84,6 +151,19 @@ export default async function MatrizPage({
         </>
       )}
     </div>
+  )
+}
+
+function Ficha({ href, activa, children }: { href: string; activa: boolean; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className={`rounded-full border px-3 py-1 ${
+        activa ? 'border-indigo-200 bg-indigo-50 font-medium text-indigo-900' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+      }`}
+    >
+      {children}
+    </Link>
   )
 }
 

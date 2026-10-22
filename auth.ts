@@ -28,16 +28,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     CredentialsProvider({
       id: 'test-user',
       name: 'Test User',
-      credentials: {},
-      async authorize() {
+      credentials: { email: { label: 'Email', type: 'text' } },
+      async authorize(credentials) {
         // 🔒 Security: Only allow test-user in development environment
         if (process.env.NODE_ENV !== 'development') {
           console.warn('⚠️  Test user login attempt blocked in production')
           return null
         }
 
+        // Alumnos simulados (scripts/cetemin/simular-alumnos.ts, 22 oct 2026):
+        // en desarrollo se puede entrar como un correo @simulado.local para que
+        // cada alumno ficticio hable con Sophia con su propia sesión y el
+        // Monitor los vea en vivo. Cualquier otro correo cae al usuario de prueba.
+        const pedido = typeof credentials?.email === 'string' ? credentials.email.trim().toLowerCase() : ''
+        const email = pedido.endsWith('@simulado.local') ? pedido : 'user-test@sophia.dev'
         const user = await prisma.user.findUnique({
-          where: { email: 'user-test@sophia.dev' },
+          where: { email },
         })
 
         if (user) {

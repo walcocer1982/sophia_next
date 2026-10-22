@@ -54,7 +54,7 @@ const ESTADO_PENDIENTE: Record<PendienteMonitor['lecciones'][number]['estado'], 
 }
 
 export default function CourseDashboardPage() {
-  const { data: session } = useSession()
+  const { data: session, status: estadoSesion } = useSession()
   const router = useRouter()
   const params = useParams()
   const courseId = params.courseId as string
@@ -91,21 +91,25 @@ export default function CourseDashboardPage() {
   }, [courseId, selectedSection])
 
   useEffect(() => {
+    // Mientras la sesión carga, el rol todavía no se conoce: con el valor por
+    // defecto («STUDENT») la página expulsaba al instructor que entraba por URL
+    // o recargaba (21 oct 2026).
+    if (estadoSesion === 'loading') return
     if (role === 'STUDENT') {
       router.push('/lessons')
       return
     }
     fetchData()
-  }, [role, router, fetchData])
+  }, [estadoSesion, role, router, fetchData])
 
   // Sondeo: cada 15 s si hay una ventana abierta o alguien escribiendo; si no,
   // cada minuto. Antes eran 15 s siempre, con o sin clase.
   const vivo = !!data && (data.enVivo || data.filas.some((f) => f.estado === 'activa'))
   useEffect(() => {
-    if (role === 'STUDENT') return
+    if (estadoSesion === 'loading' || role === 'STUDENT') return
     const id = setInterval(fetchData, vivo ? 15_000 : 60_000)
     return () => clearInterval(id)
-  }, [role, fetchData, vivo])
+  }, [estadoSesion, role, fetchData, vivo])
 
   if (loading) {
     return (

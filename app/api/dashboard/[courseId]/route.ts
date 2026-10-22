@@ -294,7 +294,9 @@ export async function GET(
         activityIndex: idx >= 0 ? idx + 1 : null,
         activityTotal: total || null,
         activityTitle: idx >= 0 ? tituloActividad(actividades[idx], idx) : null,
-        percentage: s.progress ?? 0,
+        // `LessonSession.progress` solo se escribe al terminar (100): en vivo
+        // marcaba 0 % con cinco actividades hechas. Se cuenta lo completado.
+        percentage: total ? Math.round((completadas.length / total) * 100) : (s.progress ?? 0),
         startedAt: s.startedAt.toISOString(),
         lastActivityAt: s.lastActivityAt.toISOString(),
         cierre: cierre?.toISOString() ?? null,
