@@ -34,12 +34,16 @@ const ESTILO: Record<EstadoSesion, { fondo: string; texto: string; simbolo: stri
 export function MatrizTabla({
   matriz,
   courseId,
-  enlaceSesion,
+  seccionDelReporte,
 }: {
   matriz: Matriz
   courseId: string
-  /** A dónde lleva el encabezado de cada sesión; por defecto, al Monitor en vivo. */
-  enlaceSesion?: (lessonId: string) => string
+  /**
+   * El encabezado de cada sesión lleva al reporte de la sesión; si se conoce la
+   * sección, va directo a ella. Es un dato y no una función: una página de
+   * servidor no puede pasarle funciones a un componente de cliente.
+   */
+  seccionDelReporte?: string | null
 }) {
   const [busca, setBusca] = useState('')
 
@@ -92,7 +96,7 @@ export function MatrizTabla({
                   {/* El número de sesión manda (21 oct 2026): el título truncado
                       («Riesgos en trabajo…») no decía cuál era. */}
                   <Link
-                    href={enlaceSesion ? enlaceSesion(l.id) : `/dashboard/${courseId}`}
+                    href={`/dashboard/${courseId}/clase?leccion=${l.id}${seccionDelReporte ? `&seccion=${seccionDelReporte}` : ''}`}
                     className="block max-w-[7rem] hover:text-gray-900 hover:underline"
                     title={`${l.title} · reporte de la sesión`}
                   >

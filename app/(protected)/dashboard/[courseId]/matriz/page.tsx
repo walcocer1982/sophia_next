@@ -150,10 +150,7 @@ export default async function MatrizPage({
           <MatrizTabla
             matriz={matriz}
             courseId={courseId}
-            enlaceSesion={(lessonId) => {
-              const seccion = soloSeccion ?? (seccionesDelCurso.length === 1 ? seccionesDelCurso[0].id : null)
-              return `/dashboard/${courseId}/clase?leccion=${lessonId}${seccion ? `&seccion=${seccion}` : ''}`
-            }}
+            seccionDelReporte={soloSeccion ?? (seccionesDelCurso.length === 1 ? seccionesDelCurso[0].id : null)}
           />
         </>
       )}
