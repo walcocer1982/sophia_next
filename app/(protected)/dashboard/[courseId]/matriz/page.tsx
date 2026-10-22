@@ -7,6 +7,8 @@ import { alcanceEfectivo } from '@/lib/ver-como'
 import { matrizDelCurso, type EstadoSesion } from '@/lib/asistencia'
 import { enlaceRama, seleccionDe, SIN_SEDE } from '@/lib/monitor-arbol'
 import { MatrizTabla } from '@/components/monitor/matriz-tabla'
+import { BloqueSeccion } from '@/components/monitor/bloque-seccion'
+import { cargarReporteDeClase, type DatosReporteClase } from '@/lib/reporte-clase-datos'
 import { Migas, type Miga } from '@/components/programacion/breadcrumb'
 import type { Prisma } from '@prisma/client'
 
@@ -68,6 +70,23 @@ export default async function MatrizPage({
     AND: [filtro, rama, ...(soloSeccion ? [{ id: soloSeccion }] : [])],
   })
 
+  // El bloque con Sophia de cada sección a la vista (22 oct 2026): la última
+  // sesión que ya abrió. Abierta: el botón para terminarla. Cerrada: los puntos
+  // de repaso para los 15 minutos del instructor.
+  const ahora = new Date()
+  const enVista = soloSeccion ? seccionesDelCurso.filter((s) => s.id === soloSeccion) : seccionesDelCurso
+  const ultimas = await prisma.sectionLessonSchedule.findMany({
+    where: { sectionId: { in: enVista.map((s) => s.id) }, availableAt: { lte: ahora } },
+    orderBy: { availableAt: 'desc' },
+    select: { sectionId: true, lessonId: true },
+  })
+  const unaPorSeccion = enVista
+    .map((s) => ultimas.find((u) => u.sectionId === s.id))
+    .filter((u): u is { sectionId: string; lessonId: string } => !!u)
+  const bloques = (
+    await Promise.all(unaPorSeccion.map((u) => cargarReporteDeClase({ courseId, lessonId: u.lessonId, sectionId: u.sectionId, filtro, ahora })))
+  ).filter((d): d is DatosReporteClase => d !== null)
+
   const base = `/dashboard/${courseId}/matriz`
   const conSeccion = (id: string | null) => {
     const u = new URLSearchParams(enlaceRama(seleccion, '').replace(/^\?/, ''))
@@ -106,12 +125,26 @@ export default async function MatrizPage({
             {matriz.alumnos.length} estudiantes · {matriz.lecciones.length} sesiones programadas
           </p>
         </div>
-        <Link
-          href={`/dashboard/${courseId}`}
-          className="text-sm font-medium text-blue-600 hover:underline"
-        >
-          Ver en vivo →
-        </Link>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {/* «En vivo» con el punto que parpadea mientras alguna sección está en clase;
+              el botón para terminar el bloque vive dentro del Monitor en vivo. */}
+          {bloques.some((d) => d.seccion.abierta) ? (
+            <Link
+              href={`/dashboard/${courseId}`}
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              </span>
+              En vivo →
+            </Link>
+          ) : (
+            <Link href={`/dashboard/${courseId}`} className="text-sm font-medium text-blue-600 hover:underline">
+              Ver en vivo →
+            </Link>
+          )}
+        </div>
       </div>
 
       {seccionesDelCurso.length > 1 && (
@@ -126,6 +159,10 @@ export default async function MatrizPage({
           ))}
         </div>
       )}
+
+      {bloques.map((d) => (
+        <BloqueSeccion key={`${d.seccion.id}-${d.leccion.id}`} courseId={courseId} datos={d} />
+      ))}
 
       {matriz.alumnos.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-10 text-center shadow-sm">
@@ -147,7 +184,11 @@ export default async function MatrizPage({
             {desertaron > 0 && <Resumen etiqueta="Desertaron" valor={desertaron} tono="gris" />}
           </div>
 
-          <MatrizTabla matriz={matriz} courseId={courseId} />
+          <MatrizTabla
+            matriz={matriz}
+            courseId={courseId}
+            seccionDelReporte={soloSeccion ?? (seccionesDelCurso.length === 1 ? seccionesDelCurso[0].id : null)}
+          />
         </>
       )}
     </div>

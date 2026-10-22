@@ -9,7 +9,7 @@ import { allLessonBlocks, panelInfo } from '@/lib/support-blocks'
 import { PARAM_VISTA, esVistaEstudiante } from '@/lib/vista-estudiante'
 import { nombreDeActividad } from '@/lib/planner/titulos'
 import { ocultarClaves } from '@/lib/subrayado'
-import { cierreDeVentana } from '@/lib/monitor'
+import { cierreParaAlumno } from '@/lib/ventana-alumno'
 import { formatDateLong, formatTime } from '@/lib/formatters'
 import Link from 'next/link'
 
@@ -66,23 +66,13 @@ export default async function ChatPage({
   // cierra sesiones por inactividad y es la ventana de la sección la que
   // decide, como en la lista de clases y en /api/session/start.
   if (!lessonSession.isTest && !lessonSession.completedAt) {
-    const matricula = await prisma.enrollment.findFirst({
-      where: { userId: session.user.id, section: { courseId: lessonSession.lesson.courseId } },
-      select: {
-        section: {
-          select: {
-            schedules: {
-              where: { lessonId: lessonSession.lessonId },
-              select: { availableAt: true, closesAfterHours: true },
-            },
-          },
-        },
-      },
+    // Misma función que el chat: el cierre del instructor también cuenta.
+    const cierre = await cierreParaAlumno(session.user.id, {
+      id: lessonSession.lessonId,
+      courseId: lessonSession.lesson.courseId,
+      availableAt: lessonSession.lesson.availableAt,
+      closesAfterHours: lessonSession.lesson.closesAfterHours,
     })
-    const horario = matricula?.section.schedules[0]
-    const cierre = horario
-      ? cierreDeVentana(horario.availableAt, horario.closesAfterHours)
-      : cierreDeVentana(lessonSession.lesson.availableAt, lessonSession.lesson.closesAfterHours)
     if (cierre && cierre < new Date()) {
       return (
         <div className="mx-auto max-w-lg p-8">

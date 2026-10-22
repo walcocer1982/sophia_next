@@ -7,7 +7,7 @@ import { alcanceEfectivo } from '@/lib/ver-como'
 import { otrosCursosDelAlumno } from '@/lib/asistencia'
 import { formatDate, formatDateLong } from '@/lib/formatters'
 import { ESTADOS, MOTIVOS, historialDeSeguimiento } from '@/lib/seguimiento'
-import { ventanaCerrada } from '@/lib/monitor'
+import { cierreDeHorario, ventanaCerrada } from '@/lib/monitor'
 import { reporteDeSesion, NIVEL_TEXTO } from '@/lib/reporte-sesion'
 import { SeguimientoForm } from '@/components/monitor/seguimiento-form'
 import { ReporteSesionView } from '@/components/monitor/reporte-sesion'
@@ -67,7 +67,7 @@ export default async function EstudiantePage({
           name: true,
           sede: { select: { code: true } },
           period: { select: { name: true } },
-          schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true } },
+          schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true, closedAt: true } },
         },
       },
     },
@@ -92,10 +92,7 @@ export default async function EstudiantePage({
   }
 
   const horarios = new Map(
-    matricula.section.schedules.map((h) => [
-      h.lessonId,
-      h.availableAt ? new Date(h.availableAt.getTime() + h.closesAfterHours * 3_600_000) : null,
-    ])
+    matricula.section.schedules.map((h) => [h.lessonId, cierreDeHorario(h)])
   )
 
   const lecciones = await prisma.lesson.findMany({
@@ -116,6 +113,7 @@ export default async function EstudiantePage({
           lastActivityAt: true,
           completedAt: true,
           grade: true,
+          activityId: true,
           activities: {
             select: {
               activityId: true,
@@ -123,13 +121,16 @@ export default async function EstudiantePage({
               attempts: true,
               passedCriteria: true,
               evidenceData: true,
+              startedAt: true,
+              completedAt: true,
             },
           },
-          // Lo que escribió, por actividad: de aquí salen las citas del reporte.
+          // Lo que escribió, por actividad: de aquí salen las citas, la línea de
+          // tiempo y «dónde está ahora».
           messages: {
             where: { role: 'user' },
             orderBy: { timestamp: 'asc' },
-            select: { activityId: true, content: true },
+            select: { activityId: true, content: true, timestamp: true },
           },
         },
       },
@@ -168,6 +169,9 @@ export default async function EstudiantePage({
             cerrada: !!ses.completedAt || ventanaCerrada(cierre, ses.lastActivityAt, ahora),
             metodologia: curso.methodology,
             mensajes: ses.messages,
+            actividadActualId: ses.activityId,
+            lastActivityAt: ses.lastActivityAt,
+            ahora,
           })
         : null
     return { leccion: l, ses, estado, cierre, acts, reporte }
@@ -343,6 +347,11 @@ export default async function EstudiantePage({
                         <div key={a.id} className="flex items-center gap-3 px-5 py-2.5">
                           <span className="w-5 shrink-0 text-xs tabular-nums text-gray-400">{a.indice}</span>
                           <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{a.titulo}</span>
+                          {a.estado !== 'sin_llegar' && (
+                            <span className="shrink-0 text-xs tabular-nums text-gray-400" title="Mensajes que escribió y minutos que estuvo en la actividad">
+                              {a.mensajes} msg{a.minutos !== null ? ` · ${a.minutos} min` : ''}
+                            </span>
+                          )}
                           {a.intentos ? (
                             <span className="shrink-0 text-xs text-gray-400">
                               {a.intentos} {a.intentos === 1 ? 'intento' : 'intentos'}

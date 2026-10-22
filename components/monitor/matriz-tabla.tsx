@@ -31,7 +31,20 @@ const ESTILO: Record<EstadoSesion, { fondo: string; texto: string; simbolo: stri
   'no-programada': { fondo: 'bg-gray-50', texto: 'text-gray-300', simbolo: '', nombre: 'No programada' },
 }
 
-export function MatrizTabla({ matriz, courseId }: { matriz: Matriz; courseId: string }) {
+export function MatrizTabla({
+  matriz,
+  courseId,
+  seccionDelReporte,
+}: {
+  matriz: Matriz
+  courseId: string
+  /**
+   * El encabezado de cada sesión lleva al reporte de la sesión; si se conoce la
+   * sección, va directo a ella. Es un dato y no una función: una página de
+   * servidor no puede pasarle funciones a un componente de cliente.
+   */
+  seccionDelReporte?: string | null
+}) {
   const [busca, setBusca] = useState('')
 
   const filtrados = busca.trim()
@@ -83,8 +96,9 @@ export function MatrizTabla({ matriz, courseId }: { matriz: Matriz; courseId: st
                   {/* El número de sesión manda (21 oct 2026): el título truncado
                       («Riesgos en trabajo…») no decía cuál era. */}
                   <Link
-                    href={`/dashboard/${courseId}`}
+                    href={`/dashboard/${courseId}/clase?leccion=${l.id}${seccionDelReporte ? `&seccion=${seccionDelReporte}` : ''}`}
                     className="block max-w-[7rem] hover:text-gray-900 hover:underline"
+                    title={`${l.title} · reporte de la sesión`}
                   >
                     <span className="block text-sm font-bold text-gray-800">S{l.order}</span>
                     <span className="block truncate text-[11px] font-normal text-gray-400">{l.title}</span>

@@ -33,6 +33,7 @@ import { describeClasifForPrompt, describeClasifForVerifier, sanitizeClasif, vac
 import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, guiaRevelarSubrayado, guiaLineaCorrecta, leerSubrayadoGuardado, lineasClaveTexto, mensajeRecordatorioSubrayado, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, hayQueRevisarSubrayado, esRepeticionEquivocada, type UltimoSubrayado, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
 import { resumenDeCierre } from '@/lib/cierre'
 import { pideAclaracion } from '@/lib/aclaracion'
+import { cierreParaAlumno, mensajeBloqueCerrado, ventanaPaso } from '@/lib/ventana-alumno'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -129,6 +130,9 @@ export async function POST(request: Request) {
           title: true,
           objective: true,
           keyPoints: true,
+          courseId: true,
+          availableAt: true,
+          closesAfterHours: true,
           course: {
             select: {
               instructor: true,
@@ -152,6 +156,21 @@ export async function POST(request: Request) {
 
   if (!lessonSession) {
     return new Response('Session not found', { status: 404 })
+  }
+  // El instructor terminó el bloque o la ventana venció (22 oct 2026): Sophia
+  // responde con un mensaje fijo y no se guarda nada.
+  if (!lessonSession.isTest && !lessonSession.completedAt) {
+    const cierre = await cierreParaAlumno(session.userId, lessonSession.lesson)
+    if (cierre && ventanaPaso(cierre)) {
+      const cuerpo = `data: ${JSON.stringify({ type: 'content', text: mensajeBloqueCerrado(cierre) })}
+
+data: ${JSON.stringify({ type: 'done' })}
+
+`
+      return new Response(new TextEncoder().encode(cuerpo), {
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
+      })
+    }
   }
   // Material sin validar: solo en la prueba vista como instructor (lib/vista-estudiante.ts).
   const verSinValidar = lessonSession.isTest && comoEstudiante !== true

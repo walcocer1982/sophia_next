@@ -9,9 +9,9 @@ import { normalizeLevel, LEGACY_LABEL } from '@/lib/levels'
 import { logger } from '@/lib/logger'
 import { seccionesVisibles } from '@/lib/alcance'
 import { alcanceEfectivo } from '@/lib/ver-como'
-import { formatDate } from '@/lib/formatters'
+import { formatDate, formatTime } from '@/lib/formatters'
 import { ultimaMarcaPorAlumno, resumenDeMarca, type Marca } from '@/lib/seguimiento'
-import {
+import { cierreDeHorario,
   atendido,
   avisoDeIntentos,
   cierreDeVentana,
@@ -140,7 +140,7 @@ export async function GET(
           user: { select: { id: true, name: true, email: true, phone: true } },
         },
       },
-      schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true } },
+      schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true, closedAt: true } },
     },
   })
   if (secciones.length === 0 && alcance.role !== 'SUPERADMIN') {
@@ -171,15 +171,15 @@ export async function GET(
   const cierrePorSeccion = new Map<string, Date | null>()
   for (const s of activas) {
     for (const h of s.schedules) {
-      cierrePorSeccion.set(`${s.id}:${h.lessonId}`, cierreDeVentana(h.availableAt, h.closesAfterHours))
+      cierrePorSeccion.set(`${s.id}:${h.lessonId}`, cierreDeHorario(h))
     }
   }
-  const enVivo = activas.some((s) =>
-    s.schedules.some((h) => {
-      const cierre = cierreDeVentana(h.availableAt, h.closesAfterHours)
-      return !!h.availableAt && !!cierre && h.availableAt <= ahora && ahora < cierre
-    })
+  const abiertos = activas.flatMap((s) =>
+    s.schedules
+      .map((h) => ({ s, h, cierre: cierreDeHorario(h) }))
+      .filter(({ h, cierre }) => !!h.availableAt && !!cierre && h.availableAt <= ahora && ahora < cierre)
   )
+  const enVivo = abiertos.length > 0
 
   const lessons = await prisma.lesson.findMany({
     where: {
@@ -190,6 +190,7 @@ export async function GET(
     select: {
       id: true,
       title: true,
+      order: true,
       contentJson: true,
       availableAt: true,
       closesAfterHours: true,
@@ -409,6 +410,18 @@ export async function GET(
       _count: { enrollments: s.enrollments.length },
     })),
     enVivo,
+    // La hora va formateada desde el servidor: así se ve igual que en la matriz.
+    bloquesAbiertos: abiertos.map(({ s, h, cierre }) => {
+      const l = lessons.find((x) => x.id === h.lessonId)
+      return {
+        sectionId: s.id,
+        sectionName: s.name,
+        lessonId: h.lessonId,
+        lessonOrder: l?.order ?? 0,
+        lessonTitle: l?.title ?? '',
+        cierra: formatTime(cierre!),
+      }
+    }),
     filas,
     pendientes: [...pendientes.values()].sort((a, b) => b.lecciones.length - a.lecciones.length),
     funnels,

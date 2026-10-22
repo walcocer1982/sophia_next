@@ -515,6 +515,10 @@ model SectionLessonSchedule {
   lessonId         String
   availableAt      DateTime?
   closesAfterHours Int       @default(3)
+  // El instructor terminó el bloque de Sophia antes de la hora (22 oct 2026):
+  // la ventana cierra en el menor de (availableAt + closesAfterHours, closedAt).
+  closedAt         DateTime?
+  closedById       String?
 
   section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   lesson  Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)

@@ -145,3 +145,35 @@ test('sesión en curso con la ventana abierta: no se reclama lo pendiente', () =
   assert.equal(r.oportunidades.length, 0)
   assert.equal(r.logro.nota !== null, true)
 })
+
+test('dónde está ahora y línea de tiempo: lo dejó en la 5 hace 14 min, con mensajes y minutos por actividad', () => {
+  const t0 = new Date('2026-10-22T15:00:00Z').getTime()
+  const min = (n: number) => new Date(t0 + n * 60_000)
+  const mensajes = [
+    { activityId: 'a1', content: 'Veo una losa con fierro.', timestamp: min(0) },
+    { activityId: 'a2', content: 'Del borde, no hay baranda.', timestamp: min(1) },
+    { activityId: 'a3', content: 'Abajo está el otro piso.', timestamp: min(2) },
+    { activityId: 'a4', content: 'Sí: hay electricidad activa debajo.', timestamp: min(3) },
+    { activityId: 'a4', content: 'la línea tres', timestamp: min(5) },
+    { activityId: 'a5', content: 'En la mina, por el decreto.', timestamp: min(6) },
+  ]
+  const progresos: ProgresoReporte[] = [
+    ...brayan.slice(0, 4).map((p, i) => ({ ...p, startedAt: min(i), completedAt: min(i + 1) })),
+    { activityId: 'a5', status: 'IN_PROGRESS', attempts: 1, passedCriteria: false, startedAt: min(5), evidenceData: { attempts: [intento('developing', 50, [C5[1]], [C5[0]], 'En la mina, por el decreto.')] } },
+  ]
+  const r = reporteDeSesion({ actividades, keyPoints, progresos, terminada: false, cerrada: false, mensajes, actividadActualId: 'a5', lastActivityAt: min(6), ahora: min(20) })
+  assert.equal(r.ubicacion.estado, 'lo_dejo')
+  assert.equal(r.ubicacion.actividad?.indice, 5)
+  assert.equal(r.ubicacion.minutosSinEscribir, 14)
+  assert.ok(r.acciones[0].startsWith('Escribirle ahora: dejó la sesión en la actividad 5 hace 14 min'))
+  assert.deepEqual([r.actividades[3].mensajes, r.actividades[3].minutos], [2, 2]) // a4: entró en el min 3, completó en el 4… con la línea en el 5 → 3→5
+  assert.deepEqual([r.actividades[4].mensajes, r.actividades[4].minutos], [1, 1]) // a5: entró en el 5, último mensaje en el 6
+  assert.equal(r.actividades[6].minutos, null) // sin llegar
+  assert.deepEqual([r.avance.mensajes, r.avance.palabrasPorMensaje], [6, 5])
+
+  // Escribiendo y en pausa, según el tiempo sin escribir; cerrada manda sobre todo.
+  assert.equal(reporteDeSesion({ actividades, keyPoints, progresos, terminada: false, cerrada: false, mensajes, actividadActualId: 'a5', ahora: min(7) }).ubicacion.estado, 'escribiendo')
+  assert.equal(reporteDeSesion({ actividades, keyPoints, progresos, terminada: false, cerrada: false, mensajes, actividadActualId: 'a5', ahora: min(12) }).ubicacion.estado, 'en_pausa')
+  assert.equal(reporteDeSesion({ actividades, keyPoints, progresos, terminada: false, cerrada: true, mensajes, actividadActualId: 'a5', ahora: min(12) }).ubicacion.estado, 'cerro_sin_terminar')
+  assert.equal(reporteDeSesion({ actividades, keyPoints, progresos: brayan, terminada: true, cerrada: true }).ubicacion.estado, 'terminada')
+})

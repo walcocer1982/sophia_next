@@ -26,12 +26,38 @@ function Estado({ a }: { a: ActividadDelReporte }) {
   return <Nivel nivel={a.nivel} />
 }
 
+const UBICACION: Record<Exclude<ReporteSesion['ubicacion']['estado'], 'terminada'>, { verbo: string; clase: string; punto: string }> = {
+  escribiendo: { verbo: 'Escribiendo ahora', clase: 'border-emerald-200 bg-emerald-50 text-emerald-900', punto: 'bg-emerald-500' },
+  en_pausa: { verbo: 'En pausa', clase: 'border-amber-200 bg-amber-50 text-amber-900', punto: 'bg-amber-500' },
+  lo_dejo: { verbo: 'Lo dejó', clase: 'border-red-200 bg-red-50 text-red-900', punto: 'bg-red-500' },
+  cerro_sin_terminar: { verbo: 'Cerró sin terminar', clase: 'border-gray-200 bg-gray-50 text-gray-800', punto: 'bg-gray-400' },
+}
+
 export function ReporteSesionView({ reporte, nombre }: { reporte: ReporteSesion; nombre: string }) {
-  const { avance, logro, puntosClave, fortalezas, oportunidades, duda, acciones } = reporte
+  const { avance, ubicacion, logro, puntosClave, fortalezas, oportunidades, duda, acciones } = reporte
   const primerNombre = nombre.split(' ')[0]
 
   return (
     <div className="space-y-5 text-sm">
+      {/* Dónde está ahora: solo mientras la sesión no terminó */}
+      {ubicacion.estado !== 'terminada' && (
+        <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-3 py-2 ${UBICACION[ubicacion.estado].clase}`}>
+          <span className={`inline-block h-2 w-2 rounded-full ${UBICACION[ubicacion.estado].punto}`} />
+          <span className="font-semibold">{UBICACION[ubicacion.estado].verbo}</span>
+          {ubicacion.actividad && (
+            <span>
+              en Act {ubicacion.actividad.indice} · {ubicacion.actividad.titulo}
+            </span>
+          )}
+          {ubicacion.minutosSinEscribir !== null && ubicacion.estado !== 'cerro_sin_terminar' && (
+            <span className="text-xs opacity-80">
+              · último mensaje hace {ubicacion.minutosSinEscribir} min
+            </span>
+          )}
+          {ubicacion.minutosSinEscribir === null && <span className="text-xs opacity-80">· no escribió nada</span>}
+        </div>
+      )}
+
       {/* Avance y logro */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg bg-gray-50 p-3">
@@ -42,6 +68,10 @@ export function ReporteSesionView({ reporte, nombre }: { reporte: ReporteSesion;
           <p className="text-xs text-gray-500">
             {avance.conNotaHechas} de {avance.conNota} con nota · {avance.hechas - avance.conNotaHechas} de {avance.total - avance.conNota} sin nota
             {avance.terminada ? ' · terminó' : ' · no terminó'}
+          </p>
+          <p className="text-xs text-gray-500">
+            Participación: {avance.mensajes} {avance.mensajes === 1 ? 'mensaje' : 'mensajes'}
+            {avance.palabrasPorMensaje !== null && ` · ${avance.palabrasPorMensaje} palabras por mensaje`}
           </p>
         </div>
         <div className="rounded-lg bg-gray-50 p-3">

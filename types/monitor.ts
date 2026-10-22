@@ -96,6 +96,8 @@ export type RespuestaMonitor = {
   sections: Array<{ id: string; name: string; period: { name: string }; _count: { enrollments: number } }>
   /** Alguna sección visible tiene una ventana abierta ahora mismo. */
   enVivo: boolean
+  /** Las ventanas abiertas ahora, una por sección y sesión: de aquí sale el botón para terminar el bloque. */
+  bloquesAbiertos: Array<{ sectionId: string; sectionName: string; lessonId: string; lessonOrder: number; lessonTitle: string; cierra: string }>
   filas: FilaMonitor[]
   pendientes: PendienteMonitor[]
   funnels: EmbudoLeccion[]

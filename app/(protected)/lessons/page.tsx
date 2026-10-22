@@ -1,4 +1,5 @@
 import { auth } from '@/auth'
+import { cierreDeVentana } from '@/lib/monitor'
 import { prisma } from '@/lib/prisma'
 import { CareerFilter } from '@/components/lessons/career-filter'
 import { InteractiveGridPattern } from '@/components/ui/interactive-grid-pattern'
@@ -76,6 +77,7 @@ export default async function LessonsPage() {
           sectionId: true,
           availableAt: true,
           closesAfterHours: true,
+          closedAt: true,
         },
       },
     },
@@ -83,7 +85,7 @@ export default async function LessonsPage() {
     courseId: string
     availableAt: Date | null
     closesAfterHours: number
-    sectionSchedules: Array<{ sectionId: string; availableAt: Date | null; closesAfterHours: number }>
+    sectionSchedules: Array<{ sectionId: string; availableAt: Date | null; closesAfterHours: number; closedAt: Date | null }>
   })[]
 
   // Fetch user's sessions for progress (non-test only)
@@ -125,9 +127,7 @@ export default async function LessonsPage() {
 
     const availableDate = effectiveAvailableAt ? new Date(effectiveAvailableAt) : null
     const isOpen = !availableDate || availableDate <= now
-    const closesAt = availableDate
-      ? new Date(availableDate.getTime() + effectiveClosesAfterHours * 60 * 60 * 1000)
-      : null
+    const closesAt = cierreDeVentana(availableDate, effectiveClosesAfterHours, sectionSchedule?.closedAt)
     const isClosed = closesAt ? now > closesAt : false
     const isAvailable = isOpen && !isClosed
 
