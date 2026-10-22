@@ -8,8 +8,6 @@ import { matrizDelCurso, type EstadoSesion } from '@/lib/asistencia'
 import { enlaceRama, seleccionDe, SIN_SEDE } from '@/lib/monitor-arbol'
 import { MatrizTabla } from '@/components/monitor/matriz-tabla'
 import { BloqueSeccion } from '@/components/monitor/bloque-seccion'
-import { TerminarBloque } from '@/components/monitor/terminar-bloque'
-import { formatTime } from '@/lib/formatters'
 import { cargarReporteDeClase, type DatosReporteClase } from '@/lib/reporte-clase-datos'
 import { Migas, type Miga } from '@/components/programacion/breadcrumb'
 import type { Prisma } from '@prisma/client'
@@ -128,32 +126,24 @@ export default async function MatrizPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
-          {/* Terminar el bloque de Sophia, junto a «Ver en vivo», mientras la ventana está abierta */}
-          {bloques
-            .filter((d) => d.seccion.abierta)
-            .map((d) => (
-              <div key={`${d.seccion.id}-${d.leccion.id}`} className="flex items-center gap-2">
-                {bloques.filter((x) => x.seccion.abierta).length > 1 && (
-                  <span className="text-xs text-gray-500">
-                    {d.seccion.name} · S{d.leccion.order}
-                  </span>
-                )}
-                <TerminarBloque
-                  courseId={courseId}
-                  sectionId={d.seccion.id}
-                  lessonId={d.leccion.id}
-                  cierre={d.seccion.cierre ? formatTime(d.seccion.cierre) : null}
-                  cerradoPorInstructor={false}
-                  abierta
-                />
-              </div>
-            ))}
-          <Link
-            href={`/dashboard/${courseId}`}
-            className="text-sm font-medium text-blue-600 hover:underline"
-          >
-            Ver en vivo →
-          </Link>
+          {/* «En vivo» con el punto que parpadea mientras alguna sección está en clase;
+              el botón para terminar el bloque vive dentro del Monitor en vivo. */}
+          {bloques.some((d) => d.seccion.abierta) ? (
+            <Link
+              href={`/dashboard/${courseId}`}
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              </span>
+              En vivo →
+            </Link>
+          ) : (
+            <Link href={`/dashboard/${courseId}`} className="text-sm font-medium text-blue-600 hover:underline">
+              Ver en vivo →
+            </Link>
+          )}
         </div>
       </div>
 
