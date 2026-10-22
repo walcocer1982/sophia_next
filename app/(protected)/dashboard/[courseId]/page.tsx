@@ -9,6 +9,7 @@ import { ArrowLeft, Search, AlertTriangle, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { formatDate, formatTime, hace } from '@/lib/formatters'
 import type { FilaMonitor, RespuestaMonitor } from '@/types/monitor'
+import { TerminarBloque } from '@/components/monitor/terminar-bloque'
 
 /**
  * Monitor por curso.
@@ -152,6 +153,29 @@ export default function CourseDashboardPage() {
             {course.career?.name || 'Sin carrera'} • {course.instructor}
             {data.viendoComo && <> • viendo como {data.viendoComo}</>}
           </p>
+        </div>
+        {/* Terminar el bloque de Sophia: uno por sección con la ventana abierta (22 oct 2026) */}
+        <div className="flex flex-wrap items-center gap-3">
+          {data.bloquesAbiertos
+            .filter((b) => !selectedSection || b.sectionId === selectedSection)
+            .map((b) => (
+              <div key={`${b.sectionId}-${b.lessonId}`} className="flex items-center gap-2">
+                {data.bloquesAbiertos.length > 1 && (
+                  <span className="text-xs text-gray-500">
+                    {b.sectionName} · S{b.lessonOrder}
+                  </span>
+                )}
+                <TerminarBloque
+                  courseId={courseId}
+                  sectionId={b.sectionId}
+                  lessonId={b.lessonId}
+                  cierre={b.cierra}
+                  cerradoPorInstructor={false}
+                  abierta
+                  onCambio={fetchData}
+                />
+              </div>
+            ))}
         </div>
         <Link
           href={`/dashboard/${courseId}/matriz`}

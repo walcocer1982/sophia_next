@@ -16,6 +16,7 @@ export function TerminarBloque({
   cierre,
   cerradoPorInstructor,
   abierta,
+  onCambio,
 }: {
   courseId: string
   sectionId: string
@@ -29,6 +30,8 @@ export function TerminarBloque({
   cerradoPorInstructor: boolean
   /** La ventana está abierta ahora mismo. */
   abierta: boolean
+  /** Si la página carga sus datos en el cliente, cómo recargarlos tras cerrar o reabrir. */
+  onCambio?: () => void
 }) {
   const router = useRouter()
   const [ocupado, setOcupado] = useState(false)
@@ -49,6 +52,7 @@ export function TerminarBloque({
         throw new Error(j?.error ?? `No se pudo (${r.status})`)
       }
       router.refresh()
+      onCambio?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo')
     } finally {
