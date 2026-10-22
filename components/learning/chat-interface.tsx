@@ -32,6 +32,8 @@ interface ChatInterfaceProps {
   comoEstudiante?: boolean
   /** Las actividades de la lección, con su nombre (regla de nombres). */
   actividades?: ActividadDelCuaderno[]
+  /** Sesión de prueba ya cerrada: solo lectura, sin «una pregunta más». */
+  pruebaCerrada?: boolean
 }
 
 export function ChatInterface({
@@ -47,6 +49,7 @@ export function ChatInterface({
   exitLabel = 'Volver a mis lecciones',
   comoEstudiante = false,
   actividades = [],
+  pruebaCerrada = false,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<OptimisticMessage[]>(
     initialMessages.map((msg) => ({
@@ -77,7 +80,7 @@ export function ChatInterface({
   // texto cerrada. «Hacer una pregunta más» la reabre a propósito; antes la
   // conversación seguía por inercia y el alumno no sabía que había terminado.
   const [preguntaExtra, setPreguntaExtra] = useState(false)
-  const cerrada = progress.completedAt !== null && !preguntaExtra
+  const cerrada = (progress.completedAt !== null || pruebaCerrada) && !preguntaExtra
   const hacerUnaPreguntaMas = () => {
     setPreguntaExtra(true)
     setTimeout(() => chatInputRef.current?.focus(), 150)
@@ -452,7 +455,8 @@ export function ChatInterface({
         cerrada={cerrada}
         exitHref={exitHref}
         exitLabel={exitLabel}
-        onAskMore={hacerUnaPreguntaMas}
+        onAskMore={pruebaCerrada ? undefined : hacerUnaPreguntaMas}
+        pruebaCerrada={pruebaCerrada}
         chatInputRef={chatInputRef}
         avisoSubrayar={avisoSubrayar}
       />

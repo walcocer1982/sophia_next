@@ -62,7 +62,7 @@ export function describeSubrayadoForPrompt(b: TextBlock, s: SubrayadoState): str
         ? ' Esa línea NO respalda la respuesta de esta actividad. No le digas cuál la respalda, de qué habla ni qué palabra buscar: la encuentra él.'
         : ''
   return `«${b.title}»: subrayó ${marcadas.map((t) => `«${t}»`).join(' · ')}.${juicio}
-  Cómo usarlo: si lo subrayado respalda su respuesta, pídele que lo diga con sus palabras aplicado al caso; si no la respalda, pregúntale por qué eligió esa línea, sin decirle cuál era.`
+  Cómo usarlo: si lo subrayado respalda su respuesta, reconócelo en una frase y sigue con lo que indique el estado (no le pidas otra línea); si no la respalda, pregúntale por qué eligió esa línea, sin decirle cuál era.`
 }
 
 /** Lo que el verificador recibe junto con el mensaje. */
@@ -219,4 +219,39 @@ export function pendientesDeSubrayar(args: {
     .map((r) => r.blockId)
   const ids = [...new Set([...porRevision, ...porPedido])]
   return { ids, motivo: ids.length ? (porRevision.length ? 'equivocada' : 'pedido') : null }
+}
+
+// ── ¿Hay que volver a revisar lo subrayado? (21 oct 2026, prueba de Maritza) ──
+// Solo lo que cambió desde la última vez, salvo un caso: el alumno toca OTRA VEZ
+// la misma línea equivocada (un «listo» sin respuesta nueva). Antes el servidor
+// no respondía nada y la línea quedaba en gris «en revisión» para siempre.
+
+export interface UltimoSubrayado {
+  /** Las líneas guardadas la última vez, unidas con «|». */
+  lineas: string
+  resultado?: string
+  revelada: boolean
+}
+
+export function esRepeticionEquivocada(lineasAhora: string, ultimo: UltimoSubrayado | undefined, esToque: boolean): boolean {
+  return esToque && !!lineasAhora && !!ultimo && lineasAhora === ultimo.lineas && ultimo.resultado === 'no_respalda' && !ultimo.revelada
+}
+
+export function hayQueRevisarSubrayado(lineasAhora: string, ultimo: UltimoSubrayado | undefined, esToque: boolean): boolean {
+  if (!lineasAhora) return false
+  return lineasAhora !== ultimo?.lineas || esRepeticionEquivocada(lineasAhora, ultimo, esToque)
+}
+
+/**
+ * La línea que tocó respalda su respuesta (21 oct 2026). Con dos «inténtalo
+ * de nuevo» en la historia, Sophia trataba la línea correcta como otra
+ * equivocada («Mira bien el texto… ¿cuál es esa línea?»). La primera oración
+ * la fija el código; lo que sigue depende de si la respuesta escrita aprobó.
+ */
+export function guiaLineaCorrecta(aprobo: boolean): string {
+  return `SUBRAYADO CORRECTO: la línea que acaba de tocar SÍ respalda su respuesta. Tu PRIMERA oración es exactamente: "Esa es la línea." ⛔ PROHIBIDO pedirle otra línea, decirle que mire el texto de nuevo o preguntarle cuál es la línea: ya la encontró. ${
+    aprobo
+      ? 'Después haz la transición a la siguiente actividad, como indica el estado.'
+      : 'Después pide SOLO lo que falta de su respuesta escrita (lo que dice «Lo que falta por cubrir»), sin dar la razón tú ni repetir la línea.'
+  }`
 }

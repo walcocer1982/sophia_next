@@ -8,19 +8,7 @@ import type { LessonContent } from '@/types/lesson'
 
 export const runtime = 'nodejs'
 
-/**
- * Calcula el próximo sessionAttempt para evitar violar el unique
- * [userId, lessonId, sessionAttempt] cuando ya hay sesiones previas
- * (de prueba, completadas o de cualquier otro estado).
- */
-async function nextSessionAttempt(userId: string, lessonId: string): Promise<number> {
-  const last = await prisma.lessonSession.findFirst({
-    where: { userId, lessonId },
-    orderBy: { sessionAttempt: 'desc' },
-    select: { sessionAttempt: true },
-  })
-  return (last?.sessionAttempt ?? 0) + 1
-}
+import { nextSessionAttempt } from '@/lib/lesson-session'
 
 export async function POST(request: Request) {
   // 1. Auth check
@@ -161,26 +149,25 @@ export async function POST(request: Request) {
     }
   }
 
-  // 7. Test mode: delete any existing test session for this lesson, then create fresh
+  // 7. Modo prueba. «Probar» empieza de cero, pero NO borra la prueba anterior
+  // (21 oct 2026): se cierra (`endedAt`) y queda como evidencia. Antes se
+  // borraba, y así se perdió la prueba completa de Christian al volver a entrar.
   if (isTest) {
-    const existingTest = await prisma.lessonSession.findFirst({
-      where: {
-        userId: session.user.id,
-        lessonId,
-        isTest: true,
-      },
+    const abierta = await prisma.lessonSession.findFirst({
+      where: { userId: session.user.id, lessonId, isTest: true, endedAt: null },
+      orderBy: { startedAt: 'desc' },
     })
     // Convertida por rol (no la pidió con Probar): se retoma la que ya tenía,
-    // como haría un alumno. Probar, en cambio, siempre empieza de cero.
-    if (existingTest && !pidePrueba && !existingTest.endedAt) {
+    // como haría un alumno.
+    if (abierta && !pidePrueba) {
       return NextResponse.json({
-        sessionId: existingTest.id,
+        sessionId: abierta.id,
         isTest: true,
         lesson: { title: lesson.title, courseTitle: lesson.course.title },
       })
     }
-    if (existingTest) {
-      await prisma.lessonSession.delete({ where: { id: existingTest.id } })
+    if (abierta) {
+      await prisma.lessonSession.update({ where: { id: abierta.id }, data: { endedAt: new Date() } })
     }
 
     const sessionAttempt = await nextSessionAttempt(session.user.id, lessonId)
