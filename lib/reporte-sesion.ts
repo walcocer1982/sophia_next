@@ -319,8 +319,10 @@ export function reporteDeSesion(input: {
   }
 
   // ── La duda que dejó al cerrar ───────────────────────────────────────────
+  // Completa, sin recortar: el reporte de la clase la muestra entera.
   const cierre = acts.find((x) => actividades[x.indice - 1]?.type === 'closing')
-  const duda = cierre && cierre.estado === 'completada' ? cierre.respuesta : null
+  const dudaCruda = cierre && cierre.estado === 'completada' ? intentosDe(porId.get(cierre.id)).at(-1)?.studentResponse : undefined
+  const duda = dudaCruda?.replace(/\s+/g, ' ').trim() || null
 
   // ── Acciones para el instructor (sin cerrar nada desde otra sesión) ──────
   const acciones: string[] = []
@@ -338,7 +340,7 @@ export function reporteDeSesion(input: {
   }
   const sinLlegar = oportunidades.filter((o) => o.tipo === 'sin_llegar')
   if (sinLlegar.length) acciones.push(`Revisar con él lo que no alcanzó: ${sinLlegar.map((o) => o.actividad.titulo).join(', ')}.`)
-  if (duda && !/^(ninguna|nada|no|todo (está )?claro)[.!]?$/i.test(duda)) acciones.push(`Responder su duda al cerrar: «${duda}».`)
+  if (duda && !/^(ninguna|nada|no|todo (está )?claro)[.!]?$/i.test(duda)) acciones.push(`Responder su duda al cerrar: «${recortar(duda, 160)}».`)
   // La ventana sigue abierta y dejó de escribir: la acción es ahora, no el martes.
   if (ubicacion.estado === 'lo_dejo' && ubicacion.actividad) {
     acciones.unshift(

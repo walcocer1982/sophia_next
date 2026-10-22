@@ -6,6 +6,7 @@ import { seccionesVisibles } from '@/lib/alcance'
 import { alcanceEfectivo } from '@/lib/ver-como'
 import { matrizDelCurso, pesoDeFila, type Matriz } from '@/lib/asistencia'
 import { formatTime } from '@/lib/formatters'
+import { cierreDeHorario } from '@/lib/monitor'
 import {
   armarArbol,
   claveGrupo,
@@ -54,23 +55,18 @@ export default async function MonitorPage({
         select: { id: true, title: true, scope: true, careers: { select: { id: true, name: true, code: true } } },
       },
       _count: { select: { enrollments: true } },
-      schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true } },
+      schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true, closedAt: true } },
     },
   })
 
   // «En vivo» solo si de verdad hay una ventana abierta ahora mismo.
-  const abiertas = secciones.flatMap((s) =>
-    s.schedules
-      .filter((h) => {
-        if (!h.availableAt) return false
-        const cierra = new Date(h.availableAt.getTime() + h.closesAfterHours * 3_600_000)
-        return h.availableAt <= ahora && ahora < cierra
-      })
-      .map((h) => ({
-        seccion: s,
-        cierra: new Date(h.availableAt!.getTime() + h.closesAfterHours * 3_600_000),
-      }))
-  )
+  const abiertas: { seccion: (typeof secciones)[number]; cierra: Date }[] = []
+  for (const s of secciones) {
+    for (const h of s.schedules) {
+      const cierra = cierreDeHorario(h)
+      if (h.availableAt && cierra && h.availableAt <= ahora && ahora < cierra) abiertas.push({ seccion: s, cierra })
+    }
+  }
 
   // Una matriz por (curso, admisión, sede): de ahí salen «cuántos necesitan
   // atención» para el árbol y las tarjetas, con la misma regla que ordena la
@@ -114,7 +110,10 @@ export default async function MonitorPage({
         const cerradas = new Set(
           sus.flatMap((s) =>
             (horarios.get(s.id) ?? [])
-              .filter((h) => h.availableAt && new Date(h.availableAt.getTime() + h.closesAfterHours * 3_600_000) < ahora)
+              .filter((h) => {
+                const cierre = cierreDeHorario(h)
+                return !!cierre && cierre < ahora
+              })
               .map((h) => h.lessonId)
           )
         ).size

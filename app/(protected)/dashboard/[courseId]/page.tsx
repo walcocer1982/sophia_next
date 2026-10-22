@@ -337,11 +337,17 @@ export default function CourseDashboardPage() {
       {funnels.map((lesson) => (
         <Card key={lesson.lessonId}>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              {lesson.lessonTitle}
-              <span className="text-xs text-gray-400 font-normal ml-2">
+            <CardTitle className="text-base flex flex-wrap items-center gap-2">
+              <span>{lesson.lessonTitle}</span>
+              <span className="text-xs text-gray-400 font-normal">
                 {lesson.totalStudents} estudiante{lesson.totalStudents !== 1 ? 's' : ''} abrieron la sesión
               </span>
+              <Link
+                href={`/dashboard/${courseId}/clase?leccion=${lesson.lessonId}${selectedSection ? `&seccion=${selectedSection}` : ''}`}
+                className="ml-auto text-xs font-medium text-blue-600 hover:underline"
+              >
+                Reporte de la sesión →
+              </Link>
             </CardTitle>
           </CardHeader>
           <CardContent>

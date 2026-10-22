@@ -11,7 +11,7 @@ import { seccionesVisibles } from '@/lib/alcance'
 import { alcanceEfectivo } from '@/lib/ver-como'
 import { formatDate } from '@/lib/formatters'
 import { ultimaMarcaPorAlumno, resumenDeMarca, type Marca } from '@/lib/seguimiento'
-import {
+import { cierreDeHorario,
   atendido,
   avisoDeIntentos,
   cierreDeVentana,
@@ -140,7 +140,7 @@ export async function GET(
           user: { select: { id: true, name: true, email: true, phone: true } },
         },
       },
-      schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true } },
+      schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true, closedAt: true } },
     },
   })
   if (secciones.length === 0 && alcance.role !== 'SUPERADMIN') {
@@ -171,12 +171,12 @@ export async function GET(
   const cierrePorSeccion = new Map<string, Date | null>()
   for (const s of activas) {
     for (const h of s.schedules) {
-      cierrePorSeccion.set(`${s.id}:${h.lessonId}`, cierreDeVentana(h.availableAt, h.closesAfterHours))
+      cierrePorSeccion.set(`${s.id}:${h.lessonId}`, cierreDeHorario(h))
     }
   }
   const enVivo = activas.some((s) =>
     s.schedules.some((h) => {
-      const cierre = cierreDeVentana(h.availableAt, h.closesAfterHours)
+      const cierre = cierreDeHorario(h)
       return !!h.availableAt && !!cierre && h.availableAt <= ahora && ahora < cierre
     })
   )

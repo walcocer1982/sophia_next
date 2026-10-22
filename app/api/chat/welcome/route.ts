@@ -4,6 +4,7 @@ import { createMarkerFilter } from '@/lib/material-markers'
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
 import { crearCorrectorDeTitulos } from '@/lib/titulos-material'
 import { prisma } from '@/lib/prisma'
+import { cierreParaAlumno, mensajeBloqueCerrado, ventanaPaso } from '@/lib/ventana-alumno'
 import { anthropic, TUTOR_MODEL } from '@/lib/anthropic'
 import { logger } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
@@ -44,6 +45,9 @@ export async function POST(request: Request) {
             title: true,
             objective: true,
             keyPoints: true,
+            courseId: true,
+            availableAt: true,
+            closesAfterHours: true,
             course: {
               select: {
                 instructor: true,
@@ -57,6 +61,13 @@ export async function POST(request: Request) {
 
     if (!lessonSession) {
       return new Response('Session not found', { status: 404 })
+    }
+    // Bloque terminado o ventana vencida (22 oct 2026): sin bienvenida del modelo.
+    if (!lessonSession.isTest && !lessonSession.completedAt) {
+      const cierre = await cierreParaAlumno(session.userId, lessonSession.lesson)
+      if (cierre && ventanaPaso(cierre)) {
+        return new Response(mensajeBloqueCerrado(cierre), { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+      }
     }
     // Material sin validar: solo en la prueba vista como instructor. En «Probar
     // como estudiante» (lib/vista-estudiante.ts) se oculta, como para el alumno.

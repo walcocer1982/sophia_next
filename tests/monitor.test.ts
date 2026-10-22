@@ -139,3 +139,13 @@ test('pasoDelEmbudo: con menos de tres que llegaron no se habla de cuello', () =
   const sesiones = [sesion('u1', 0, { a1: { status: 'COMPLETED', passedCriteria: false } })]
   assert.equal(pasoDelEmbudo(0, 'a1', sesiones).cuelloDeBotella, false)
 })
+
+test('cierreDeVentana: el cierre del instructor manda si es antes que el de las horas', () => {
+  const abre = new Date('2026-10-22T15:00:00Z')
+  const porHoras = new Date('2026-10-22T17:00:00Z')
+  assert.deepEqual(cierreDeVentana(abre, 2), porHoras)
+  assert.deepEqual(cierreDeVentana(abre, 2, new Date('2026-10-22T15:45:00Z')), new Date('2026-10-22T15:45:00Z'))
+  assert.deepEqual(cierreDeVentana(abre, 2, new Date('2026-10-22T18:00:00Z')), porHoras)
+  assert.deepEqual(cierreDeVentana(null, 2, new Date('2026-10-22T15:45:00Z')), new Date('2026-10-22T15:45:00Z'))
+  assert.equal(cierreDeVentana(null, 2), null)
+})

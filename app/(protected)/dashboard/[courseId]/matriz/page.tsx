@@ -147,7 +147,14 @@ export default async function MatrizPage({
             {desertaron > 0 && <Resumen etiqueta="Desertaron" valor={desertaron} tono="gris" />}
           </div>
 
-          <MatrizTabla matriz={matriz} courseId={courseId} />
+          <MatrizTabla
+            matriz={matriz}
+            courseId={courseId}
+            enlaceSesion={(lessonId) => {
+              const seccion = soloSeccion ?? (seccionesDelCurso.length === 1 ? seccionesDelCurso[0].id : null)
+              return `/dashboard/${courseId}/clase?leccion=${lessonId}${seccion ? `&seccion=${seccion}` : ''}`
+            }}
+          />
         </>
       )}
     </div>

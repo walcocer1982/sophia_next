@@ -28,14 +28,26 @@ export const MIN_LLEGARON_CUELLO = 3
 export type EstadoVivo = 'activa' | 'en-pausa' | 'sin-terminar' | 'terminada'
 export type Avance = 'a-medias' | 'sin-avanzar' | null
 
-/** Fecha de cierre de una ventana; null si la lección no tiene horario. */
+/**
+ * Fecha de cierre de una ventana; null si la lección no tiene horario. El
+ * instructor puede terminar el bloque antes (`closedAt`, 22 oct 2026): manda
+ * la más temprana de las dos.
+ */
 export function cierreDeVentana(
   availableAt: Date | string | null | undefined,
-  closesAfterHours: number
+  closesAfterHours: number,
+  closedAt?: Date | string | null
 ): Date | null {
-  if (!availableAt) return null
-  return new Date(new Date(availableAt).getTime() + closesAfterHours * 3_600_000)
+  const porHoras = availableAt ? new Date(new Date(availableAt).getTime() + closesAfterHours * 3_600_000) : null
+  const porInstructor = closedAt ? new Date(closedAt) : null
+  if (porHoras && porInstructor) return porInstructor < porHoras ? porInstructor : porHoras
+  return porInstructor ?? porHoras
 }
+
+export type Horario = { availableAt: Date | string | null; closesAfterHours: number; closedAt?: Date | string | null }
+
+/** Lo mismo desde la fila del horario. Úsalo en vez de repetir la suma de horas. */
+export const cierreDeHorario = (h: Horario): Date | null => cierreDeVentana(h.availableAt, h.closesAfterHours, h.closedAt)
 
 /** ¿Se puede dar la sesión por cerrada? Con ventana, por la fecha; sin ventana, por 24 h sin actividad. */
 export function ventanaCerrada(cierre: Date | null, lastActivityAt: Date, ahora: Date): boolean {

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { cierreDeHorario } from '@/lib/monitor'
 import type { Prisma } from '@prisma/client'
 import { ventanaCerrada } from '@/lib/monitor'
 import { ultimaMarcaPorAlumno, type Marca } from '@/lib/seguimiento'
@@ -97,7 +98,7 @@ export async function matrizDelCurso(
         },
       },
       schedules: {
-        select: { lessonId: true, availableAt: true, closesAfterHours: true },
+        select: { lessonId: true, availableAt: true, closesAfterHours: true, closedAt: true },
       },
     },
   })
@@ -113,10 +114,7 @@ export async function matrizDelCurso(
   const seccionesConLeccion = new Map<string, number>()
   for (const s of secciones) {
     for (const h of s.schedules) {
-      const cierre = h.availableAt
-        ? new Date(h.availableAt.getTime() + h.closesAfterHours * 3_600_000)
-        : null
-      cierrePorSeccion.set(`${s.id}:${h.lessonId}`, cierre)
+      cierrePorSeccion.set(`${s.id}:${h.lessonId}`, cierreDeHorario(h))
       seccionesConLeccion.set(h.lessonId, (seccionesConLeccion.get(h.lessonId) ?? 0) + 1)
     }
   }
@@ -282,7 +280,7 @@ export async function otrosCursosDelAlumno(
         select: {
           name: true,
           course: { select: { id: true, title: true } },
-          schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true } },
+          schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true, closedAt: true } },
         },
       },
     },
@@ -300,8 +298,9 @@ export async function otrosCursosDelAlumno(
   return matriculas.map((m) => {
     const hs = m.section.schedules
     const faltas = hs.filter((h) => {
-      if (abiertas.has(h.lessonId) || !h.availableAt) return false
-      return new Date(h.availableAt.getTime() + h.closesAfterHours * 3_600_000) < ahora
+      if (abiertas.has(h.lessonId)) return false
+      const cierre = cierreDeHorario(h)
+      return !!cierre && cierre < ahora
     }).length
     return {
       courseId: m.section.course.id,

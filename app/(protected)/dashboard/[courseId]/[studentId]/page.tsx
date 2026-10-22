@@ -7,7 +7,7 @@ import { alcanceEfectivo } from '@/lib/ver-como'
 import { otrosCursosDelAlumno } from '@/lib/asistencia'
 import { formatDate, formatDateLong } from '@/lib/formatters'
 import { ESTADOS, MOTIVOS, historialDeSeguimiento } from '@/lib/seguimiento'
-import { ventanaCerrada } from '@/lib/monitor'
+import { cierreDeHorario, ventanaCerrada } from '@/lib/monitor'
 import { reporteDeSesion, NIVEL_TEXTO } from '@/lib/reporte-sesion'
 import { SeguimientoForm } from '@/components/monitor/seguimiento-form'
 import { ReporteSesionView } from '@/components/monitor/reporte-sesion'
@@ -67,7 +67,7 @@ export default async function EstudiantePage({
           name: true,
           sede: { select: { code: true } },
           period: { select: { name: true } },
-          schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true } },
+          schedules: { select: { lessonId: true, availableAt: true, closesAfterHours: true, closedAt: true } },
         },
       },
     },
@@ -92,10 +92,7 @@ export default async function EstudiantePage({
   }
 
   const horarios = new Map(
-    matricula.section.schedules.map((h) => [
-      h.lessonId,
-      h.availableAt ? new Date(h.availableAt.getTime() + h.closesAfterHours * 3_600_000) : null,
-    ])
+    matricula.section.schedules.map((h) => [h.lessonId, cierreDeHorario(h)])
   )
 
   const lecciones = await prisma.lesson.findMany({
