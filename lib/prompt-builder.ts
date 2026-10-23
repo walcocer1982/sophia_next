@@ -80,6 +80,15 @@ export const COMPLEXITY_TOKENS: Record<ActivityComplexity, number> = {
 /**
  * Obtener maxTokens basado en complejidad de la actividad
  */
+/**
+ * El ejemplo resuelto de una instrucción «Enseña primero… Resuelve tú este ejemplo: X Primero…»
+ * (plantilla de sesiones de curso, scripts/cetemin/plantillas.ts). null si no trae ejemplo.
+ */
+export function extraerEjemploResuelto(instruccion: string): string | null {
+  const m = instruccion.match(/Resuelve tú este ejemplo:\s*([\s\S]+?)(?:\s+Primero regla y ejemplo|$)/)
+  return m ? m[1].trim() : null
+}
+
 export function getMaxTokensForActivity(complexity?: ActivityComplexity): number {
   return complexity ? COMPLEXITY_TOKENS[complexity] : COMPLEXITY_TOKENS.moderate
 }
@@ -497,6 +506,15 @@ ACTIVIDAD ${position} de ${totalActivities}${isFirstActivity ? ' (primera)' : ''
 
 INSTRUCCIÓN:
 ${agentInstruction}
+${(() => {
+    // Simulaciones del 22 oct 2026 (alumno bueno, dos veces): respondió bien la pregunta y
+    // Sophia le dijo «No exactamente… pero el vale dice cartuchos de resina», comparando su
+    // respuesta con el EJEMPLO que ella misma había resuelto.
+    const ejemplo = extraerEjemploResuelto(agentInstruction)
+    return ejemplo
+      ? `\nEL EJEMPLO YA LO RESOLVISTE TÚ: «${ejemplo.slice(0, 120)}». El estudiante NO responde ese ejemplo: responde la PREGUNTA DE VERIFICACIÓN, que es otra situación. Evalúa su respuesta solo contra la pregunta y sus criterios; nunca le digas que no coincide con el ejemplo ni le pidas que lo resuelva.`
+      : ''
+  })()}
 ${teachingContext ? `\nCONTEXTO: ${teachingContext}` : ''}
 ${imageBlock}
 ${conversacionPanel}
@@ -583,6 +601,10 @@ En UNA o DOS oraciones: ${cierraPorTope && isEvaluative ? 'reconoce lo que sí d
 ⛔ PROHIBIDO despedirte o decir «Gracias por participar»: la lección todavía no terminó (falta la comprobación y la reflexión final).`
       } else if (nextActivity) {
         const nextTeaching = nextActivity.teaching?.agent_instruction || (nextActivity as { agent_instruction?: string }).agent_instruction || ''
+        // Simulaciones del 22 oct 2026 (ocho sesiones nuevas): con «Introduce el nuevo tema en
+        // 2-3 oraciones» Sophia enseñaba la regla y se saltaba el ejemplo resuelto en una de cada
+        // dos transiciones. Si la instrucción trae «Resuelve tú este ejemplo: …», el formato lo pide.
+        const ejemploDeLaSiguiente = extraerEjemploResuelto(nextTeaching)
         // Una actividad con ecualizador se abre con la predicción, no con el porqué.
         const nextQuestion = nextActivity.teaching?.first_question ?? nextActivity.verification.question
         const nextChoice = nextActivity.choice
@@ -610,7 +632,7 @@ TEMA NUEVO: «${nextActivity.title ?? `Actividad ${position + 1}`}». Enséñalo
 
 FORMATO DE TRANSICIÓN (máximo 80 palabras total; hasta 130 si la instrucción de la siguiente actividad pide enseñar o resolver un ejemplo antes de preguntar: en ese caso hazlo antes de la pregunta, nunca la saltes):
 1. ${sinVerificar ? '"Gracias, sigamos." (sin validar la respuesta: no pudo verificarse)' : cierraPorTope && isEvaluative ? 'Reconoce en 1 oración lo que sí dijo y explica en 1-2 oraciones lo que faltó' + salvoEliminatorios + '. Se acabaron los intentos: NO lo presentes como logrado y NO hagas más preguntas sobre esta actividad.' : isEvaluative ? '"Correcto/Bien." (1 palabra de cierre, NO resumas lo que ya dijiste)' : 'Recoge lo que dijo en una frase neutra ("Dices que…"), sin calificar: esta actividad no lleva nota, así que PROHIBIDO "correcto", "exacto", "bien", "bien pensado"'}
-2. Introduce el nuevo tema en 2-3 oraciones máximo
+2. ${ejemploDeLaSiguiente ? `Enseña la regla del tema nuevo en 1-2 oraciones y DESPUÉS resuelve el ejemplo de la instrucción como un caso aparte, con su situación y su decisión («Por ejemplo: ${ejemploDeLaSiguiente.slice(0, 60)}…»). El ejemplo es obligatorio: sin él, el estudiante no ve la regla aplicada antes de responder` : 'Introduce el nuevo tema en 2-3 oraciones máximo'}
 3. ${nextChoiceText ? 'Termina presentando la PREGUNTA CERRADA, con sus opciones y letras EXACTAMENTE como están abajo (una por línea). Pide que elija una letra. NO hagas todavía la pregunta abierta y NO adelantes la respuesta correcta en la introducción (ni el número, ni el nivel, ni la causa): explica la regla general, el caso lo resuelve el estudiante.' : 'Termina con la pregunta de verificación TAL CUAL, como única pregunta: sin reformularla, sin agregarle una aclaración («es decir, …») ni una segunda pregunta'}
 
 SIGUIENTE ACTIVIDAD:

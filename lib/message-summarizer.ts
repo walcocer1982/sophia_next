@@ -61,6 +61,14 @@ function extractScenario(content: string): string | null {
  * Las preguntas son críticas para mantener el contexto
  */
 function extractLastQuestion(content: string): string | null {
+  // 22 oct 2026: la pregunta conserva su párrafo entero. Con solo la última oración
+  // («¿Qué perno es, y por qué?») se perdía la situación que la plantea («En la labor
+  // encuentras un tubo ranurado…») y Sophia tomaba el EJEMPLO resuelto por la pregunta:
+  // corrigió «Es split set» contra su ejemplo 5 de 5 veces en la prueba por API.
+  const parrafos = content.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
+  const conPregunta = [...parrafos].reverse().find((p) => p.includes('?'))
+  if (conPregunta && conPregunta.length <= 450) return conPregunta.replace(/\s*\n\s*/g, ' ')
+
   // Buscar oraciones que terminen en ?
   const sentences = content.split(/(?<=[.!?])\s+/)
   const questions = sentences.filter(s => s.trim().endsWith('?'))
@@ -116,7 +124,10 @@ export function summarizeInstructorMessage(content: string): string {
       const intro = content.slice(0, 200).replace(/\n/g, ' ').trim()
       parts.push(intro)
     }
-    if (scenario) parts.push(`ESCENARIO: "${scenario}"`)
+    // Un «ejemplo» que no está dentro del párrafo de la pregunta es el ejemplo que el
+    // instructor ya resolvió, no la situación que el estudiante responde.
+    const esEjemploResuelto = !!scenario && !!question && !question.includes(scenario.replace(/\.\.\.$/, '').slice(0, 40))
+    if (scenario) parts.push(esEjemploResuelto ? `EJEMPLO YA RESUELTO POR EL INSTRUCTOR (no es lo que se pregunta): "${scenario}"` : `ESCENARIO: "${scenario}"`)
     if (question) parts.push(`PREGUNTA: "${question}"`)
     return parts.join(' | ')
   }

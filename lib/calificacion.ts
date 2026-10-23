@@ -9,9 +9,11 @@
  * simulaciones aparecía al final («…está cercado. Bien observado.») y a mitad
  * («Bien, eso es lo que ves.»). Una oración que era solo la calificación se va
  * entera; si había algo después, queda eso, con mayúscula.
+ * 22 oct 2026 (ocho sesiones nuevas): «Eso es una buena observación:» y «Exacto lo que
+ * muestra la figura.» también.
  */
 const CALIFICACION =
-  '¡?(?:exacto|exactamente|correcto|perfecto|excelente|genial|muy bien|bien pensado|bien observado|bien visto|buena observación|buen punto|así es|eso es|bien)(?:[.!,:;]+|\\s*[—-]\\s*)'
+  '¡?(?:eso es (?:una |un )?(?:buena observación|buen punto)|exacto lo que[^.!?\n]*|(?:excelente|buena|muy buena) pregunta|exacto|exactamente|correcto|perfecto|excelente|genial|muy bien|bien pensado|bien observado|bien visto|buena observación|buen punto|así es|eso es|bien)(?:[.!,:;]+|\\s*[—-]\\s*)'
 
 const EN_CADA_ORACION = new RegExp(`(^[ \\t]*|[.!?…]\\s+|\\n\\s*)${CALIFICACION}[ \\t]*`, 'giu')
 const MARCA = '\u0000'

@@ -45,3 +45,21 @@ test('prueba de Edwin (21 oct): «Exacto:» llega solo en un trozo y se quita ig
   const q2 = crearQuitadorDeCalificaciones()
   assert.equal(['Exacto.'].map((t) => q2.push(t)).join('') + q2.flush(), 'Exacto.')
 })
+
+test('simulaciones del 22 oct: «Eso es una buena observación:» y «Exacto lo que…» en la rutina', () => {
+  assert.equal(
+    quitarCalificaciones('Eso es una buena observación: alguien tuvo que verificar que aguanta. Hay normas detrás.'),
+    'Alguien tuvo que verificar que aguanta. Hay normas detrás.',
+  )
+  assert.equal(
+    quitarCalificaciones('Dices que los pernos rodean la excavación. Exacto lo que muestra la figura.\n\nAhora el segundo paso.'),
+    'Dices que los pernos rodean la excavación.\n\nAhora el segundo paso.',
+  )
+})
+
+test('simulación PM-FMPLANTA S1 (22 oct): «Excelente pregunta.» en el Me pregunto', () => {
+  assert.equal(
+    quitarCalificaciones('Excelente pregunta. Eso que planteas lo vamos a distinguir hoy.'),
+    'Eso que planteas lo vamos a distinguir hoy.',
+  )
+})
