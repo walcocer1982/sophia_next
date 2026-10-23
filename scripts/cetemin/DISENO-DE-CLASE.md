@@ -54,6 +54,15 @@ El alumno toca la línea que respalda su respuesta (Lemov, técnica 23 «Orquest
 - **Las preguntas que se apoyan en una respuesta anterior lo dicen:** «De los puntos que señalaste: ¿qué hay abajo de cada uno?», no «¿qué hay abajo de cada uno?» suelto.
 - **Lo que pide el sistema va con su porqué y su límite:** «Tu respuesta quedó guardada. Falta un paso: toca… No hace falta escribir de nuevo». Con «Anoto tu respuesta», Edwin creyó que no había llegado y la volvió a dictar.
 
+## 5b. Criterios, ejemplo y líneas que respaldan (ocho sesiones, 22 oct 2026)
+
+- **Un criterio solo lleva las cifras que son la respuesta.** El código exige que el alumno diga cada valor con unidad que aparece en un criterio (`lib/cifras.ts`), salvo los que ya vienen en la pregunta o en el caso. «Decide que manda perno de 8 pies (2,44 m)» rechazó a un alumno que respondió bien «8 pies» sin los metros, y Sophia inventó un error. Equivalencias, rangos completos («de 1,00 a 1,50 m» cuando basta el máximo) y porcentajes de contexto se quitan del criterio.
+- **El ejemplo es una situación con alguien que decide**, no la regla repetida («una galería con cimbras a 1,20 m cumple»). Si se parece a la regla, Sophia lo funde con ella y no lo dice.
+- **`ejemploClave` es una palabra que solo está en el ejemplo** («galería 310», «techo a 8 m»), no una que el alumno va a usar al responder («galería», «trunnions», «5,3»): el auditor la usa para saber si el alumno habló del ejemplo.
+- **Declara todas las líneas que respaldan la respuesta.** Si la respuesta correcta se apoya en dos líneas («se ordena por horas perdidas» y «la más frecuente no siempre es la que más resta»), van las dos en `subrayar.respalda`: con una sola, el alumno que toca la otra sale en rojo aunque leyó bien.
+- **El ejemplo y la pregunta no son la misma tarea con datos opuestos.** «Barra con resina → helicoidal» como ejemplo y «tubo sin resina → ¿qué perno?» como pregunta invitan a confundirlos. Mejor otro perno, otro lugar y otra persona.
+- **El caso corto pide una sola decisión.** Un dato de más en los hechos («limpieza semanal con parada de 20 minutos») abre una segunda pregunta que se come el cierre.
+
 ## 6. La estructura de la sesión se tiene que ver
 
 El alumno tiene que saber en qué paso está y qué falta: el riel de avance, el título de cada actividad en tono de sílabo (regla de nombres de `CLAUDE.md`) y, cuando falta tocar una línea, el aviso sobre la caja y el texto iluminado en la pizarra. Si el alumno no sabe qué se espera de él, escribe de nuevo o se va.

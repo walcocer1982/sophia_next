@@ -82,6 +82,12 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
   const mural = bloqueImagen(spec, subidas, r.imagenId, r.tituloImagen, 'on_start', true)
   const usa = [mural.id, RUTINA_BLOCK_ID]
   const pista = r.pistaVeo ? ` Si no describe nada, pregúntale ${r.pistaVeo}.` : ''
+  const tipo = r.tipoImagen ?? 'fotografía'
+  // 22 oct 2026: los criterios y el enlace salen de la sesión; antes estaban
+  // escritos para «caídas» (SI-ALTORIESGO S1) y no servían en otro curso.
+  const criteriosPienso = r.criterios?.pienso ?? ['Dice qué piensa sobre lo que la pregunta le plantea', `Dice qué de la ${tipo} le hace pensarlo`]
+  const criteriosMePregunto = r.criterios?.mePregunto ?? ['Dice qué le falta saber, o qué se pregunta']
+  const enlace = r.enlaceMePregunto ?? 'Sobre lo que dijiste en el paso anterior:'
   return [
     {
       id: `${prefijo}-1`,
@@ -91,11 +97,11 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
       complexity: 'simple',
       keyPointIndex: null,
       teaching: {
-        agent_instruction: `Primer paso de la rutina Veo · Pienso · Me pregunto. Dile que mire la fotografía «${r.tituloImagen}» de la pizarra antes de leer los textos y hazle la pregunta tal cual. Sin nota. No califiques (nada de «correcto», «exacto» ni «bien») y no interpretes la foto por él: recoge lo que describa en una frase neutra y pasa al paso siguiente.${pista} Nada de normas todavía.`,
+        agent_instruction: `Primer paso de la rutina Veo · Pienso · Me pregunto. Dile que mire la ${tipo} «${r.tituloImagen}» de la pizarra antes de leer los textos y hazle la pregunta tal cual. Sin nota. No califiques (nada de «correcto», «exacto» ni «bien») y no interpretes la imagen por él: recoge lo que describa en una frase neutra y pasa al paso siguiente.${pista} Nada de normas todavía.`,
         target_length: '40-70 palabras',
         blocks: [mural, bloqueRutina(r)],
       },
-      verification: sinNota(`Mira la fotografía «${r.tituloImagen}» de la pizarra: ${r.preguntas.veo}`, ['Describe algo de lo que ve en la foto'], 1),
+      verification: sinNota(`Mira la ${tipo} «${r.tituloImagen}» de la pizarra: ${r.preguntas.veo}`, [`Describe algo de lo que ve en la ${tipo}`], 1),
     },
     {
       id: `${prefijo}-2`,
@@ -105,11 +111,11 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
       complexity: 'simple',
       keyPointIndex: null,
       teaching: {
-        agent_instruction: `Segundo paso de la rutina: Pienso. Haz la pregunta tal cual: el punto y qué le hace decir eso. Si da el punto sin la evidencia, pregúntale solo «¿qué te hace decir eso?». No califiques (nada de «correcto», «exacto» ni «bien») ni completes su respuesta: recógela en una frase neutra y pasa al paso siguiente. Nada de normas todavía.`,
+        agent_instruction: `Segundo paso de la rutina: Pienso. Haz la pregunta tal cual: lo que piensa y qué le hace decir eso. Si afirma algo sin la evidencia, pregúntale solo «¿qué te hace decir eso?». No califiques (nada de «correcto», «exacto» ni «bien») ni completes su respuesta: recógela en una frase neutra y pasa al paso siguiente. Nada de normas todavía.`,
         target_length: '40-70 palabras',
         uses: usa,
       },
-      verification: sinNota(`En esa misma fotografía: ${r.preguntas.pienso.replace(/\?\s*$/, '')}, y qué te hace decir eso?`, ['Señala un punto desde donde podría caer alguien o algo', 'Dice qué de la foto le hace pensarlo'], 2),
+      verification: sinNota(`En esa misma ${tipo}: ${r.preguntas.pienso.replace(/\?\s*$/, '')}, y qué te hace decir eso?`, criteriosPienso, 2),
     },
     {
       id: `${prefijo}-3`,
@@ -119,11 +125,11 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
       complexity: 'simple',
       keyPointIndex: null,
       teaching: {
-        agent_instruction: `Tercer paso de la rutina: Me pregunto. Haz la pregunta tal cual; se refiere a los puntos que el estudiante señaló en el paso anterior. No la respondas tú: si dice «no sé», eso es lo que buscamos; recógelo como su pregunta («eso lo vemos ahora») sin calificar. No anuncies temas ni hagas otra pregunta: la bienvenida ya presentó los temas de hoy.`,
+        agent_instruction: `Tercer paso de la rutina: Me pregunto. Haz la pregunta tal cual; se refiere a lo que el estudiante dijo en el paso anterior. No la respondas tú: si dice «no sé», eso es lo que buscamos; recógelo como su pregunta («eso lo vemos ahora») sin calificar. No anuncies temas ni hagas otra pregunta: la bienvenida ya presentó los temas de hoy.`,
         target_length: '40-70 palabras',
         uses: usa,
       },
-      verification: sinNota(`De los puntos que señalaste: ${r.preguntas.mePregunto}`, ['Dice qué hay abajo de al menos un punto, o qué le falta saber'], 1),
+      verification: sinNota(`${enlace} ${r.preguntas.mePregunto}`, criteriosMePregunto, 1),
     },
   ]
 }

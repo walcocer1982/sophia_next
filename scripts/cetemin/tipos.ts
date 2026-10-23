@@ -35,11 +35,21 @@ export interface CursoSpec {
 export interface RutinaSpec {
   imagenId: string
   tituloImagen: string
+  /** Cómo se le nombra la imagen al alumno: «fotografía» (por defecto), «figura», «esquema». */
+  tipoImagen?: string
   fuente?: string
   preguntas: { veo: string; pienso: string; mePregunto: string }
   titulos: { veo: string; pienso: string; mePregunto: string }
   /** Qué preguntar si no describe nada («dónde está parada la gente de la foto»). */
   pistaVeo?: string
+  /**
+   * Qué tiene que traer la respuesta en Pienso y en Me pregunto (pasos sin nota).
+   * Sin esto, criterios genéricos. (22 oct 2026: antes estaban escritos para
+   * «caídas», y solo servían en SI-ALTORIESGO.)
+   */
+  criterios?: { pienso?: string[]; mePregunto?: string[] }
+  /** Cómo se enlaza Me pregunto con lo dicho en Pienso. Por defecto, «Sobre lo que dijiste en el paso anterior:». */
+  enlaceMePregunto?: string
 }
 
 export interface NormaSpec {

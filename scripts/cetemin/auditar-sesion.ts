@@ -87,7 +87,11 @@ async function main() {
     if (!primera) { r2++; fallas.push(`R2 ${id}: no hay mensaje de Sophia bajo esta actividad`); return }
     const texto = primera.content.toLowerCase()
     const posEjemplo = texto.indexOf(p.ejemploClave.toLowerCase())
-    const posPregunta = texto.indexOf('¿')
+    // La pregunta de verificación, no cualquier «¿»: una pregunta retórica dentro del ejemplo
+    // («Primero, ¿subes? No: …») no es la pregunta (simulaciones del 22 oct 2026).
+    const inicioPregunta = p.pregunta.toLowerCase().split(/\s+/).slice(0, 6).join(' ')
+    const posVerificacion = texto.indexOf(inicioPregunta)
+    const posPregunta = posVerificacion >= 0 ? posVerificacion : texto.lastIndexOf('¿')
     if (posEjemplo < 0) { r2++; fallas.push(`R2 ${id}: Sophia no dio el ejemplo («${p.ejemploClave}») antes de preguntar: «${corto(primera.content)}»`) }
     else if (posPregunta >= 0 && posPregunta < posEjemplo) { r2++; fallas.push(`R2 ${id}: la pregunta salió antes que el ejemplo: «${corto(primera.content)}»`) }
     // R5: mandó a leer otro texto en vez de enseñar

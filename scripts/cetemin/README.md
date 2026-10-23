@@ -27,6 +27,16 @@ npx tsx scripts/cetemin/auditar-sesion.ts <sessionId>               # la transcr
 
 La lección se publica solo cuando la auditoría de las dos pruebas pasa sin fallas.
 
+## Cursos en el canal (22 oct 2026)
+
+| Curso | Dicta | Sesiones cargadas | Fuente del diseño |
+|---|---|---|---|
+| `si-altoriesgo` · Trabajos de alto riesgo | Maritza Mercado | S1, S2, S3 | `03_Entregables-diseño/SI - Ciclo II/4 - SI-ALTORIESGO` · CV1 caps. 1–6 |
+| `eom-sost` · Sostenimiento de labores mineras | Walther Alcocer | S1, S2, S3 | `03_Entregables-diseño/EOM - Ciclo II/3 - EOM-SOST` · CV1 caps. 1–4 |
+| `pm-fmplanta` · Fundamentos mecánicos de planta | Christian Huamán | S1, S2, S3 | `03_Entregables-diseño/PM - Ciclo II/4 - PM-FMPLANTA` · CV1 lecturas 1–2 |
+
+Las sesiones de EOM y PM salen de `laminas.csv` (el PPT en tabla) y de `contenidos.csv`; en `imagenes.csv` las descripciones de SI son solo el nombre («S2 · jerarquia»), así que cada imagen se miró antes de describirla, como manda `DISENO-DE-CLASE.md`. Ninguna de las nueve está publicada.
+
 ## Alumnos simulados (Monitor y ficha)
 
 ```bash
@@ -51,10 +61,10 @@ real. Requiere `npm run dev` corriendo. La transcripción queda en `logs/simulad
 
 1. Esquema, un pedido por pregunta y nombres en tono de sílabo (las reglas de siempre).
 2. Sin alternativas: ni `choice` ni `checks`.
-3. La rutina de entrada: tres pasos `reflection` sin nota, con la consigna en la pizarra; Pienso admite un turno más para «¿qué te hace decir eso?».
-4. Cada punto clave: instrucción que empieza con «Enseña primero», trae «Resuelve tú…», cabe en 90 palabras, un reintento, norma fijada.
-5. Caso corto como bloque de caso; cierre sin nota.
-6. Hasta 16 turnos y 10 actividades (45 min).
+3. La rutina de entrada: tres pasos `reflection` sin nota, con la consigna en la pizarra; Pienso admite un turno más para «¿qué te hace decir eso?». Las preguntas son las que trae la lámina (o la imagen, si las lleva escritas); cada sesión declara sus `criterios` de Pienso y Me pregunto, el `tipoImagen` («fotografía», «figura») y el enlace de Me pregunto (desde el 22 oct 2026: antes la plantilla traía los criterios de «caídas» y solo servían en SI).
+4. Cada punto clave: instrucción que empieza con «Enseña primero», trae «Resuelve tú…», cabe en 90 palabras (regla + ejemplo ≈ 55 palabras con un título de lámina de 4), un reintento, norma fijada, `subrayar.respalda`.
+5. Caso corto como bloque de caso (nombre ≤ 40 caracteres, hechos ≤ 140); cierre sin nota.
+6. Hasta 24 turnos (un turno de subrayar por punto clave) y 10 actividades (45 min).
 7. Los casos del equipo no aparecen en ningún texto.
 8. Bloques con id único, `uses` apunta a lo fijado antes, cada imagen con el texto que está escrito en ella (mínimo 60 caracteres).
 

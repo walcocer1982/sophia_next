@@ -71,6 +71,12 @@ export const S1: SesionSpec = {
       mePregunto: 'Lo que hay abajo de cada punto',
     },
     pistaVeo: 'dónde está parada la gente de la foto',
+    // Lo que la plantilla traía fijo hasta el 22 oct 2026 (ahora cada sesión lo declara).
+    criterios: {
+      pienso: ['Señala un punto desde donde podría caer alguien o algo', 'Dice qué de la foto le hace pensarlo'],
+      mePregunto: ['Dice qué hay abajo de al menos un punto, o qué le falta saber'],
+    },
+    enlaceMePregunto: 'De los puntos que señalaste:',
   },
 
   puntosClave: [
