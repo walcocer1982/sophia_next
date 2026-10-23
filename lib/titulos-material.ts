@@ -9,7 +9,9 @@
  * fotografía X», «el texto X»): así «la caída de objetos alcanza…» no se toca
  * aunque exista un bloque llamado «Caída de objetos». Independiente del tema.
  */
-const NOMBRE_DE_MATERIAL = '(?:fotograf[ií]a|foto|imagen|l[aá]mina|texto|tabla|esquema|diagrama|caso|ficha|norma)'
+// «figura», «plano» y «cartilla» desde el 22 oct 2026: la rutina de EOM-SOST S1 abre con una figura
+// («Mira la figura Pernos en abanico de la pizarra») y la S3 con la cartilla geomecánica.
+const NOMBRE_DE_MATERIAL = '(?:fotograf[ií]a|foto|imagen|l[aá]mina|figura|plano|cartilla|texto|tabla|esquema|diagrama|caso|ficha|norma)'
 
 function escapar(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

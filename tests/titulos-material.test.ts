@@ -36,3 +36,10 @@ test('en streaming da lo mismo que de una vez, se corte donde se corte', () => {
     assert.equal(salida, esperado, `trozos de ${paso}`)
   }
 })
+
+test('EOM-SOST S1 (22 oct): la figura de la rutina también va entre «»', () => {
+  assert.equal(
+    comillasEnTitulos('Empecemos. Mira la figura Pernos en abanico de la pizarra: ¿qué ves en la figura?', ['Pernos en abanico']),
+    'Empecemos. Mira la figura «Pernos en abanico» de la pizarra: ¿qué ves en la figura?',
+  )
+})

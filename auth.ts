@@ -75,10 +75,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return token
         }
         const normalizedEmail = user.email.toLowerCase()
+        // 23 oct 2026: una cuenta que viene del padrón (tiene DNI) conserva su nombre
+        // oficial. Antes cada ingreso lo pisaba con el de Google («Elpinin 9», «nelson»).
+        const delPadron = await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { dni: true } }).catch(() => null)
         const dbUser = await prisma.user.upsert({
           where: { email: normalizedEmail },
           update: {
-            name: user.name,
+            ...(delPadron?.dni ? {} : { name: user.name }),
             image: user.image,
             googleId: account.providerAccountId,
           },
