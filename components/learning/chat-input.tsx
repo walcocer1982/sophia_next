@@ -48,8 +48,8 @@ interface ChatInputProps {
   dictado?: boolean
   /**
    * La voz de Sophia, junto al micrófono (23 oct 2026, decisión de Walther).
-   * Mientras habla, el botón se anima y al tocarlo la detiene; callada, activa
-   * o silencia la lectura de los mensajes siguientes.
+   * Mientras habla, el botón se anima y al tocarlo la calla y la silencia;
+   * silenciada, no vuelve a hablar hasta que el alumno la active.
    */
   vozSophia?: { activa: boolean; hablando: boolean; onTocar: () => void }
 }
@@ -291,7 +291,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                 type="button"
                 onClick={vozSophia.onTocar}
                 aria-pressed={vozSophia.activa}
-                aria-label={vozSophia.hablando ? 'Detener la voz de Sophia' : vozSophia.activa ? 'Silenciar a Sophia' : 'Que Sophia lea en voz alta'}
+                aria-label={vozSophia.hablando ? 'Silenciar a Sophia' : vozSophia.activa ? 'Silenciar a Sophia' : 'Que Sophia lea en voz alta'}
                 className={`relative p-2.5 rounded-full transition-all ${
                   vozSophia.hablando
                     ? 'bg-[#fbc50b] text-[#09222d]'
@@ -299,7 +299,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                       ? `border border-white/20 hover:bg-white/10 ${vozSophia.activa ? 'text-[#e6edf1]' : 'text-slate-500'}`
                       : `border border-slate-300 hover:bg-slate-100 ${vozSophia.activa ? 'text-slate-700' : 'text-slate-400'}`
                 }`}
-                title={vozSophia.hablando ? 'Detener la voz de Sophia' : vozSophia.activa ? 'Silenciar a Sophia' : 'Que Sophia lea en voz alta'}
+                title={vozSophia.hablando ? 'Silenciar a Sophia' : vozSophia.activa ? 'Silenciar a Sophia' : 'Que Sophia lea en voz alta'}
               >
                 {vozSophia.hablando && <span aria-hidden className="absolute inset-0 rounded-full bg-[#fbc50b]/60 animate-ping" />}
                 {vozSophia.activa || vozSophia.hablando ? <Volume2 className="relative h-5 w-5" /> : <VolumeX className="relative h-5 w-5" />}

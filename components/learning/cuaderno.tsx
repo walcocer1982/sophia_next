@@ -24,7 +24,6 @@ import type { PlannerAttachment } from '@/types/planner'
 import { useMaterial } from './material-context'
 import { ChoiceButtons } from './message-material'
 import { ChatInput, type ChatInputRef } from './chat-input'
-import { PlayAudioButton } from './play-audio-button'
 import { LessonCompleteCard } from './lesson-complete-card'
 import { QueVasALograr } from './que-vas-a-lograr'
 import { useLectura } from '@/hooks/use-lectura'
@@ -159,32 +158,39 @@ export function Cuaderno({
   // «Sophia lee en voz alta» (configuración del curso): cada mensaje nuevo de
   // Sophia se lee al terminar de escribirse. Los que ya estaban al cargar, no.
   // El navegador puede bloquear la primera lectura hasta que el alumno toque
-  // algo; entonces queda el botón «Escuchar».
+  // algo; el alumno la activa o la silencia con el altavoz de la caja.
   const lectura = useLectura()
   // La voz se maneja desde la caja de respuesta (23 oct 2026): el curso da el
   // valor por defecto y la elección del alumno queda en este navegador.
   const vozGuardada = useSyncExternalStore(suscribirVoz, leerVozGuardada, () => null)
-  const vozActiva = vozGuardada === null ? leerEnVoz : vozGuardada === 'on'
+  // Lo elegido en esta visita manda aunque el navegador no deje guardarlo:
+  // silenciada, no vuelve a hablar hasta que el alumno la active.
+  const [vozElegida, setVozElegida] = useState<'on' | 'off' | null>(null)
+  const preferencia = vozElegida ?? vozGuardada
+  const vozActiva = preferencia === null ? leerEnVoz : preferencia === 'on'
   // ¿Está hablando? speechSynthesis es uno solo para la página: también cuenta
-  // lo que se lee con «Escuchar» bajo un mensaje.
+  // cualquier lectura que esté en curso.
   const [hablando, setHablando] = useState(false)
   useEffect(() => {
     if (!lectura.soportado) return
     const id = window.setInterval(() => setHablando(window.speechSynthesis.speaking), 300)
     return () => window.clearInterval(id)
   }, [lectura.soportado])
+  // Tocar mientras habla la calla Y la silencia (23 oct 2026, Walther: «una vez
+  // desactivado no tiene por qué volver a hablar hasta que lo active»).
   const tocarVoz = useCallback(() => {
+    const ahora: 'on' | 'off' = hablando || vozActiva ? 'off' : 'on'
     if (hablando) {
       window.speechSynthesis.cancel()
       lectura.detener()
       setHablando(false)
-      return
     }
+    setVozElegida(ahora)
     try {
-      window.localStorage.setItem(CLAVE_VOZ, vozActiva ? 'off' : 'on')
+      window.localStorage.setItem(CLAVE_VOZ, ahora)
       window.dispatchEvent(new Event(AVISO_VOZ))
     } catch {
-      /* sin almacenamiento: no se puede recordar la elección */
+      /* sin almacenamiento: vale para esta visita */
     }
   }, [hablando, lectura, vozActiva])
   const yaLeidos = useRef<Set<string> | null>(null)
@@ -567,11 +573,6 @@ function MensajeDeSophia({
         )}
         {pedido && <Pedido texto={pedido} />}
         {!escribiendo && <VerEnLaPizarra contenido={mensaje.content} />}
-        {esElUltimo && !escribiendo && mensaje.content.length > 10 && (
-          <div className="mt-1 -ml-2 text-[#7f909b]">
-            <PlayAudioButton text={mensaje.content} className="text-[#7f909b] hover:text-white" />
-          </div>
-        )}
     </div>
   )
 }
