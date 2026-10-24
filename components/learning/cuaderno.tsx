@@ -10,7 +10,7 @@
  * (tema noche, app/globals.css).
  * Diseño: investigacion/design-leccion/propuestas-ui.html (propuesta B).
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { motion } from 'framer-motion'
@@ -28,6 +28,26 @@ import { PlayAudioButton } from './play-audio-button'
 import { LessonCompleteCard } from './lesson-complete-card'
 import { QueVasALograr } from './que-vas-a-lograr'
 import { useLectura } from '@/hooks/use-lectura'
+
+/** La elección del alumno sobre la voz de Sophia, en este navegador. */
+const CLAVE_VOZ = 'sophia.voz'
+const AVISO_VOZ = 'sophia-voz'
+function leerVozGuardada(): 'on' | 'off' | null {
+  try {
+    const v = window.localStorage.getItem(CLAVE_VOZ)
+    return v === 'on' || v === 'off' ? v : null
+  } catch {
+    return null
+  }
+}
+function suscribirVoz(avisar: () => void) {
+  window.addEventListener('storage', avisar)
+  window.addEventListener(AVISO_VOZ, avisar)
+  return () => {
+    window.removeEventListener('storage', avisar)
+    window.removeEventListener(AVISO_VOZ, avisar)
+  }
+}
 import { alFinal, desplazarDentro } from '@/lib/desplazar'
 
 export interface ActividadDelCuaderno {
@@ -141,6 +161,32 @@ export function Cuaderno({
   // El navegador puede bloquear la primera lectura hasta que el alumno toque
   // algo; entonces queda el botón «Escuchar».
   const lectura = useLectura()
+  // La voz se maneja desde la caja de respuesta (23 oct 2026): el curso da el
+  // valor por defecto y la elección del alumno queda en este navegador.
+  const vozGuardada = useSyncExternalStore(suscribirVoz, leerVozGuardada, () => null)
+  const vozActiva = vozGuardada === null ? leerEnVoz : vozGuardada === 'on'
+  // ¿Está hablando? speechSynthesis es uno solo para la página: también cuenta
+  // lo que se lee con «Escuchar» bajo un mensaje.
+  const [hablando, setHablando] = useState(false)
+  useEffect(() => {
+    if (!lectura.soportado) return
+    const id = window.setInterval(() => setHablando(window.speechSynthesis.speaking), 300)
+    return () => window.clearInterval(id)
+  }, [lectura.soportado])
+  const tocarVoz = useCallback(() => {
+    if (hablando) {
+      window.speechSynthesis.cancel()
+      lectura.detener()
+      setHablando(false)
+      return
+    }
+    try {
+      window.localStorage.setItem(CLAVE_VOZ, vozActiva ? 'off' : 'on')
+      window.dispatchEvent(new Event(AVISO_VOZ))
+    } catch {
+      /* sin almacenamiento: no se puede recordar la elección */
+    }
+  }, [hablando, lectura, vozActiva])
   const yaLeidos = useRef<Set<string> | null>(null)
   useEffect(() => {
     if (yaLeidos.current === null) {
@@ -148,10 +194,10 @@ export function Cuaderno({
       return
     }
     const m = ultimoDeSophia
-    if (!leerEnVoz || !lectura.soportado || !m || m.status === 'streaming' || yaLeidos.current.has(m.id)) return
+    if (!vozActiva || !lectura.soportado || !m || m.status === 'streaming' || yaLeidos.current.has(m.id)) return
     yaLeidos.current.add(m.id)
     lectura.leer(m.content, m.id)
-  }, [ultimoDeSophia, messages, leerEnVoz, lectura])
+  }, [ultimoDeSophia, messages, vozActiva, lectura])
 
   // Desplazamiento de la hoja (21 oct 2026, capturas de Walther). Solo se mueve la
   // hoja, nunca la página (lib/desplazar.ts): con scrollIntoView subía la lección
@@ -389,6 +435,7 @@ export function Cuaderno({
                 allowAttachments={allowAttachments}
                 placeholder="Tu respuesta…"
                 dictado
+                vozSophia={lectura.soportado ? { activa: vozActiva, hablando, onTocar: tocarVoz } : undefined}
               />
             </div>
           </div>
