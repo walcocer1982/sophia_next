@@ -10,7 +10,7 @@ import {
   ChangeEvent,
   ClipboardEvent
 } from 'react'
-import { ArrowUp, Square, Paperclip, X, Mic } from 'lucide-react'
+import { ArrowUp, Square, Paperclip, X, Mic, Volume2, VolumeX } from 'lucide-react'
 import { toast } from 'sonner'
 import type { PlannerAttachment } from '@/types/planner'
 import { useDictado } from '@/hooks/use-dictado'
@@ -46,6 +46,12 @@ interface ChatInputProps {
    * revisarlo. Si el navegador no lo soporta, no se muestra.
    */
   dictado?: boolean
+  /**
+   * La voz de Sophia, junto al micrófono (23 oct 2026, decisión de Walther).
+   * Mientras habla, el botón se anima y al tocarlo la detiene; callada, activa
+   * o silencia la lectura de los mensajes siguientes.
+   */
+  vozSophia?: { activa: boolean; hablando: boolean; onTocar: () => void }
 }
 
 // Imágenes y PDF (bloques nativos de Claude). Word/Excel quedan deshabilitados
@@ -72,7 +78,7 @@ export interface ChatInputRef {
 }
 
 export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
-  ({ onSend, onStop, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming, isSpeaking, allowPaste, allowAttachments, variant = 'light', dictado = false }, ref) => {
+  ({ onSend, onStop, disabled, placeholder, isGeneratingWelcome, isThinking, isStreaming, isSpeaking, allowPaste, allowAttachments, variant = 'light', dictado = false, vozSophia }, ref) => {
   const isDark = variant === 'dark'
   const [message, setMessage] = useState('')
   const [attachments, setAttachments] = useState<PlannerAttachment[]>([])
@@ -242,7 +248,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
               isDark
                 ? 'bg-white/5 backdrop-blur text-white border-white/10 placeholder:text-slate-500 focus:ring-2 focus:ring-[#fbc50b]/40 focus:border-[#fbc50b]/50 disabled:opacity-60'
                 : 'bg-white border-slate-300 focus:ring-2 focus:ring-slate-600 focus:border-transparent'
-            } ${allowAttachments ? 'pl-14' : ''} ${conMicrofono ? 'pr-28' : ''}`}
+            } ${allowAttachments ? 'pl-14' : ''} ${conMicrofono && vozSophia ? 'pr-40' : conMicrofono || vozSophia ? 'pr-28' : ''}`}
             style={{
               minHeight: isDark ? '92px' : '80px',
               maxHeight: isDark ? '180px' : '120px',
@@ -280,6 +286,25 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
           )}
 
           <div className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-transparent">
+            {vozSophia && (
+              <button
+                type="button"
+                onClick={vozSophia.onTocar}
+                aria-pressed={vozSophia.activa}
+                aria-label={vozSophia.hablando ? 'Detener la voz de Sophia' : vozSophia.activa ? 'Silenciar a Sophia' : 'Que Sophia lea en voz alta'}
+                className={`relative p-2.5 rounded-full transition-all ${
+                  vozSophia.hablando
+                    ? 'bg-[#fbc50b] text-[#09222d]'
+                    : isDark
+                      ? `border border-white/20 hover:bg-white/10 ${vozSophia.activa ? 'text-[#e6edf1]' : 'text-slate-500'}`
+                      : `border border-slate-300 hover:bg-slate-100 ${vozSophia.activa ? 'text-slate-700' : 'text-slate-400'}`
+                }`}
+                title={vozSophia.hablando ? 'Detener la voz de Sophia' : vozSophia.activa ? 'Silenciar a Sophia' : 'Que Sophia lea en voz alta'}
+              >
+                {vozSophia.hablando && <span aria-hidden className="absolute inset-0 rounded-full bg-[#fbc50b]/60 animate-ping" />}
+                {vozSophia.activa || vozSophia.hablando ? <Volume2 className="relative h-5 w-5" /> : <VolumeX className="relative h-5 w-5" />}
+              </button>
+            )}
             {conMicrofono && (
               <button
                 type="button"
