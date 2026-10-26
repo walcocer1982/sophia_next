@@ -1891,6 +1891,9 @@ Referencia: `scripts/cetemin/cursos/si-altoriesgo/s1.ts` (S1, 9 actividades: 3 d
 **Q:** Un alumno ve en su inicio cursos que no lleva (otro curso transversal, uno borrado)
 **A:** Desde el 27 oct 2026 el alumno ve solo las lecciones que su sección activa programó con fecha, abiertas o por venir (`lib/lecciones-alumno.ts`), y nadie ve cursos borrados. Antes veía todo lo publicado de su carrera y lo transversal: en tres semanas hubo 41 sesiones de no matriculados en AI 101, EPPs, Tutoría y Química.
 
+**Q:** Un alumno trabaja en la lección pero el Monitor lo marca «Aún no entran» y no aparece en la tabla
+**A:** Entró con otro correo de Google y la plataforma le creó una cuenta nueva sin DNI (Cuellar, 26 oct 2026; había 27 así). Desde ese día: `auth.ts` busca primero el acceso de Google ya vinculado (no el correo), una cuenta nueva de alumno escribe su DNI al elegir carrera y se une a la del padrón si el nombre comparte dos palabras (`/api/user/vincular`, `lib/cuenta-duplicada.ts`), y `scripts/unir-cuentas.ts` lista y une las existentes. La duplicada no se borra: queda con `unidaA` y un token abierto con ella pasa solo a la del padrón.
+
 **Q:** `ClientFetchError` en login
 **A:** Verifica que `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` estén en `.env`
 

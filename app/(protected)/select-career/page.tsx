@@ -2,6 +2,7 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { CareerSelector } from '@/components/career-selector'
+import { IngresoConDni } from '@/components/ingreso-con-dni'
 
 export default async function SelectCareerPage() {
   const session = await auth()
@@ -10,9 +11,12 @@ export default async function SelectCareerPage() {
   // If user already has a career, redirect to lessons
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { careerId: true },
+    select: { careerId: true, dni: true, role: true },
   })
   if (user?.careerId) redirect('/lessons')
+  // Una cuenta nueva de alumno sin DNI puede ser alguien del padrón que entró con
+  // otro correo: primero se le pregunta el DNI (26 oct 2026).
+  const preguntarDni = user?.role === 'STUDENT' && !user.dni
 
   // Onboarding: Sede → Carrera → Admisión.
   // Solo sedes activas CON carreras asignadas (los programas internos sin
@@ -54,6 +58,10 @@ export default async function SelectCareerPage() {
               No hay sedes con carreras disponibles todavía. Contacta al administrador.
             </p>
           </div>
+        ) : preguntarDni ? (
+          <IngresoConDni>
+            <CareerSelector sedes={sedes} periods={periods} />
+          </IngresoConDni>
         ) : (
           <CareerSelector sedes={sedes} periods={periods} />
         )}

@@ -2,6 +2,7 @@ import NextAuth from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from './lib/prisma'
+import { idFinal } from './lib/unir-cuentas'
 
 // Log env vars availability at startup (no values, just presence)
 console.log('[Auth] ENV check:', {
@@ -75,24 +76,46 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return token
         }
         const normalizedEmail = user.email.toLowerCase()
-        // 23 oct 2026: una cuenta que viene del padrón (tiene DNI) conserva su nombre
-        // oficial. Antes cada ingreso lo pisaba con el de Google («Elpinin 9», «nelson»).
-        const delPadron = await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { dni: true } }).catch(() => null)
-        const dbUser = await prisma.user.upsert({
-          where: { email: normalizedEmail },
-          update: {
-            ...(delPadron?.dni ? {} : { name: user.name }),
-            image: user.image,
-            googleId: account.providerAccountId,
-          },
-          create: {
-            email: normalizedEmail,
-            name: user.name,
-            image: user.image,
-            googleId: account.providerAccountId,
-            emailVerified: new Date(),
-          },
-        })
+        // 26 oct 2026: manda el acceso de Google ya vinculado, no el correo. Un
+        // alumno que entró con otro Gmail y se unió a su cuenta del padrón
+        // (lib/unir-cuentas.ts) llega a la del padrón; antes el correo le creaba
+        // otra cuenta y su trabajo no se veía en el Monitor.
+        const vinculado = await prisma.account
+          .findUnique({
+            where: { provider_providerAccountId: { provider: account.provider, providerAccountId: account.providerAccountId } },
+            select: { userId: true },
+          })
+          .catch(() => null)
+        const porCorreo = vinculado
+          ? null
+          : await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true, dni: true, unidaA: true } }).catch(() => null)
+        const destinoId = vinculado ? await idFinal(vinculado.userId) : porCorreo?.unidaA ? await idFinal(porCorreo.id) : null
+        let dbUser
+        if (destinoId) {
+          const destino = await prisma.user.findUniqueOrThrow({ where: { id: destinoId }, select: { dni: true } })
+          dbUser = await prisma.user.update({
+            where: { id: destinoId },
+            data: { ...(destino.dni ? {} : { name: user.name }), image: user.image },
+          })
+        } else {
+          // 23 oct 2026: una cuenta que viene del padrón (tiene DNI) conserva su nombre
+          // oficial. Antes cada ingreso lo pisaba con el de Google («Elpinin 9», «nelson»).
+          dbUser = await prisma.user.upsert({
+            where: { email: normalizedEmail },
+            update: {
+              ...(porCorreo?.dni ? {} : { name: user.name }),
+              image: user.image,
+              googleId: account.providerAccountId,
+            },
+            create: {
+              email: normalizedEmail,
+              name: user.name,
+              image: user.image,
+              googleId: account.providerAccountId,
+              emailVerified: new Date(),
+            },
+          })
+        }
 
         await prisma.account.upsert({
           where: {
@@ -126,6 +149,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         })
 
         token.sub = dbUser.id
+        // El nombre y el correo de la cuenta, no los de Google: con un acceso
+        // unido al padrón, la barra mostraba el nombre del otro Gmail.
+        token.name = dbUser.name
+        token.email = dbUser.email
         token.role = dbUser.role
         token.careerId = dbUser.careerId
         token.sedeId = dbUser.sedeId
@@ -177,10 +204,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // NextAuth borraba la cookie: un corte de segundos de Neon (6 oct 2026)
         // sacó al usuario de la lección y lo mandó al login.
         try {
-          const dbUser = await prisma.user.findUnique({
+          let dbUser = await prisma.user.findUnique({
             where: { id: token.sub },
-            select: { role: true, careerId: true, sedeId: true },
+            select: { role: true, careerId: true, sedeId: true, unidaA: true, name: true, email: true },
           })
+          // La cuenta se unió a la del padrón (lib/unir-cuentas.ts) con la sesión
+          // abierta: el token pasa a la del padrón sin volver a iniciar sesión.
+          if (dbUser?.unidaA) {
+            token.sub = await idFinal(token.sub)
+            dbUser = await prisma.user.findUnique({
+              where: { id: token.sub },
+              select: { role: true, careerId: true, sedeId: true, unidaA: true, name: true, email: true },
+            })
+            token.name = dbUser?.name
+            token.email = dbUser?.email
+            token.hasEnrollment = false // se vuelve a contar abajo, con la cuenta nueva
+          }
           if (dbUser) {
             token.role = dbUser.role
             token.careerId = dbUser.careerId
