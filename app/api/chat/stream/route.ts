@@ -16,7 +16,7 @@ import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/sup
 import { citedFromTexts, createMarkerFilter, stripMarkers, type MarkerCheck } from '@/lib/material-markers'
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
 import { crearCorrectorDeTitulos } from '@/lib/titulos-material'
-import { crearQuitadorDeCalificaciones } from '@/lib/calificacion'
+import { crearQuitadorDeCalificaciones, debeQuitarCalificacion } from '@/lib/calificacion'
 import { planteaLaPregunta } from '@/lib/planteo'
 import type { ChoiceTurn } from '@/lib/prompt-builder'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
@@ -657,6 +657,10 @@ data: ${JSON.stringify({ type: 'done' })}
     moderation_safe: moderation.is_safe,
   })
 
+  // Lo que decidió el verificador ANTES de que el código fuerce el avance (tope de
+  // desglose, cierre por intentos): decide si Sophia puede calificar (26 oct 2026).
+  const aproboElVerificador = verification.ready_to_advance === true && verification.unverified !== true
+
   // ═══════════════════════════════════════════════════════════════
   // Escalada por desglose (scaffolding)
   // ═══════════════════════════════════════════════════════════════
@@ -1093,9 +1097,15 @@ CÓMO RESPONDER (máximo 90 palabras):
         const correctorVoseo = crearCorrectorDeVoseo()
         // Títulos del material entre «» (lib/titulos-material.ts): «toca en el texto Cuándo…».
         const correctorTitulos = crearCorrectorDeTitulos(allLessonBlocks(contentJson, verSinValidar).map((b) => b.title))
-        // En un paso sin nota, la calificación con que abre («Exacto.») se quita
-        // en el código (lib/calificacion.ts): el prompt no bastó.
-        const quitador = currentActivity.verification.is_evaluative === false && respuestaFija === null
+        // La calificación («Exacto.», «Correcto.») se quita en el código
+        // (lib/calificacion.ts): en un paso sin nota siempre, y en uno con nota si
+        // el verificador no aprobó, aunque el código avance por tope o desglose.
+        const quitador = debeQuitarCalificacion({
+          evaluativa: currentActivity.verification.is_evaluative !== false,
+          respuestaFija: respuestaFija !== null,
+          aproboElVerificador: aproboElVerificador && verification.ready_to_advance === true,
+          pasoCerrado: !!choiceTurn || !!checkTurn,
+        })
           ? crearQuitadorDeCalificaciones()
           : null
         const limpiar = (trozo: string) => (quitador ? quitador.push(trozo) : trozo)

@@ -78,3 +78,22 @@ export function crearQuitadorDeCalificaciones() {
     },
   }
 }
+
+/**
+ * ¿Hay que quitar la calificación de este mensaje? (26 oct 2026, pruebas de
+ * Maritza). En un paso sin nota, siempre. En uno con nota, cuando el verificador
+ * NO aprobó la respuesta: Sophia decía «Correcto.» a un «listoç» o a «la baranda
+ * de 60 cm sí cumple» porque al agotar los intentos el prompt recibe la
+ * actividad como aprobada para poder cerrar (`cierraPorTope`). Las alternativas
+ * y la comprobación de cierre quedan fuera: ahí el código ya corrigió y Sophia
+ * puede decir que la elección fue correcta.
+ */
+export function debeQuitarCalificacion(a: {
+  evaluativa: boolean
+  respuestaFija: boolean
+  aproboElVerificador: boolean
+  pasoCerrado: boolean
+}): boolean {
+  if (a.respuestaFija || a.pasoCerrado) return false
+  return !a.evaluativa || !a.aproboElVerificador
+}
