@@ -34,6 +34,7 @@ import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubray
 import { resumenDeCierre } from '@/lib/cierre'
 import { pideAclaracion } from '@/lib/aclaracion'
 import { mensajePideSeguir, pideSeguir } from '@/lib/pide-seguir'
+import { decidirDesglose, turnosPrevios } from '@/lib/desglose'
 import { cierreParaAlumno, mensajeBloqueCerrado, ventanaPaso } from '@/lib/ventana-alumno'
 
 export const runtime = 'nodejs'
@@ -306,11 +307,12 @@ data: ${JSON.stringify({ type: 'done' })}
     wasExplained?: boolean
   } | null) || { attempts: [] }
   const scaffoldingTurns = existingEvidence.scaffoldingTurns || 0
-  // Tope de intentos. En un paso sin nota cada desglose cuenta como intento: ahí
-  // no hay nota que proteger y el tope es lo que cuida el tiempo de la clase.
+  // Tope de intentos. Cada desglose gasta un turno del tope, con o sin nota: el
+  // tope es lo que cuida el tiempo de la clase (lib/desglose.ts). `attempts`, el
+  // contador de la nota, sigue sin sumar desgloses.
   const sinNota = currentActivity.verification.is_evaluative === false
   const topeDeIntentos = currentActivity.verification.max_attempts || 3
-  const intentosPrevios = attempts + (sinNota ? scaffoldingTurns : 0)
+  const intentosPrevios = turnosPrevios(attempts, scaffoldingTurns)
   const wasExplained = existingEvidence.wasExplained === true
   // true si este turno se retiene el avance porque Sophia no pasó a la siguiente actividad
   let retenido = false
@@ -694,7 +696,10 @@ data: ${JSON.stringify({ type: 'done' })}
   // intentos, el desglose no contaba y respondió 4 veces; y al llegar al tope de
   // desglose, una respuesta a OTRA pregunta (off_topic) cerró la actividad 3.
   // Ahora una respuesta fuera de tema no se desglosa (Sophia la redirige), y sin
-  // nota cada turno de desglose cuenta para el tope de intentos.
+  // nota cada turno de desglose cuenta para el tope de intentos. Clase de SI A
+  // (26 oct 2026): con nota tampoco alcanzaba; Gianny respondió tres veces en
+  // una actividad de 2 intentos. Ahora el desglose gasta el tope siempre y, con
+  // nota, el turno que lo agota no se desglosa: cierra por límite (cierraPorTope).
   let willScaffold = false
   if (
     verification.needs_scaffolding === true &&
@@ -702,8 +707,17 @@ data: ${JSON.stringify({ type: 'done' })}
     verification.response_type !== 'off_topic' &&
     !activityAlreadyCompleted
   ) {
-    if (scaffoldingTurns < scaffoldingCap && (!sinNota || intentosPrevios + 1 < topeDeIntentos)) {
+    const decision = decidirDesglose({
+      intentos: attempts,
+      desgloses: scaffoldingTurns,
+      topeDeDesgloses: scaffoldingCap,
+      topeDeIntentos,
+      sinNota,
+    })
+    if (decision === 'desglosa') {
       willScaffold = true
+    } else if (decision === 'tope-de-intentos') {
+      verification.needs_scaffolding = false
     } else {
       // Cap alcanzado: avanzar con el nivel ya escalado
       verification.needs_scaffolding = false
@@ -1743,7 +1757,7 @@ const allActivities = await prisma.activityProgress.findMany({
           // Marcamos como completado con nivel "En inicio"
           // Mismo tope que usa el prompt (prompt-builder: max_attempts || 3). Antes
           // el código esperaba 5 mientras Sophia ya «avanzaba» en el 3: desfase.
-          // Sin nota, los desgloses cuentan (intentosPrevios): igual que cierraPorTope.
+          // Los desgloses cuentan (intentosPrevios): igual que cierraPorTope.
           const forcedAdvanceLimit = topeDeIntentos
           const newAttemptCount = intentosPrevios + 1
 

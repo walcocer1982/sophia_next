@@ -192,13 +192,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             })
             token.hasEnrollment = enrollmentCount > 0
           }
-          refrescos.set(token.sub, {
-            hasta: Date.now() + REFRESCO_TTL_MS,
-            role: token.role,
-            careerId: token.careerId,
-            sedeId: token.sedeId,
-            hasEnrollment: token.hasEnrollment,
-          })
+          // Quien está en el ingreso (sin carrera o, si es alumno, sin matrícula)
+          // no se guarda: el proxy lo manda a elegir carrera o sección, y al
+          // terminar el paso la próxima petición tiene que ver la base. Guardado,
+          // el `false` de un minuto atrás lo devolvía a /select-section y el botón
+          // «Continuar» giraba sin fin (alumno de PM, 26 oct 2026). Son pocas
+          // peticiones; el ahorro está en la lección.
+          const enIngreso =
+            (!token.careerId && token.role !== 'SUPERADMIN') ||
+            (token.role === 'STUDENT' && !token.hasEnrollment)
+          if (!enIngreso) {
+            refrescos.set(token.sub, {
+              hasta: Date.now() + REFRESCO_TTL_MS,
+              role: token.role,
+              careerId: token.careerId,
+              sedeId: token.sedeId,
+              hasEnrollment: token.hasEnrollment,
+            })
+          }
         } catch (error) {
           console.warn('⚠️  auth.jwt: no se pudo refrescar el usuario; se mantiene el token', error instanceof Error ? error.message.split('\n').pop() : error)
         }
