@@ -153,6 +153,11 @@ export default async function LessonsPage() {
     }
   })
 
+  // El alumno ve solo lo abierto y lo que viene (26 oct 2026, pedido de Walther):
+  // una lección cuya ventana cerró, terminada o no, ya no está en su lista. Lo que
+  // hizo queda en el Monitor. Instructores y administradores ven todo.
+  const leccionesVisibles = role === 'STUDENT' ? enrichedLessons.filter((l) => !l.isClosed) : enrichedLessons
+
   // Fetch careers for SUPERADMIN filter
   const careers = isSuperadmin
     ? await prisma.career.findMany({
@@ -178,7 +183,7 @@ export default async function LessonsPage() {
         </div>
 
         <CareerFilter
-          lessons={enrichedLessons}
+          lessons={leccionesVisibles}
           careers={careers}
           showCareerFilter={isSuperadmin}
         />
