@@ -10,7 +10,7 @@
  * simulado y pasar `auditar-sesion.ts` sobre la sesión de prueba.
  */
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { prisma } from '../../lib/prisma'
 import type { LessonContent } from '../../types/lesson'
 import { REGISTRO } from './cursos/registro'
@@ -20,6 +20,11 @@ import type { CursoSpec, SesionSpec, Subida } from './tipos'
 
 /** El proyecto de diseño es SOLO LECTURA: de aquí salen los archivos de imagen. */
 export const FUENTE = 'C:/Users/LEGION/Claude/cetemin/diseño-ppt-cetemin'
+
+/** Una imagen que no viene del proyecto de diseño (la lección de Sophia) se nombra desde la raíz del repo: «scripts/…». */
+function rutaDeImagen(archivo: string): string {
+  return isAbsolute(archivo) ? archivo : archivo.startsWith('scripts/') ? resolve(archivo) : join(FUENTE, archivo)
+}
 
 // tsx no carga .env (Prisma lo hace solo; Cloudinary no).
 for (const linea of readFileSync('.env', 'utf8').split(/\r?\n/)) {
@@ -45,7 +50,7 @@ async function subirImagenes(curso: CursoSpec, courseId: string, spec: SesionSpe
       subidas[f.id] = { url: existente.url, bankId: existente.id }
       continue
     }
-    const ruta = join(FUENTE, f.archivo)
+    const ruta = rutaDeImagen(f.archivo)
     if (!existsSync(ruta)) throw new Error(`no existe el archivo de ${f.id}: ${ruta}`)
     const url = await uploadImage(readFileSync(ruta), `sophia/${curso.slug}`)
     const creada = await prisma.courseImage.create({
@@ -82,7 +87,7 @@ async function main() {
   // Validación con imágenes de mentira: no toca nada
   const errores = validarSesion(spec, construirActividades(spec, subidasFalsas(spec)))
   for (const f of spec.imagenes) {
-    if (!existsSync(join(FUENTE, f.archivo))) errores.push(`falta el archivo de ${f.id}: ${f.archivo}`)
+    if (!existsSync(rutaDeImagen(f.archivo))) errores.push(`falta el archivo de ${f.id}: ${f.archivo}`)
   }
   if (errores.length) fallar(errores)
   console.log(`✅ ${curso.slug} S${n} «${spec.title}»: ${resumen(construirActividades(spec, subidasFalsas(spec)))}`)
@@ -92,10 +97,10 @@ async function main() {
     title: curso.title,
     capacidad: curso.capacidad,
     instructor: curso.instructor,
-    scope: 'SPECIALIZATION' as const,
-    careerId: curso.carreraId,
+    scope: curso.carreraId ? ('SPECIALIZATION' as const) : ('TRANSVERSAL' as const),
+    careerId: curso.carreraId ?? null,
     userId: curso.userId,
-    careers: { connect: [{ id: curso.carreraId }] },
+    ...(curso.carreraId ? { careers: { connect: [{ id: curso.carreraId }] } } : {}),
   }
   const c = await prisma.course.upsert({
     where: { slug: curso.slug },

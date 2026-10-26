@@ -145,9 +145,12 @@ function puntoClave(spec: SesionSpec, subidas: Subida, prefijo: string, n: numbe
     norma.subrayable = true
     norma.lineasClave = claves.every((i) => i >= 0) ? [...new Set(claves)] : []
   }
+  // El texto que se toca va PRIMERO (23 oct 2026, clase de EOM): con la lámina
+  // arriba, en laptop el texto quedaba fuera de vista y los alumnos no lo hallaban.
+  const laminaAPedido = p.laminaCuando === 'on_reference'
   const blocks: SupportBlock[] = [
-    bloqueImagen(spec, subidas, p.lamina.imagenId, p.lamina.title, 'on_start'),
     norma,
+    bloqueImagen(spec, subidas, p.lamina.imagenId, p.lamina.title, laminaAPedido ? 'on_reference' : 'on_start'),
     ...(p.clasificar ? [{ ...p.clasificar, type: 'classify', showWhen: 'on_start' } as ClassifyBlock] : []),
     ...(p.apoyo ?? []).map((a) => bloqueImagen(spec, subidas, a.imagenId, a.title, 'on_reference')),
   ]
@@ -159,7 +162,7 @@ function puntoClave(spec: SesionSpec, subidas: Subida, prefijo: string, n: numbe
     complexity: 'moderate',
     keyPointIndex: p.keyPointIndex,
     teaching: {
-      agent_instruction: `Enseña primero, con la lámina «${p.lamina.title}» de la pizarra: ${p.regla} Resuelve tú este ejemplo: ${p.ejemplo} Primero regla y ejemplo, sin mandar a leer otro texto; después, la pregunta tal cual.`,
+      agent_instruction: `Enseña primero, con ${laminaAPedido ? `el texto «${p.norma.title}»` : `la lámina «${p.lamina.title}»`} de la pizarra: ${p.regla} Resuelve tú este ejemplo: ${p.ejemplo} Primero regla y ejemplo, sin mandar a leer otro texto; después, la pregunta tal cual.`,
       target_length: '90-130 palabras',
       blocks,
     },
@@ -184,9 +187,9 @@ function casoCorto(spec: SesionSpec, prefijo: string, n: number): Activity {
     complexity: 'complex',
     keyPointIndex: c.keyPointIndex,
     teaching: {
-      agent_instruction: `Caso corto individual, calentamiento del caso que después se resuelve en equipo; no inventes otro caso ni cites casos de la clase. Dile que lea el caso «${c.caso.title}» en la pizarra; no lo recites. Pide una decisión con su porqué. ${c.pistas}`,
+      agent_instruction: `${spec.sinTrabajoEnEquipo ? 'Caso corto individual' : 'Caso corto individual, calentamiento del caso que después se resuelve en equipo'}; no inventes otro caso ni cites casos de la clase. Dile que lea el caso «${c.caso.title}» en la pizarra; no lo recites. Pide una decisión con su porqué. ${c.pistas}`,
       target_length: '60-100 palabras',
-      uses: spec.puntosClave.map((p) => p.norma.id),
+      uses: c.usa ?? spec.puntosClave.map((p) => p.norma.id),
       blocks: [caso],
     },
     verification: {
@@ -208,7 +211,7 @@ function cierre(spec: SesionSpec, prefijo: string, n: number): Activity {
     complexity: 'simple',
     keyPointIndex: null,
     teaching: {
-      agent_instruction: 'Cierre corto, sin nota. Pregúntale qué punto de hoy le quedó menos claro; esa respuesta la ve el instructor antes de aclarar en clase. No califiques. Reconoce una cosa concreta que haya hecho bien hoy, sin felicitaciones vacías. Anuncia en una oración que ahora el instructor aclara dudas y que luego, en equipo, trabajarán el caso de la clase. No resumas ni agradezcas: el resumen con los puntos clave y el «Gracias por participar» los agrega el sistema.',
+      agent_instruction: `Cierre corto, sin nota. Pregúntale qué punto de hoy le quedó menos claro; esa respuesta la ve el instructor antes de aclarar en clase. No califiques. Reconoce una cosa concreta que haya hecho bien hoy, sin felicitaciones vacías. Anuncia en una oración ${spec.sinTrabajoEnEquipo ? 'que ahora el instructor conversa con el grupo sobre lo que respondieron' : 'que ahora el instructor aclara dudas y que luego, en equipo, trabajarán el caso de la clase'}. No resumas ni agradezcas: el resumen con los puntos clave y el «Gracias por participar» los agrega el sistema.`,
       target_length: '40-70 palabras',
     },
     verification: sinNota('¿Qué punto de hoy te quedó menos claro?', ['Nombra un punto que le quedó menos claro, o dice que ninguno'], 1),
