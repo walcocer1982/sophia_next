@@ -111,10 +111,12 @@ export async function matrizDelCurso(
 
   // Cierre por (sección, lección) y cuántas secciones programaron cada lección.
   const cierrePorSeccion = new Map<string, Date | null>()
+  const aperturaPorSeccion = new Map<string, Date | null>()
   const seccionesConLeccion = new Map<string, number>()
   for (const s of secciones) {
     for (const h of s.schedules) {
       cierrePorSeccion.set(`${s.id}:${h.lessonId}`, cierreDeHorario(h))
+      aperturaPorSeccion.set(`${s.id}:${h.lessonId}`, h.availableAt)
       seccionesConLeccion.set(h.lessonId, (seccionesConLeccion.get(h.lessonId) ?? 0) + 1)
     }
   }
@@ -187,7 +189,7 @@ export async function matrizDelCurso(
             estado === 'terminada' || estado === 'no-programada' || estado === 'pendiente'
               ? false
               : ses
-                ? ventanaCerrada(cierre ?? null, ses.lastActivityAt, ahora)
+                ? ventanaCerrada(cierre ?? null, ses.lastActivityAt, ahora, aperturaPorSeccion.get(`${sec.id}:${l.id}`))
                 : true, // no-entro: la ventana cerró por definición
         }
       }

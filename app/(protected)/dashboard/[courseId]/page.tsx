@@ -138,7 +138,8 @@ export default function CourseDashboardPage() {
   const q = search.trim().toLowerCase()
   const coincide = (name: string | null, email: string | null) =>
     !q || name?.toLowerCase().includes(q) || email?.toLowerCase().includes(q)
-  const filasVisibles = filas.filter((f) => coincide(f.name, f.email))
+  // En vivo, solo la ventana actual: lo de una ventana anterior (lección reabierta) queda en la matriz.
+  const filasVisibles = filas.filter((f) => !f.deVentanaAnterior && coincide(f.name, f.email))
   const activos = filas.filter((f) => f.estado === 'activa').length
 
   return (

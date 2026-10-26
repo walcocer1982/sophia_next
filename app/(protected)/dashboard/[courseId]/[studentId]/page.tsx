@@ -94,6 +94,7 @@ export default async function EstudiantePage({
   const horarios = new Map(
     matricula.section.schedules.map((h) => [h.lessonId, cierreDeHorario(h)])
   )
+  const aperturas = new Map(matricula.section.schedules.map((h) => [h.lessonId, h.availableAt]))
 
   const lecciones = await prisma.lesson.findMany({
     where: { courseId },
@@ -166,7 +167,7 @@ export default async function EstudiantePage({
             keyPoints: l.keyPoints,
             progresos: ses.activities,
             terminada: !!ses.completedAt,
-            cerrada: !!ses.completedAt || ventanaCerrada(cierre, ses.lastActivityAt, ahora),
+            cerrada: !!ses.completedAt || ventanaCerrada(cierre, ses.lastActivityAt, ahora, aperturas.get(l.id)),
             metodologia: curso.methodology,
             mensajes: ses.messages,
             actividadActualId: ses.activityId,

@@ -49,8 +49,14 @@ export type Horario = { availableAt: Date | string | null; closesAfterHours: num
 /** Lo mismo desde la fila del horario. Úsalo en vez de repetir la suma de horas. */
 export const cierreDeHorario = (h: Horario): Date | null => cierreDeVentana(h.availableAt, h.closesAfterHours, h.closedAt)
 
-/** ¿Se puede dar la sesión por cerrada? Con ventana, por la fecha; sin ventana, por 24 h sin actividad. */
-export function ventanaCerrada(cierre: Date | null, lastActivityAt: Date, ahora: Date): boolean {
+/**
+ * ¿Se puede dar la sesión por cerrada? Con ventana, por la fecha; sin ventana, por 24 h sin actividad.
+ * Una sesión que quedó antes de la apertura actual es de una ventana anterior y está
+ * cerrada (26 oct 2026): al reabrir una lección, las sesiones a medias de hacía tres
+ * días volvían al Monitor en vivo como «En pausa».
+ */
+export function ventanaCerrada(cierre: Date | null, lastActivityAt: Date, ahora: Date, apertura?: Date | string | null): boolean {
+  if (apertura && lastActivityAt.getTime() < new Date(apertura).getTime()) return true
   if (cierre) return ahora.getTime() > cierre.getTime()
   return ahora.getTime() - lastActivityAt.getTime() > UMBRAL_SIN_VENTANA_MS
 }
@@ -58,11 +64,12 @@ export function ventanaCerrada(cierre: Date | null, lastActivityAt: Date, ahora:
 export function estadoDeSesion(
   s: { completedAt: Date | null; lastActivityAt: Date; completadas: number },
   cierre: Date | null,
-  ahora: Date
+  ahora: Date,
+  apertura?: Date | string | null
 ): { estado: EstadoVivo; avance: Avance; cerrada: boolean } {
   const avance: Avance = s.completadas > 0 ? 'a-medias' : 'sin-avanzar'
   if (s.completedAt) return { estado: 'terminada', avance: null, cerrada: false }
-  const cerrada = ventanaCerrada(cierre, s.lastActivityAt, ahora)
+  const cerrada = ventanaCerrada(cierre, s.lastActivityAt, ahora, apertura)
   if (cerrada) return { estado: 'sin-terminar', avance, cerrada }
   const activa = ahora.getTime() - s.lastActivityAt.getTime() < UMBRAL_ACTIVA_MS
   return { estado: activa ? 'activa' : 'en-pausa', avance, cerrada }
