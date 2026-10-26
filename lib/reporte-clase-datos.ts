@@ -92,7 +92,7 @@ export async function cargarReporteDeClase(o: {
             keyPoints: leccion.keyPoints,
             progresos: ses.activities,
             terminada: !!ses.completedAt,
-            cerrada: !!ses.completedAt || ventanaCerrada(cierre, ses.lastActivityAt, ahora),
+            cerrada: !!ses.completedAt || ventanaCerrada(cierre, ses.lastActivityAt, ahora, horario ? horario.availableAt : leccion.availableAt),
             metodologia: curso.methodology,
             mensajes: ses.messages,
             actividadActualId: ses.activityId,

@@ -169,9 +169,12 @@ export async function GET(
   // Cierre por (sección, lección). Si la sección no programó la lección, la
   // clave no existe y se cae al horario de la lección.
   const cierrePorSeccion = new Map<string, Date | null>()
+  // Y su apertura: una sesión anterior a ella es de una ventana pasada (lib/monitor.ts).
+  const aperturaPorSeccion = new Map<string, Date | null>()
   for (const s of activas) {
     for (const h of s.schedules) {
       cierrePorSeccion.set(`${s.id}:${h.lessonId}`, cierreDeHorario(h))
+      aperturaPorSeccion.set(`${s.id}:${h.lessonId}`, h.availableAt)
     }
   }
   const abiertos = activas.flatMap((s) =>
@@ -268,10 +271,12 @@ export async function GET(
         ? (cierrePorSeccion.get(clave) ?? null)
         : cierreDeVentana(lesson.availableAt, lesson.closesAfterHours)
       const completadas = s.activities.filter((a) => a.status === 'COMPLETED')
+      const apertura = aperturaPorSeccion.has(clave) ? aperturaPorSeccion.get(clave) : lesson.availableAt
       const { estado, avance } = estadoDeSesion(
         { completedAt: s.completedAt, lastActivityAt: s.lastActivityAt, completadas: completadas.length },
         cierre,
-        ahora
+        ahora,
+        apertura
       )
       const idx = actividades.findIndex((a) => a.id === s.activityId)
       const actual = s.activities.find((a) => a.activityId === s.activityId)
@@ -310,6 +315,7 @@ export async function GET(
             ? { actuales: actual.attempts, maximo, aviso: avisoDeIntentos(actual.attempts, maximo) }
             : null,
         criterioFaltante: ultimo?.analysis?.criteriaMissing?.[0] ?? null,
+        deVentanaAnterior: !!apertura && s.lastActivityAt.getTime() < new Date(apertura).getTime(),
         porLimite:
           porLimiteIdx >= 0
             ? { index: porLimiteIdx + 1, title: tituloActividad(actividades[porLimiteIdx], porLimiteIdx) }

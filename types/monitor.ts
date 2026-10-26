@@ -39,6 +39,8 @@ export type FilaMonitor = {
   criterioFaltante: string | null
   /** La última actividad que el código avanzó por agotar intentos. */
   porLimite: { index: number; title: string } | null
+  /** La sesión quedó antes de que se abriera la ventana actual (se reabrió la lección): no va en la vista en vivo. */
+  deVentanaAnterior: boolean
   /** Actividades cerradas en que el alumno nunca tocó la línea que respalda su respuesta (lectura comprobada, 21 oct 2026). */
   lecturaSinComprobar: { index: number; title: string }[]
   seguimiento: MarcaDTO | null

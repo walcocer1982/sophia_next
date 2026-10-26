@@ -149,3 +149,19 @@ test('cierreDeVentana: el cierre del instructor manda si es antes que el de las 
   assert.deepEqual(cierreDeVentana(null, 2, new Date('2026-10-22T15:45:00Z')), new Date('2026-10-22T15:45:00Z'))
   assert.equal(cierreDeVentana(null, 2), null)
 })
+
+test('lección reabierta (26 oct): la sesión que quedó antes de la apertura es de una ventana anterior', async () => {
+  const { estadoDeSesion, ventanaCerrada } = await import('../lib/monitor')
+  const apertura = new Date('2026-10-26T09:33:00-05:00')
+  const cierre = new Date('2026-10-26T23:59:00-05:00')
+  const ahora = new Date('2026-10-26T10:00:00-05:00')
+  // Dejó la lección a medias el jueves 23: ya no está «en pausa».
+  const jueves = { completedAt: null, lastActivityAt: new Date('2026-10-23T17:49:00-05:00'), completadas: 3 }
+  assert.equal(estadoDeSesion(jueves, cierre, ahora, apertura).estado, 'sin-terminar')
+  assert.equal(ventanaCerrada(cierre, jueves.lastActivityAt, ahora, apertura), true)
+  // Quien escribe hoy, dentro de la ventana nueva, sigue activo.
+  const hoy = { completedAt: null, lastActivityAt: new Date('2026-10-26T09:58:00-05:00'), completadas: 1 }
+  assert.equal(estadoDeSesion(hoy, cierre, ahora, apertura).estado, 'activa')
+  // Sin apertura, la regla de siempre.
+  assert.equal(estadoDeSesion(jueves, cierre, ahora).estado, 'en-pausa')
+})
