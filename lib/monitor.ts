@@ -183,3 +183,22 @@ export function pasoDelEmbudo(idx: number, actId: string, sesiones: SesionDeEmbu
     cuelloDeBotella: llegaron >= MIN_LLEGARON_CUELLO && superadas / llegaron < 0.5,
   }
 }
+
+/**
+ * Quiénes de la sección todavía no abrieron la sesión del bloque en curso
+ * (26 oct 2026, clase de SI-ALTORIESGO: «me parece que 2 no se han conectado»).
+ * Entró quien tiene una sesión con actividad desde la apertura de la ventana;
+ * una de una ventana anterior (lección reabierta) no cuenta. «Desertó» no se
+ * espera. Por nombre, para leerlo en voz alta en la clase.
+ */
+export function noEntraronAlBloque<A extends { userId: string; name: string | null }>(
+  matriculados: A[],
+  sesiones: { userId: string; lastActivityAt: Date }[],
+  apertura: Date,
+  desertores: Set<string>,
+): A[] {
+  const entraron = new Set(sesiones.filter((s) => s.lastActivityAt >= apertura).map((s) => s.userId))
+  return matriculados
+    .filter((a) => !entraron.has(a.userId) && !desertores.has(a.userId))
+    .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'es'))
+}

@@ -192,6 +192,36 @@ export default function CourseDashboardPage() {
         </p>
       )}
 
+      {/* Quiénes aún no entran al bloque en curso (26 oct 2026): sale del padrón de la sección. */}
+      {data.bloquesAbiertos.map((b) => {
+        const entraron = b.esperados - b.noEntraron.length
+        const prefijo = data.bloquesAbiertos.length > 1 ? `${b.sectionName} · S${b.lessonOrder} — ` : ''
+        return b.noEntraron.length === 0 ? (
+          <p key={`ne-${b.sectionId}-${b.lessonId}`} className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">
+            {prefijo}Entraron todos: {entraron} de {b.esperados}.
+          </p>
+        ) : (
+          <div key={`ne-${b.sectionId}-${b.lessonId}`} className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-medium">
+              {prefijo}Aún no entran ({b.noEntraron.length})
+              <span className="ml-2 font-normal text-amber-700">
+                entraron {entraron} de {b.esperados}
+              </span>
+            </p>
+            <p className="mt-1 leading-relaxed">
+              {b.noEntraron.map((a, i) => (
+                <span key={a.userId}>
+                  {i > 0 && <span className="text-amber-400"> · </span>}
+                  <Link href={`/dashboard/${courseId}/${a.userId}`} className="hover:underline">
+                    {a.name || 'Sin nombre'}
+                  </Link>
+                </span>
+              ))}
+            </p>
+          </div>
+        )
+      })}
+
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
