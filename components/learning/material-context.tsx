@@ -18,7 +18,7 @@ import { citedBlocksInOrder, citedFromTexts, type Cited } from '@/lib/material-m
 import type { BlockWithActivity } from '@/lib/support-blocks'
 import type { MaterialState, SimState } from '@/lib/simulator'
 import type { ClasifState } from '@/lib/clasificar'
-import { leerSubrayadoGuardado, type SubrayadoGuardado, type SubrayadoState } from '@/lib/subrayado'
+import { leerSubrayadoGuardado, subrayadosDesdeMensajes, type SubrayadoGuardado, type SubrayadoState } from '@/lib/subrayado'
 
 interface Focus {
   id: string
@@ -213,7 +213,18 @@ export function MaterialProvider({
 
   const [subrayadosRevisados, setRevisados] = useState<Record<string, SubrayadoGuardado & { nonce?: number }>>({})
   const revisionesVistas = useRef(0)
+  // Al cargar la lección, lo que ya tocó vuelve a la pizarra (lib/subrayado.ts):
+  // una sola vez, para no rehacer una línea que el alumno destocó después.
+  const restaurado = useRef(false)
   const reportSubrayadosRevisados = useCallback((materiales: unknown[]) => {
+    if (!restaurado.current) {
+      restaurado.current = true
+      const previos = subrayadosDesdeMensajes(materiales, blocksById)
+      if (Object.keys(previos).length) {
+        subrRef.current = { ...previos, ...subrRef.current }
+        setSubrayados(subrRef.current)
+      }
+    }
     // Cuántas revisiones hay en la conversación: si aparece una nueva, la línea vuelve a vibrar.
     const revisiones = materiales.flatMap((m) => leerSubrayadoGuardado(m)).filter((s) => s.resultado)
     const ultimo: Record<string, SubrayadoGuardado & { nonce?: number }> = {}
@@ -221,7 +232,7 @@ export function MaterialProvider({
     if (revisiones.length === revisionesVistas.current) return
     revisionesVistas.current = revisiones.length
     setRevisados(ultimo)
-  }, [])
+  }, [blocksById])
 
   // Pedido de tocar una línea: se lleva el texto a la vista y, en celular, la
   // pestaña «Pizarra» avisa (punto). No se cambia de pestaña sola.

@@ -25,7 +25,7 @@ Si una pieza de material no sirve a ninguna de esas decisiones, sobra (Lemov, *E
 | **Texto de la norma** | Solo las líneas que hacen falta para decidir; una de ellas respalda la respuesta | `norma` + `subrayar.respalda` |
 | **Pregunta** | Una situación nueva, una sola decisión con su porqué | `pregunta` |
 
-**La regla de oro:** mientras Sophia dice el ejemplo, la imagen de la pizarra tiene que mostrar ese ejemplo (o la situación de la pregunta). Si Sophia habla de una cisterna y la pizarra muestra una tabla de normas, no conversan.
+**La regla de oro:** mientras Sophia dice el ejemplo, la imagen de la pizarra tiene que mostrar ese ejemplo (o la situación de la pregunta). Si Sophia habla de una cisterna y la pizarra muestra una tabla de normas, no conversan. La imagen va debajo del texto que se toca (§3).
 
 > Así quedó la S1: el ejemplo de la cisterna va con «Los cuatro casos de la G.050», que trae la foto de los líquidos y la de la electricidad (la pregunta); el de la canaleta, con la foto de un vano abierto en una losa.
 
@@ -34,6 +34,7 @@ Por qué regla **y** ejemplo: quien solo memoriza ejemplos no sabe qué hacer co
 ## 3. Menos material, y cada pieza con un uso
 
 - **Una imagen por actividad**, más un apoyo solo si Sophia lo cita en el ejemplo o en la pregunta. En una laptop la pizarra muestra una sola columna: con tres recursos, el texto para subrayar queda fuera de vista.
+- **El texto que se toca va primero** (23 oct 2026, primera clase con alumnos): la plantilla lo pone arriba y la lámina debajo. Si la lámina no hace falta para decidir, declárala `laminaCuando: 'on_reference'`: la pizarra muestra solo el texto y la lámina aparece cuando Sophia la cita. En el caso corto, `usa` dice qué textos siguen abiertos; `[]` deja solo el caso. Con dos recursos a la vista, los alumnos escribieron «¿cuál es la pizarra? no veo» y volvían a escribir su respuesta en vez de tocar la línea.
 - **Fuera los datos para el instructor:** «ninguna norma lo define con todas sus letras», historia de la norma, artículos sin uso en la decisión. Van a las notas del instructor, no a la pizarra del alumno.
 - **Dos piezas no pueden contradecirse en apariencia.** La S1 tenía una tabla «a 1,20 m sobre piso plano: no pide arnés» al lado del umbral de 1,2 m de industria («sí pide»): mismo número, respuesta opuesta. Se quitó.
 - **La imagen se mira antes de describirla.** La `description` lleva lo que se ve y el texto escrito en ella; Sophia no ve imágenes.

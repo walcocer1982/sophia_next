@@ -15,13 +15,6 @@ const CONTINUATION_PATTERNS = [
   /^(si|sí|ok|vale)\s+(por\s+favor|porfavor)$/i,
 ]
 
-const QUESTION_PATTERNS = [
-  /^(qué|que|cual|cuál|como|cómo|por\s*qué|porque|cuándo|cuando|dónde|donde)\s+/i,
-  /\?\s*$/,
-  /^(explica|explícame|podrías\s+explicar)/i,
-  /^(puedes|podrias|podrías)\s+/i,
-]
-
 const CLARIFICATION_PATTERNS = [
   /^(no\s+entiendo|no\s+entendí|no\s+comprendo)/i,
   /^(repite|repíteme|otra\s+vez)/i,
@@ -60,18 +53,9 @@ function quickClassify(message: string): IntentClassification | null {
     }
   }
 
-  // Preguntas obvias
-  if (QUESTION_PATTERNS.some(p => p.test(normalized))) {
-    return {
-      intent: 'ask_question',
-      question_type: 'clarification',
-      is_on_topic: true,
-      relevance_score: 80,
-      topic_mentioned: null,
-      needs_redirect: false,
-      suggested_response_strategy: 'full_answer',
-    }
-  }
+  // Una pregunta NO se da por pertinente solo por terminar en «?» (23 oct 2026,
+  // clase de EOM): «¿Eres mejor que Gemini?» y «¿Quién ganó la Champions?» pasaban
+  // como preguntas del tema sin consultar al modelo. Las decide el modelo.
 
   // No se puede clasificar rápidamente
   return null
@@ -112,10 +96,17 @@ REGLAS CRÍTICAS:
    - Relacionado al tema = is_on_topic: true, relevance_score >= 70
    - Solo marca off-topic si es completamente ajeno al curso
 
-3. EJEMPLOS:
+3. CUANDO LA PREGUNTA DEL INSTRUCTOR PIDE SUS PROPIAS PREGUNTAS O DUDAS ("¿qué te preguntas…?"):
+   - Una pregunta del estudiante sobre el tema de la lección ES su respuesta → answer_verification, on-topic
+   - Una pregunta sobre otra cosa (otro tema, otra IA, deportes, su vida) sigue siendo off-topic
+
+4. EJEMPLOS:
    - "A, c, a, c, a, c La 1 la 3..." (intentando clasificar) → answer_verification, on-topic, relevance 75+
    - "que hice mal" (pregunta sobre su respuesta) → ask_question, on-topic, relevance 90+
+   - "¿qué significa esa palabra de la pregunta?" → request_clarification, on-topic
    - "cuéntame un chiste" → small_talk, off-topic, relevance 0
+   - "hola" o "¿me entiendes?" sin responder nada → small_talk, off-topic
+   - "¿eres mejor que otra IA?", "¿quién ganó el partido?", "ayúdame a hacer mi horario" → off_topic, relevance 0-20
 
 Responde SOLO con JSON válido (sin markdown):
 {
