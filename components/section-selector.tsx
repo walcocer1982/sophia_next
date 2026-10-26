@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -24,7 +23,6 @@ interface SectionSelectorProps {
 }
 
 export function SectionSelector({ grouped, existingEnrollments }: SectionSelectorProps) {
-  const router = useRouter()
   const { update } = useSession()
   const [loading, setLoading] = useState<string | null>(null)
   const [continuing, setContinuing] = useState(false)
@@ -60,8 +58,9 @@ export function SectionSelector({ grouped, existingEnrollments }: SectionSelecto
     } catch {
       // si el refresh falla, igual intentamos navegar
     }
-    router.push('/lessons')
-    router.refresh()
+    // Navegación completa, como en career-selector: con router.push, si el proxy
+    // rebotaba a /select-section el componente seguía montado y el botón giraba.
+    window.location.href = '/lessons'
   }
 
   const hasEnrollments = enrolled.size > 0
