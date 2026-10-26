@@ -33,6 +33,7 @@ import { describeClasifForPrompt, describeClasifForVerifier, sanitizeClasif, vac
 import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, faltaTocarLaLinea, guiaRevelarSubrayado, guiaLineaCorrecta, leerSubrayadoGuardado, lineasClaveTexto, mensajeRecordatorioSubrayado, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, hayQueRevisarSubrayado, esRepeticionEquivocada, type UltimoSubrayado, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
 import { resumenDeCierre } from '@/lib/cierre'
 import { pideAclaracion } from '@/lib/aclaracion'
+import { mensajePideSeguir, pideSeguir } from '@/lib/pide-seguir'
 import { cierreParaAlumno, mensajeBloqueCerrado, ventanaPaso } from '@/lib/ventana-alumno'
 
 export const runtime = 'nodejs'
@@ -305,6 +306,11 @@ data: ${JSON.stringify({ type: 'done' })}
     wasExplained?: boolean
   } | null) || { attempts: [] }
   const scaffoldingTurns = existingEvidence.scaffoldingTurns || 0
+  // Tope de intentos. En un paso sin nota cada desglose cuenta como intento: ahí
+  // no hay nota que proteger y el tope es lo que cuida el tiempo de la clase.
+  const sinNota = currentActivity.verification.is_evaluative === false
+  const topeDeIntentos = currentActivity.verification.max_attempts || 3
+  const intentosPrevios = attempts + (sinNota ? scaffoldingTurns : 0)
   const wasExplained = existingEvidence.wasExplained === true
   // true si este turno se retiene el avance porque Sophia no pasó a la siguiente actividad
   let retenido = false
@@ -540,18 +546,33 @@ data: ${JSON.stringify({ type: 'done' })}
     !activityAlreadyCompleted &&
     lessonSession.lesson.course?.methodology !== 'CODE'
 
+  // Pedir seguir no es responder (lib/pide-seguir.ts; Maritza 24 oct, Rosario 26
+  // oct 2026): «¿podemos continuar?» gastaba intentos y desgloses y cerraba la
+  // actividad por tope. No se verifica ni cuenta; el código repite lo pedido.
+  const pidioSeguir =
+    pideSeguir(message) &&
+    !isContinuationMessage &&
+    !pidioAclaracion &&
+    !revisionRapida &&
+    !repiteLineaEquivocada &&
+    !choiceTurn &&
+    !checkTurn &&
+    !esTurnoDeConexion &&
+    !activityAlreadyCompleted &&
+    lessonSession.lesson.course?.methodology !== 'CODE'
+
   const [moderation, intent, verification] = await Promise.all([
-    isContinuationMessage || choiceTurn || checkTurn
+    isContinuationMessage || choiceTurn || checkTurn || pidioSeguir
       ? Promise.resolve(SAFE_MODERATION)
       : moderateContent(message, { lessonTitle }),
-    isContinuationMessage || choiceTurn || checkTurn
+    isContinuationMessage || choiceTurn || checkTurn || pidioSeguir
       ? Promise.resolve(CONTINUATION_INTENT)
       : classifyIntent(message, currentActivity, {
           currentLesson: lessonTitle,
           currentActivity: currentActivityInstruction,
           lastInstructorQuestion: lastInstructorMessage?.content || undefined
         }),
-    pidioAclaracion
+    pidioAclaracion || pidioSeguir
       ? Promise.resolve<ActivityCompletionResult>(SIN_VERIFICAR)
     // Revisión al tocar, o la misma línea equivocada otra vez: el código ya sabe que no respalda.
     : revisionRapida || repiteLineaEquivocada
@@ -622,6 +643,7 @@ data: ${JSON.stringify({ type: 'done' })}
     sinNotaDeUnTurno &&
     !isContinuationMessage &&
     !pidioAclaracion &&
+    !pidioSeguir &&
     !activityAlreadyCompleted &&
     !hallucinationCheck.isHallucination &&
     (!intent.is_on_topic || intent.intent === 'off_topic' || intent.intent === 'small_talk')
@@ -668,13 +690,19 @@ data: ${JSON.stringify({ type: 'done' })}
   // es parcial/cero pero en tema. Sophia entonces desglosa con una sub-pregunta
   // específica. Si ya alcanzamos el cap por tipo, forzamos avanzar con el nivel
   // actual (no se castiga al estudiante: el nivel ya refleja lo que llegó a dar).
+  // Clase de Rosario (26 oct 2026, S0 de tutoría): en un paso sin nota de 2
+  // intentos, el desglose no contaba y respondió 4 veces; y al llegar al tope de
+  // desglose, una respuesta a OTRA pregunta (off_topic) cerró la actividad 3.
+  // Ahora una respuesta fuera de tema no se desglosa (Sophia la redirige), y sin
+  // nota cada turno de desglose cuenta para el tope de intentos.
   let willScaffold = false
   if (
     verification.needs_scaffolding === true &&
     verification.next_subquestion &&
+    verification.response_type !== 'off_topic' &&
     !activityAlreadyCompleted
   ) {
-    if (scaffoldingTurns < scaffoldingCap) {
+    if (scaffoldingTurns < scaffoldingCap && (!sinNota || intentosPrevios + 1 < topeDeIntentos)) {
       willScaffold = true
     } else {
       // Cap alcanzado: avanzar con el nivel ya escalado
@@ -790,8 +818,14 @@ data: ${JSON.stringify({ type: 'done' })}
   // Una línea equivocada en un «listo», sin respuesta nueva: se evalúa lo escrito,
   // pero el toque no cuenta como intento ni cierra la actividad por tope.
   const lineaEquivocadaSola = isContinuationMessage && !!subrayadoQueNoRespalda && !revisarSubrayado && !turnoDeSubrayar && !revelarSubrayado
+  // Pidió seguir: se repite lo que Sophia pidió, con un mensaje fijo y sin modelo.
+  if (pidioSeguir && respuestaFija === null) {
+    willScaffold = false
+    respuestaFija = mensajePideSeguir(lastInstructorMessage?.content ?? '', currentActivity.verification.question)
+    logger.info('chat.stream.pide_seguir', { sessionId, activityId: currentActivity.id })
+  }
   // Turnos que no evalúan ni cuentan intento.
-  const turnoSinEvaluar = turnoDeSubrayar || recordarSubrayado || revisarSubrayado || repiteLineaEquivocada || pidioAclaracion || desvioEnPasoSinNota
+  const turnoSinEvaluar = turnoDeSubrayar || recordarSubrayado || revisarSubrayado || repiteLineaEquivocada || pidioAclaracion || desvioEnPasoSinNota || pidioSeguir
 
   // ¿Este turno agota los intentos? Misma condición que el avance forzado de
   // más abajo (bloque «intento fallido»: ni paso cerrado, ni comprobación, ni
@@ -806,7 +840,9 @@ data: ${JSON.stringify({ type: 'done' })}
     verification.unverified !== true &&
     verification.response_type !== 'continuation' &&
     !hallucinationCheck.isHallucination &&
-    attempts + 1 >= (currentActivity.verification.max_attempts || 3) &&
+    intentosPrevios + 1 >= topeDeIntentos &&
+    // Fuera de tema no es un intento (no suma) ni cierra la actividad (26 oct 2026).
+    verification.response_type !== 'off_topic' &&
     !turnoSinEvaluar &&
     !lineaEquivocadaSola
 
@@ -1707,15 +1743,16 @@ const allActivities = await prisma.activityProgress.findMany({
           // Marcamos como completado con nivel "En inicio"
           // Mismo tope que usa el prompt (prompt-builder: max_attempts || 3). Antes
           // el código esperaba 5 mientras Sophia ya «avanzaba» en el 3: desfase.
-          const forcedAdvanceLimit = currentActivity.verification.max_attempts || 3
-          const newAttemptCount = attempts + 1
+          // Sin nota, los desgloses cuentan (intentosPrevios): igual que cierraPorTope.
+          const forcedAdvanceLimit = topeDeIntentos
+          const newAttemptCount = intentosPrevios + 1
 
           // Si este turno retuvo el avance (Sophia no planteó la actividad
           // siguiente), no se fuerza aquí: el turno que viene avanza con la
           // pregunta. 20 oct 2026: en una actividad de un intento se retuvo y se
           // forzó en el mismo turno; el puntero pasó a la actividad siguiente
           // sin que Sophia la enseñara.
-          if (newAttemptCount >= forcedAdvanceLimit && !retenido && !turnoSinEvaluar && !lineaEquivocadaSola) {
+          if (newAttemptCount >= forcedAdvanceLimit && !retenido && !turnoSinEvaluar && !lineaEquivocadaSola && !isOffTopic) {
             // Buscar el mejor intento (mayor completeness_percentage)
             type AttemptAnalysis = { understanding_level?: string; completeness_percentage?: number }
             type AttemptRecord = { analysis?: AttemptAnalysis }
