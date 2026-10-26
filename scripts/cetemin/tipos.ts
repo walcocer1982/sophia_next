@@ -27,7 +27,8 @@ export interface CursoSpec {
   title: string
   capacidad: string
   instructor: string
-  carreraId: string
+  /** Sin carrera: el curso es transversal y lo ven todas las carreras. */
+  carreraId?: string
   userId: string
 }
 
@@ -66,6 +67,13 @@ export interface PuntoClaveSpec {
   subtitle: string
   keyPointIndex: number
   lamina: { imagenId: string; title: string }
+  /**
+   * Cuándo aparece la lámina. Por defecto, al empezar, DEBAJO del texto que se toca.
+   * «on_reference»: solo cuando Sophia la cita, y en la pizarra queda solo el texto
+   * (23 oct 2026, clase de EOM: con dos recursos el texto quedaba fuera de vista y
+   * los alumnos no lo encontraban para tocar la línea).
+   */
+  laminaCuando?: 'on_start' | 'on_reference'
   norma: NormaSpec
   apoyo?: { imagenId: string; title: string }[]
   /** Una a tres frases. Va dentro de la instrucción de Sophia: corta. */
@@ -110,6 +118,8 @@ export interface CasoCortoSpec {
   }
   /** Qué preguntar si decide mal o a medias. */
   pistas: string
+  /** Textos de los puntos clave que siguen abiertos en el caso. Por defecto, todos; [] deja solo el caso. */
+  usa?: string[]
   criterios: string[]
   critical?: number[]
   commonMistakes?: string[]
@@ -132,6 +142,8 @@ export interface SesionSpec {
   puntosClave: PuntoClaveSpec[]
   casoCorto: CasoCortoSpec
   cierre?: { title?: string; subtitle?: string }
+  /** Lección sin caso de equipo después (p. ej. la presentación de Sophia): el caso corto y el cierre no lo anuncian. */
+  sinTrabajoEnEquipo?: boolean
   contexto: LessonContent['context']
 }
 

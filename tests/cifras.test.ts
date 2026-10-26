@@ -6,17 +6,17 @@ const criterio = 'Decide que sí: en industria general la norma exige protecció
 const dados = 'Un operario trabaja desde un entrepiso a 1,50 m del piso. ¿Está en trabajo en altura, y por qué?'
 
 test('valores con unidad: misma cifra escrita distinto; sin unidad no cuenta', () => {
-  assert.deepEqual(valoresConUnidad('desde 1,20 m o 1.2 metros'), [{ n: 1.2, unidad: 'm' }, { n: 1.2, unidad: 'm' }])
+  assert.deepEqual(valoresConUnidad('desde 1,20 m o 1.2 metros'), [{ n: 1.2, unidad: 'm', decimales: 2 }, { n: 1.2, unidad: 'm', decimales: 1 }])
   assert.deepEqual(valoresConUnidad('la norma 1910, art. 134, del año 2016'), [])
-  assert.deepEqual(valoresConUnidad('una baranda de 60 cm y un 25 %'), [{ n: 60, unidad: 'cm' }, { n: 25, unidad: '%' }])
+  assert.deepEqual(valoresConUnidad('una baranda de 60 cm y un 25 %'), [{ n: 60, unidad: 'cm', decimales: 0 }, { n: 25, unidad: '%', decimales: 0 }])
 })
 
 test('dictado del navegador: «1 m 80» es 1,80 m (prueba de Edwin, 21 oct)', () => {
-  assert.deepEqual(valoresConUnidad('ahí aplicaría 1 m 80 y en industria 1 m 20 que es'), [{ n: 1.8, unidad: 'm' }, { n: 1.2, unidad: 'm' }])
+  assert.deepEqual(valoresConUnidad('ahí aplicaría 1 m 80 y en industria 1 m 20 que es'), [{ n: 1.8, unidad: 'm', decimales: 2 }, { n: 1.2, unidad: 'm', decimales: 2 }])
   const crit = 'Decide: en la embotelladora sí (OSHA 1910, industria general, desde 1,20 m) y en la mina no por umbral (D.S. 024, desde 1,80 m)'
   const alumno = ['en la planta concentradora de minerales, ahí aplicaría 1 m 80 porque está el Decreto Supremo cero 24 y en la planta embotelladora sería la zona industrial 1 m 20 que es la olla 19 10.28.']
   assert.equal(contradiceCifras(crit, alumno, 'La misma plataforma de 1,60 m en dos lugares'), false)
-  assert.deepEqual(valoresConUnidad('una baranda de 1 m 5 cm'), [{ n: 1, unidad: 'm' }, { n: 5, unidad: 'cm' }])
+  assert.deepEqual(valoresConUnidad('una baranda de 1 m 5 cm'), [{ n: 1, unidad: 'm', decimales: 0 }, { n: 5, unidad: 'cm', decimales: 0 }])
 })
 
 test('simulación «apurado» del 21 oct: decide bien con un umbral falso → no cubre', () => {
@@ -48,4 +48,16 @@ test('descartar mueve el criterio a «faltan» (números 1-based)', () => {
   assert.equal(n, 1)
   assert.deepEqual(r.criteriaMatched, [2])
   assert.deepEqual(r.criteriaMissing, [1])
+})
+
+test('redondeo a la precisión del criterio: «94,7 %» es «95 %» (prueba de Christian, 26 oct)', () => {
+  const criterio = 'Decide que no le sobra: trabaja al 95 % (71 A de 75 A)'
+  const dados = 'Corriente nominal 75 A; la pinza mide 71 A'
+  assert.equal(contradiceCifras(criterio, ['el motor está trabajando al 94.7 % de su capacidad nominal'], dados), false)
+  assert.equal(contradiceCifras(criterio, ['trabaja al 94,7 %'], dados), false)
+  assert.equal(contradiceCifras(criterio, ['trabaja al 90 %'], dados), true)
+  // Con decimales en el criterio, el redondeo no rescata un valor distinto.
+  assert.equal(contradiceCifras('Decide: en la embotelladora sí, desde 1,20 m', ['desde 1,25 m'], ''), true)
+  assert.equal(contradiceCifras('Decide: en la embotelladora sí, desde 1,20 m', ['desde 1.2 m'], ''), false)
+  assert.equal(contradiceCifras('Decide que sí: desde 1,80 m', ['dice 1,50 m'], ''), true)
 })

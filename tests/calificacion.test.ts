@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { crearQuitadorDeCalificaciones, quitarCalificacionInicial, quitarCalificaciones } from '../lib/calificacion'
+import { crearQuitadorDeCalificaciones, debeQuitarCalificacion, quitarCalificacionInicial, quitarCalificaciones } from '../lib/calificacion'
 
 const enTrozos = (texto: string, paso: number) => {
   const q = crearQuitadorDeCalificaciones()
@@ -62,4 +62,13 @@ test('simulación PM-FMPLANTA S1 (22 oct): «Excelente pregunta.» en el Me preg
     quitarCalificaciones('Excelente pregunta. Eso que planteas lo vamos a distinguir hoy.'),
     'Eso que planteas lo vamos a distinguir hoy.',
   )
+})
+
+test('debeQuitarCalificacion: sin aprobación del verificador no hay «Correcto», ni con avance forzado', () => {
+  const base = { evaluativa: true, respuestaFija: false, aproboElVerificador: true, pasoCerrado: false }
+  assert.equal(debeQuitarCalificacion(base), false) // aprobó: puede decir «Correcto»
+  assert.equal(debeQuitarCalificacion({ ...base, aproboElVerificador: false }), true) // «listoç» al agotar intentos
+  assert.equal(debeQuitarCalificacion({ ...base, evaluativa: false }), true) // paso sin nota
+  assert.equal(debeQuitarCalificacion({ ...base, aproboElVerificador: false, pasoCerrado: true }), false) // alternativa corregida en código
+  assert.equal(debeQuitarCalificacion({ ...base, aproboElVerificador: false, respuestaFija: true }), false) // mensaje fijo
 })

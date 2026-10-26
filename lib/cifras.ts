@@ -14,6 +14,8 @@
 export interface Valor {
   n: number
   unidad: string
+  /** Decimales con que está escrita la cifra («95 %» → 0, «1,20 m» → 2). */
+  decimales: number
 }
 
 const UNIDADES: Record<string, string> = {
@@ -44,12 +46,25 @@ export function valoresConUnidad(texto: string): Valor[] {
   for (const m of metrosDictados(sinTildes(texto)).matchAll(re)) {
     const unidad = UNIDADES[m[2].toLowerCase()]
     if (!unidad) continue
-    out.push({ n: Number(m[1].replace(',', '.')), unidad })
+    const [, dec = ''] = m[1].split(/[.,]/)
+    out.push({ n: Number(m[1].replace(',', '.')), unidad, decimales: dec.length })
   }
   return out
 }
 
 const igual = (a: Valor, b: Valor) => a.unidad === b.unidad && Math.abs(a.n - b.n) < 1e-9
+
+/**
+ * ¿La cifra del alumno es la del criterio? Se redondea a la precisión con que
+ * está escrita la del criterio (26 oct 2026, prueba de Christian): el criterio
+ * decía «95 %» y él calculó «94,7 %»; la comparación exacta lo dio por
+ * contradicho y la actividad avanzó por límite con la respuesta bien.
+ */
+const coincide = (delCriterio: Valor, delAlumno: Valor) => {
+  if (delCriterio.unidad !== delAlumno.unidad) return false
+  const f = 10 ** delCriterio.decimales
+  return Math.abs(Math.round(delAlumno.n * f) / f - delCriterio.n) < 1e-9
+}
 
 /**
  * ¿Lo que dijo el alumno contradice las cifras del criterio?
@@ -63,7 +78,7 @@ export function contradiceCifras(criterio: string, textosDelAlumno: string[], da
   const porSaber = valoresConUnidad(criterio).filter((v) => !dados.some((d) => igual(d, v)))
   if (porSaber.length === 0) return false
   const delAlumno = valoresConUnidad(textosDelAlumno.join(' '))
-  if (delAlumno.some((v) => porSaber.some((r) => igual(r, v)))) return false
+  if (delAlumno.some((v) => porSaber.some((r) => coincide(r, v)))) return false
   const unidades = new Set(porSaber.map((v) => v.unidad))
   return delAlumno.some((v) => unidades.has(v.unidad) && !dados.some((d) => igual(d, v)))
 }

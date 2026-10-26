@@ -52,7 +52,9 @@ const subrayadas = (b: TextBlock, s: SubrayadoState) => {
 export function describeSubrayadoForPrompt(b: TextBlock, s: SubrayadoState): string {
   const marcadas = subrayadas(b, s)
   if (!marcadas.length) {
-    return `«${b.title}»: todavía no subrayó nada. Si tu pregunta pide justificar con el material, pídele que toque en ese texto la línea que respalda su respuesta.`
+    // 23 oct 2026: Sophia pedía la línea por su cuenta aunque la respuesta estuviera
+    // mal. El pedido lo hace el código, y solo cuando la respuesta escrita aprobó.
+    return `«${b.title}»: todavía no subrayó nada. No le pidas que toque una línea: eso lo pide el sistema cuando su respuesta escrita esté bien.`
   }
   const resultado = evaluarSubrayado(b, s)
   const juicio =
@@ -160,6 +162,23 @@ export function leerSubrayadoGuardado(material: unknown): SubrayadoGuardado[] {
 }
 
 /**
+ * Lo último que tocó en cada texto, leído de sus mensajes guardados, como estado
+ * de la pizarra. El estado vive en el navegador y nace vacío: al recargar se
+ * perdía lo tocado y el siguiente mensaje viajaba «sin subrayar» (23 oct 2026).
+ */
+export function subrayadosDesdeMensajes(materiales: unknown[], bloques: Map<string, SupportBlock>): Record<string, SubrayadoState> {
+  const estado: Record<string, SubrayadoState> = {}
+  for (const s of materiales.flatMap((m) => leerSubrayadoGuardado(m))) {
+    const b = bloques.get(s.blockId)
+    if (!b || b.type !== 'text') continue
+    const lineas = lineasDelTexto(b.body).map(textoPlano)
+    const indices = s.lineas.map((l) => lineas.indexOf(l)).filter((n) => n >= 0)
+    if (indices.length) estado[b.id] = { lineas: [...new Set(indices)].sort((a, z) => a - z) }
+  }
+  return estado
+}
+
+/**
  * Turno de subrayar (investigacion/turno-de-subrayar-2026-10-20.md): el alumno
  * respondió sin subrayar en una actividad que lo pide. El código no evalúa ni
  * cuenta intento, y el mensaje lo escribe él, sin modelo (21 oct 2026): con una
@@ -180,6 +199,19 @@ export function mensajeTurnoDeSubrayar(titulos: string[]): string {
 export function mensajeRecordatorioSubrayado(titulos: string[]): string {
   const donde = titulos.map((t) => `«${t}»`).join(' o ')
   return `${RECORDATORIO_SUBRAYAR} toca en ${donde} la línea que respalda tu respuesta; está marcada en la pizarra. Tu respuesta ya quedó guardada.`
+}
+
+/**
+ * ¿Toca pedirle que toque la línea? (23 oct 2026, primera clase con alumnos de EOM)
+ * - Solo si su respuesta escrita aprobó: a quien respondió lo contrario de la
+ *   lección se le pedía «la línea que respalda tu respuesta», que no existe, y
+ *   tocaba al azar. Con la respuesta mal, Sophia la trabaja primero.
+ * - Y no si ya tocó una en esta actividad, aunque el navegador la haya olvidado
+ *   (recargó o se cortó la conexión): a un alumno se le pidió dos veces una
+ *   línea que ya estaba en verde.
+ */
+export function faltaTocarLaLinea(a: { textos: SubrayadoState[]; tocoAntes: boolean; aprobo: boolean }): boolean {
+  return a.aprobo && !a.tocoAntes && a.textos.length > 0 && a.textos.every((s) => s.lineas.length === 0)
 }
 
 const PEDIDO_SUBRAYAR = 'Tu respuesta quedó guardada. Falta un paso:'

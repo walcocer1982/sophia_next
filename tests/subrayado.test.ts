@@ -120,3 +120,37 @@ test('línea correcta: la primera oración la fija el código, con y sin respues
   assert.ok(a.includes('"Esa es la línea."') && a.includes('PROHIBIDO pedirle otra línea') && a.includes('transición'))
   assert.ok(b.includes('"Esa es la línea."') && b.includes('lo que falta de su respuesta escrita') && !b.includes('transición'))
 })
+
+test('clase de EOM (23 oct): la línea se pide solo si la respuesta aprobó y no tocó ya una', async () => {
+  const { faltaTocarLaLinea } = await import('../lib/subrayado')
+  // «Sí, porque terminaría más rápido» (lo contrario de la lección): no se pide la línea.
+  assert.equal(faltaTocarLaLinea({ textos: [sinSubrayar()], tocoAntes: false, aprobo: false }), false)
+  // Respuesta aprobada, sin tocar nada: se pide.
+  assert.equal(faltaTocarLaLinea({ textos: [sinSubrayar()], tocoAntes: false, aprobo: true }), true)
+  // Tocó la línea, recargó la página y el navegador la olvidó: lo guardado cuenta.
+  assert.equal(faltaTocarLaLinea({ textos: [sinSubrayar()], tocoAntes: true, aprobo: true }), false)
+  // Respondió y tocó en el mismo mensaje.
+  assert.equal(faltaTocarLaLinea({ textos: [{ lineas: [3] }], tocoAntes: false, aprobo: true }), false)
+  // Sin texto para tocar en la actividad.
+  assert.equal(faltaTocarLaLinea({ textos: [], tocoAntes: false, aprobo: true }), false)
+})
+
+test('Sophia no pide la línea por su cuenta cuando todavía no subrayó (23 oct)', () => {
+  const t = describeSubrayadoForPrompt(texto, sinSubrayar())
+  assert.match(t, /No le pidas que toque una línea/)
+  assert.doesNotMatch(t, /pídele que toque/)
+})
+
+test('al recargar, lo tocado vuelve a la pizarra desde los mensajes guardados (23 oct)', async () => {
+  const { subrayadosDesdeMensajes } = await import('../lib/subrayado')
+  const bloques = new Map([[texto.id, texto]])
+  const materiales = [
+    null,
+    { subrayado: [{ blockId: 'norma-x', titulo: 'La regla', lineas: ['Segunda condición del texto.'], resultado: 'no_respalda' }] },
+    { subrayado: [{ blockId: 'norma-x', titulo: 'La regla', lineas: ['Primera condición del texto.'], resultado: 'respalda' }] },
+    { subrayado: [{ blockId: 'otro', titulo: 'Otro', lineas: ['x'] }] },
+  ]
+  // Queda lo último que tocó en cada texto; un texto que ya no existe se ignora.
+  assert.deepEqual(subrayadosDesdeMensajes(materiales, bloques), { 'norma-x': { lineas: [0] } })
+  assert.deepEqual(subrayadosDesdeMensajes([], bloques), {})
+})

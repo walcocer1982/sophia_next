@@ -16,7 +16,7 @@ import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/sup
 import { citedFromTexts, createMarkerFilter, stripMarkers, type MarkerCheck } from '@/lib/material-markers'
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
 import { crearCorrectorDeTitulos } from '@/lib/titulos-material'
-import { crearQuitadorDeCalificaciones } from '@/lib/calificacion'
+import { crearQuitadorDeCalificaciones, debeQuitarCalificacion } from '@/lib/calificacion'
 import { planteaLaPregunta } from '@/lib/planteo'
 import type { ChoiceTurn } from '@/lib/prompt-builder'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
@@ -30,7 +30,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { checkReply, checksIntro, newChecksState, readCheck, type ChecksState, type CheckTurn } from '@/lib/checks'
 import { describeStateForPrompt, directivaSiYaMovio, initialState, sanitizeState, type SimState } from '@/lib/simulator'
 import { describeClasifForPrompt, describeClasifForVerifier, sanitizeClasif, vacio as clasificacionVacia, type ClasifState } from '@/lib/clasificar'
-import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, guiaRevelarSubrayado, guiaLineaCorrecta, leerSubrayadoGuardado, lineasClaveTexto, mensajeRecordatorioSubrayado, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, hayQueRevisarSubrayado, esRepeticionEquivocada, type UltimoSubrayado, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
+import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, faltaTocarLaLinea, guiaRevelarSubrayado, guiaLineaCorrecta, leerSubrayadoGuardado, lineasClaveTexto, mensajeRecordatorioSubrayado, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, hayQueRevisarSubrayado, esRepeticionEquivocada, type UltimoSubrayado, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
 import { resumenDeCierre } from '@/lib/cierre'
 import { pideAclaracion } from '@/lib/aclaracion'
 import { cierreParaAlumno, mensajeBloqueCerrado, ventanaPaso } from '@/lib/ventana-alumno'
@@ -613,6 +613,23 @@ data: ${JSON.stringify({ type: 'done' })}
   ])
   marcar('gate')
 
+  // Un paso sin nota de un turno (rutina, cierre) se acepta sin verificador, pero
+  // un mensaje fuera de tema no lo responde (23 oct 2026, clase de EOM): «¿Eres
+  // mejor que Gemini?» cerraba el paso Veo, Sophia repetía su pregunta y el código
+  // le pegaba la del paso siguiente, dos preguntas en un mensaje (6 de 11 alumnos).
+  // No cuenta intento ni avanza; Sophia repite la pregunta del paso.
+  const desvioEnPasoSinNota =
+    sinNotaDeUnTurno &&
+    !isContinuationMessage &&
+    !pidioAclaracion &&
+    !activityAlreadyCompleted &&
+    !hallucinationCheck.isHallucination &&
+    (!intent.is_on_topic || intent.intent === 'off_topic' || intent.intent === 'small_talk')
+  if (desvioEnPasoSinNota) {
+    Object.assign(verification, { ...SIN_VERIFICAR, response_type: 'off_topic' })
+    logger.info('chat.stream.desvio_en_paso_sin_nota', { sessionId, activityId: currentActivity.id, intent: intent.intent })
+  }
+
   // Detectar si esta vuelta vamos a inyectar una MINI-EXPLICACIÓN (el alumno
   // admite que no conoce el tema + primer intento + no fue explicado antes).
   // Si sí, marcamos el flag para que el verificador en la próxima vuelta sepa
@@ -639,6 +656,10 @@ data: ${JSON.stringify({ type: 'done' })}
     relevance_score: intent.relevance_score,
     moderation_safe: moderation.is_safe,
   })
+
+  // Lo que decidió el verificador ANTES de que el código fuerce el avance (tope de
+  // desglose, cierre por intentos): decide si Sophia puede calificar (26 oct 2026).
+  const aproboElVerificador = verification.ready_to_advance === true && verification.unverified !== true
 
   // ═══════════════════════════════════════════════════════════════
   // Escalada por desglose (scaffolding)
@@ -680,9 +701,14 @@ data: ${JSON.stringify({ type: 'done' })}
   // subrayar nada y todavía no se le pidió: este turno no se evalúa ni cuenta
   // intento; Sophia solo pide la línea. Una sola vez por actividad. No se
   // intercepta un «no sé», una ayuda, un fuera de tema ni una continuación.
+  // Desde el 23 oct 2026, solo si la respuesta escrita aprobó y si no tocó ya una
+  // línea en esta actividad (lo guardado cuenta aunque el navegador lo olvide).
   const sinSubrayarAun =
-    subrayablesPropios.length > 0 &&
-    subrayablesPropios.every(({ state }) => state.lineas.length === 0) &&
+    faltaTocarLaLinea({
+      textos: subrayablesPropios.map(({ state }) => state),
+      tocoAntes: subrayablesPropios.some(({ b }) => ultimoSubrayadoGuardado.has(b.id)),
+      aprobo: verification.ready_to_advance === true && verification.unverified !== true,
+    }) &&
     !pidioAclaracion &&
     lessonSession.lesson.course?.methodology !== 'CODE' &&
     !choiceTurn &&
@@ -765,7 +791,7 @@ data: ${JSON.stringify({ type: 'done' })}
   // pero el toque no cuenta como intento ni cierra la actividad por tope.
   const lineaEquivocadaSola = isContinuationMessage && !!subrayadoQueNoRespalda && !revisarSubrayado && !turnoDeSubrayar && !revelarSubrayado
   // Turnos que no evalúan ni cuentan intento.
-  const turnoSinEvaluar = turnoDeSubrayar || recordarSubrayado || revisarSubrayado || repiteLineaEquivocada || pidioAclaracion
+  const turnoSinEvaluar = turnoDeSubrayar || recordarSubrayado || revisarSubrayado || repiteLineaEquivocada || pidioAclaracion || desvioEnPasoSinNota
 
   // ¿Este turno agota los intentos? Misma condición que el avance forzado de
   // más abajo (bloque «intento fallido»: ni paso cerrado, ni comprobación, ni
@@ -1071,9 +1097,15 @@ CÓMO RESPONDER (máximo 90 palabras):
         const correctorVoseo = crearCorrectorDeVoseo()
         // Títulos del material entre «» (lib/titulos-material.ts): «toca en el texto Cuándo…».
         const correctorTitulos = crearCorrectorDeTitulos(allLessonBlocks(contentJson, verSinValidar).map((b) => b.title))
-        // En un paso sin nota, la calificación con que abre («Exacto.») se quita
-        // en el código (lib/calificacion.ts): el prompt no bastó.
-        const quitador = currentActivity.verification.is_evaluative === false && respuestaFija === null
+        // La calificación («Exacto.», «Correcto.») se quita en el código
+        // (lib/calificacion.ts): en un paso sin nota siempre, y en uno con nota si
+        // el verificador no aprobó, aunque el código avance por tope o desglose.
+        const quitador = debeQuitarCalificacion({
+          evaluativa: currentActivity.verification.is_evaluative !== false,
+          respuestaFija: respuestaFija !== null,
+          aproboElVerificador: aproboElVerificador && verification.ready_to_advance === true,
+          pasoCerrado: !!choiceTurn || !!checkTurn,
+        })
           ? crearQuitadorDeCalificaciones()
           : null
         const limpiar = (trozo: string) => (quitador ? quitador.push(trozo) : trozo)
@@ -1224,6 +1256,7 @@ CÓMO RESPONDER (máximo 90 palabras):
           !verification.ready_to_advance &&
           verification.response_type !== 'continuation' &&
           !hallucinationCheck.isHallucination &&
+          !desvioEnPasoSinNota &&
           attempts + 1 >= (currentActivity.verification.max_attempts || 3)
         if (
           !verification.ready_to_advance &&
@@ -1232,7 +1265,8 @@ CÓMO RESPONDER (máximo 90 palabras):
           respuestaFija === null &&
           !choiceTurn &&
           !avanzaPorIntentos &&
-          !turnoSinEvaluar &&
+          // Tras un desvío en la rutina, la pregunta del paso tiene que quedar en el mensaje.
+          (!turnoSinEvaluar || desvioEnPasoSinNota) &&
           !terminaEnPregunta(cleanedAssistantContent)
         ) {
           // Sin intentos todavía, una actividad que abre con otra pregunta (la
