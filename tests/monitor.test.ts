@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import {
   atendido,
   avisoDeIntentos,
+  noEntraronAlBloque,
   cierreDeVentana,
   estadoDeSesion,
   pasoDelEmbudo,
@@ -164,4 +165,21 @@ test('lección reabierta (26 oct): la sesión que quedó antes de la apertura es
   assert.equal(estadoDeSesion(hoy, cierre, ahora, apertura).estado, 'activa')
   // Sin apertura, la regla de siempre.
   assert.equal(estadoDeSesion(jueves, cierre, ahora).estado, 'en-pausa')
+})
+
+test('no entraron al bloque: sin sesión de esta ventana y sin «desertó», por nombre', () => {
+  const apertura = new Date('2026-10-26T15:00:00Z')
+  const matriculados = [
+    { userId: 'a', name: 'Zevallos Ana' },
+    { userId: 'b', name: 'Perez Rivera Rosario' },
+    { userId: 'c', name: 'Challhua Tito Luis' },
+    { userId: 'd', name: 'Azurza Pedro' },
+    { userId: 'e', name: 'Samar Santiago' },
+  ]
+  const sesiones = [
+    { userId: 'c', lastActivityAt: new Date('2026-10-26T15:10:00Z') }, // entró
+    { userId: 'a', lastActivityAt: new Date('2026-10-19T15:10:00Z') }, // ventana anterior: no cuenta
+  ]
+  const r = noEntraronAlBloque(matriculados, sesiones, apertura, new Set(['d']))
+  assert.deepEqual(r.map((a) => a.userId), ['b', 'e', 'a'])
 })

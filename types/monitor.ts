@@ -99,7 +99,18 @@ export type RespuestaMonitor = {
   /** Alguna sección visible tiene una ventana abierta ahora mismo. */
   enVivo: boolean
   /** Las ventanas abiertas ahora, una por sección y sesión: de aquí sale el botón para terminar el bloque. */
-  bloquesAbiertos: Array<{ sectionId: string; sectionName: string; lessonId: string; lessonOrder: number; lessonTitle: string; cierra: string }>
+  bloquesAbiertos: Array<{
+    sectionId: string
+    sectionName: string
+    lessonId: string
+    lessonOrder: number
+    lessonTitle: string
+    cierra: string
+    /** Matriculados de la sección que se esperan (sin «desertó»). */
+    esperados: number
+    /** Los que aún no abren la sesión en esta ventana (26 oct 2026). */
+    noEntraron: Array<{ userId: string; name: string | null }>
+  }>
   filas: FilaMonitor[]
   pendientes: PendienteMonitor[]
   funnels: EmbudoLeccion[]

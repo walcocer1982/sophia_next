@@ -16,6 +16,7 @@ import { cierreDeHorario,
   avisoDeIntentos,
   cierreDeVentana,
   estadoDeSesion,
+  noEntraronAlBloque,
   pasoDelEmbudo,
   representativa,
   type ProgresoEmbudo,
@@ -419,6 +420,15 @@ export async function GET(
     // La hora va formateada desde el servidor: así se ve igual que en la matriz.
     bloquesAbiertos: abiertos.map(({ s, h, cierre }) => {
       const l = lessons.find((x) => x.id === h.lessonId)
+      const desertores = new Set(
+        s.enrollments.filter((e) => marcas.get(e.userId)?.estado === 'DESERTO').map((e) => e.userId)
+      )
+      const noEntraron = noEntraronAlBloque(
+        s.enrollments.map((e) => ({ userId: e.userId, name: e.user.name })),
+        l?.sessions ?? [],
+        h.availableAt!,
+        desertores
+      )
       return {
         sectionId: s.id,
         sectionName: s.name,
@@ -426,6 +436,8 @@ export async function GET(
         lessonOrder: l?.order ?? 0,
         lessonTitle: l?.title ?? '',
         cierra: formatTime(cierre!),
+        esperados: s.enrollments.length - desertores.size,
+        noEntraron,
       }
     }),
     filas,

@@ -543,6 +543,7 @@ Connection: keep-alive
 - `filas[]`: una por alumno y lección (la sesión representativa), con `estado` activa · en-pausa · sin-terminar · terminada, `avance` a-medias / sin-avanzar, intentos con aviso a uno del tope, `porLimite` y la marca de seguimiento.
 - `pendientes[]`: alumnos con sesiones cerradas sin terminar o sin abrir («no entró») y sin marca de seguimiento posterior al evento.
 - `funnels[]`: por lección; el cuello de botella se mide sobre los que llegaron a la actividad y «por límite» no cuenta como superada.
+- `bloquesAbiertos[]`: cada ventana abierta, con `esperados` y `noEntraron` (matriculados de la sección sin sesión desde la apertura, sin «desertó»; `noEntraronAlBloque` en `lib/monitor.ts`). La pantalla en vivo los muestra en la franja «Aún no entran».
 - No escribe nada. Dispara los reportes parciales como mucho una vez cada 5 min por curso.
 
 ---
