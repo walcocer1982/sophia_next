@@ -544,6 +544,7 @@ Connection: keep-alive
 - `pendientes[]`: alumnos con sesiones cerradas sin terminar o sin abrir («no entró») y sin marca de seguimiento posterior al evento.
 - `funnels[]`: por lección; el cuello de botella se mide sobre los que llegaron a la actividad y «por límite» no cuenta como superada.
 - `bloquesAbiertos[]`: cada ventana abierta, con `esperados` y `noEntraron` (matriculados de la sección sin sesión desde la apertura, sin «desertó»; `noEntraronAlBloque` en `lib/monitor.ts`). La pantalla en vivo los muestra en la franja «Aún no entran».
+- La pantalla en vivo muestra solo las filas del bloque abierto, por sección y lección (`filasDelBloqueAbierto`, 27 oct 2026): al terminar el horario o cerrarlo el instructor, la tabla se vacía y lo de esa sesión queda en la matriz y el reporte. Antes seguían las filas «a medias» de la sesión de ayer.
 - No escribe nada. Dispara los reportes parciales como mucho una vez cada 5 min por curso.
 
 ---
@@ -1886,6 +1887,9 @@ Referencia: `scripts/cetemin/cursos/si-altoriesgo/s1.ts` (S1, 9 actividades: 3 d
 
 **Q:** Un alumno del padrón aparece con un nombre raro («Elpinin 9», «nelson»)
 **A:** El ingreso con Google pisaba el nombre oficial con el de su cuenta de Google. Desde el 23 oct 2026 `auth.ts` no cambia el nombre de una cuenta con DNI (del padrón). Los nombres oficiales por DNI están en el «Consolidado de Tutoría» (Tutoría - Cetemin 2026.xlsx).
+
+**Q:** Un alumno ve en su inicio cursos que no lleva (otro curso transversal, uno borrado)
+**A:** Desde el 27 oct 2026 el alumno ve solo las lecciones que su sección activa programó con fecha, abiertas o por venir (`lib/lecciones-alumno.ts`), y nadie ve cursos borrados. Antes veía todo lo publicado de su carrera y lo transversal: en tres semanas hubo 41 sesiones de no matriculados en AI 101, EPPs, Tutoría y Química.
 
 **Q:** `ClientFetchError` en login
 **A:** Verifica que `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` estén en `.env`

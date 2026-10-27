@@ -17,6 +17,8 @@ export type FilaMonitor = {
   name: string | null
   email: string | null
   sessionId: string
+  /** La sección del alumno en este curso: con la lección, dice si la fila es del bloque abierto. */
+  sectionId: string
   lessonId: string
   lessonTitle: string
   estado: EstadoVivo
