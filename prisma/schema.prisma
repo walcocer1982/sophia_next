@@ -51,6 +51,12 @@ model User {
   // Admisión del estudiante (período académico en que ingresó, ej: "2026-1").
   // Se elige en el onboarding y filtra las secciones visibles a su cohorte.
   admissionPeriodId String?
+  // Cuenta duplicada unida a la del padrón (26 oct 2026): el alumno entró con
+  // otro correo de Google y la plataforma le creó una cuenta nueva. Su trabajo
+  // pasó a `unidaA`; la duplicada queda vacía para que un token abierto con
+  // ella se redirija (auth.ts) y su correo no cree otra (lib/unir-cuentas.ts).
+  unidaA        String?
+  unidaEn       DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
