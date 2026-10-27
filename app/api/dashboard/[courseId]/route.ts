@@ -294,6 +294,7 @@ export async function GET(
         name: alumno.user.name,
         email: alumno.user.email,
         sessionId: s.id,
+        sectionId: alumno.sectionId,
         lessonId: lesson.id,
         lessonTitle: lesson.title,
         estado,

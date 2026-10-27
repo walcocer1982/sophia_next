@@ -202,3 +202,17 @@ export function noEntraronAlBloque<A extends { userId: string; name: string | nu
     .filter((a) => !entraron.has(a.userId) && !desertores.has(a.userId))
     .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'es'))
 }
+
+/**
+ * Lo que muestra el Monitor en vivo (27 oct 2026, Walther: «esto se debe cerrar
+ * ni bien termina el horario programado»): solo las sesiones de un bloque abierto,
+ * por sección y lección. Las de un bloque que ya cerró (la S1 de ayer, «a medias»)
+ * se revisan en la matriz y en el reporte de la sesión. Sin bloque abierto, nada.
+ */
+export function filasDelBloqueAbierto<F extends { sectionId: string; lessonId: string }>(
+  filas: F[],
+  bloques: { sectionId: string; lessonId: string }[],
+): F[] {
+  const abiertos = new Set(bloques.map((b) => `${b.sectionId}:${b.lessonId}`))
+  return filas.filter((f) => abiertos.has(`${f.sectionId}:${f.lessonId}`))
+}

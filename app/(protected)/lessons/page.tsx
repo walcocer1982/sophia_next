@@ -1,5 +1,6 @@
 import { auth } from '@/auth'
 import { cierreDeVentana } from '@/lib/monitor'
+import { programadaParaElAlumno } from '@/lib/lecciones-alumno'
 import { prisma } from '@/lib/prisma'
 import { CareerFilter } from '@/components/lessons/career-filter'
 import { InteractiveGridPattern } from '@/components/ui/interactive-grid-pattern'
@@ -31,15 +32,18 @@ export default async function LessonsPage() {
   const role = user?.role || 'STUDENT'
   const isSuperadmin = role === 'SUPERADMIN'
 
-  // Filter by career for non-SUPERADMIN (include transversal courses with careerId=null)
-  const careerFilter = !isSuperadmin && user?.careerId
-    ? { course: { OR: [{ careerId: user.careerId }, { careerId: null }] } }
-    : {}
+  // Filter by career for non-SUPERADMIN (include transversal courses with careerId=null).
+  // Un curso borrado no se muestra a nadie (27 oct 2026: AI 101 y EPPs seguían en el inicio).
+  const courseFilter = {
+    deletedAt: null,
+    ...(!isSuperadmin && user?.careerId ? { OR: [{ careerId: user.careerId }, { careerId: null }] } : {}),
+  }
 
   // Get student's enrollments to look up section schedules
   const studentEnrollments = session?.user?.id
     ? await prisma.enrollment.findMany({
-        where: { userId: session.user.id },
+        // Solo secciones activas: una archivada ya no programa nada.
+        where: { userId: session.user.id, section: { isArchived: false } },
         select: { sectionId: true, section: { select: { courseId: true } } },
       })
     : []
@@ -50,7 +54,7 @@ export default async function LessonsPage() {
   const lessons = (await prisma.lesson.findMany({
     where: {
       isPublished: true,
-      ...careerFilter,
+      course: courseFilter,
     },
     orderBy: [
       { course: { title: 'asc' } },
@@ -145,6 +149,7 @@ export default async function LessonsPage() {
       status: (progressMap.get(l.id) || 'not_started') as 'completed' | 'in_progress' | 'not_started',
       isAvailable,
       isClosed,
+      programada: programadaParaElAlumno({ seccionDelAlumno: studentSectionId ?? null, horario: sectionSchedule ?? null, cerrada: isClosed }),
       // Fecha EFECTIVA (programación de la sección del estudiante, con
       // fallback a la general). Antes se pasaba siempre la general y la card
       // mostraba una fecha vieja aunque la sección tuviera horario propio.
@@ -153,10 +158,10 @@ export default async function LessonsPage() {
     }
   })
 
-  // El alumno ve solo lo abierto y lo que viene (26 oct 2026, pedido de Walther):
-  // una lección cuya ventana cerró, terminada o no, ya no está en su lista. Lo que
-  // hizo queda en el Monitor. Instructores y administradores ven todo.
-  const leccionesVisibles = role === 'STUDENT' ? enrichedLessons.filter((l) => !l.isClosed) : enrichedLessons
+  // El alumno ve solo lo que su sección programó, abierto o por venir (26 y 27 oct
+  // 2026, pedidos de Walther; lib/lecciones-alumno.ts). Lo que hizo queda en el
+  // Monitor. Instructores y administradores ven todo.
+  const leccionesVisibles = role === 'STUDENT' ? enrichedLessons.filter((l) => l.programada) : enrichedLessons
 
   // Fetch careers for SUPERADMIN filter
   const careers = isSuperadmin

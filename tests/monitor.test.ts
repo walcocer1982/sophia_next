@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import {
   atendido,
   avisoDeIntentos,
+  filasDelBloqueAbierto,
   noEntraronAlBloque,
   cierreDeVentana,
   estadoDeSesion,
@@ -182,4 +183,14 @@ test('no entraron al bloque: sin sesión de esta ventana y sin «desertó», por
   ]
   const r = noEntraronAlBloque(matriculados, sesiones, apertura, new Set(['d']))
   assert.deepEqual(r.map((a) => a.userId), ['b', 'e', 'a'])
+})
+
+test('en vivo: solo las filas del bloque abierto de su sección; sin bloque, ninguna', () => {
+  const filas = [
+    { id: 1, sectionId: 'A', lessonId: 's2' }, // hoy, bloque abierto
+    { id: 2, sectionId: 'A', lessonId: 's1' }, // ayer: «a medias», ya cerró
+    { id: 3, sectionId: 'B', lessonId: 's2' }, // otra sección, su bloque no está abierto
+  ]
+  assert.deepEqual(filasDelBloqueAbierto(filas, [{ sectionId: 'A', lessonId: 's2' }]).map((f) => f.id), [1])
+  assert.deepEqual(filasDelBloqueAbierto(filas, []), [])
 })

@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { formatDate, formatTime, hace } from '@/lib/formatters'
 import type { FilaMonitor, RespuestaMonitor } from '@/types/monitor'
 import { TerminarBloque } from '@/components/monitor/terminar-bloque'
+import { filasDelBloqueAbierto } from '@/lib/monitor'
 
 /**
  * Monitor por curso.
@@ -138,9 +139,11 @@ export default function CourseDashboardPage() {
   const q = search.trim().toLowerCase()
   const coincide = (name: string | null, email: string | null) =>
     !q || name?.toLowerCase().includes(q) || email?.toLowerCase().includes(q)
-  // En vivo, solo la ventana actual: lo de una ventana anterior (lección reabierta) queda en la matriz.
-  const filasVisibles = filas.filter((f) => !f.deVentanaAnterior && coincide(f.name, f.email))
-  const activos = filas.filter((f) => f.estado === 'activa').length
+  // En vivo, solo el bloque abierto (27 oct 2026): lo de un bloque que cerró y lo de
+  // una ventana anterior (lección reabierta) queda en la matriz y en el reporte.
+  const delBloque = filasDelBloqueAbierto(filas.filter((f) => !f.deVentanaAnterior), data.bloquesAbiertos)
+  const filasVisibles = delBloque.filter((f) => coincide(f.name, f.email))
+  const activos = delBloque.filter((f) => f.estado === 'activa').length
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
@@ -271,9 +274,17 @@ export default function CourseDashboardPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {filas.length === 0 ? (
+          {data.bloquesAbiertos.length === 0 ? (
             <p className="text-sm text-gray-500 py-4 text-center">
-              Ningún estudiante de las secciones visibles ha abierto una sesión. Los que no entraron se ven en la matriz.
+              No hay un bloque de Sophia abierto ahora. Lo de las sesiones anteriores está en la{' '}
+              <Link href={`/dashboard/${courseId}/matriz`} className="text-blue-600 hover:underline">
+                matriz
+              </Link>{' '}
+              y en el reporte de cada sesión, más abajo.
+            </p>
+          ) : delBloque.length === 0 ? (
+            <p className="text-sm text-gray-500 py-4 text-center">
+              Nadie abrió todavía la sesión de este bloque.
             </p>
           ) : filasVisibles.length === 0 ? (
             <p className="text-sm text-gray-500 py-4 text-center">No se encontraron estudiantes</p>
