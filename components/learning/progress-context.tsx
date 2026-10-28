@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { useSondeo } from '@/hooks/use-sondeo'
 
 interface ProgressData {
   current: number
@@ -66,38 +67,38 @@ export function ProgressProvider({
     setProgress((prev) => ({ ...prev, ...data }))
   }, [])
 
-  useEffect(() => {
-    const fetchProgress = async () => {
-      try {
-        const res = await fetch(`/api/activity/progress?sessionId=${sessionId}`)
-        if (!res.ok) return
-        const data = await res.json()
+  const fetchProgress = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/activity/progress?sessionId=${sessionId}`)
+      if (!res.ok) return
+      const data = await res.json()
 
-        setProgress((prev) => ({
-          ...prev,
-          current: data.currentPosition ?? data.progress,
-          total: data.total,
-          percentage: data.percentage,
-          currentActivityId: data.currentActivityId || null,
-          currentActivity: data.currentActivity || '',
-          lessonTitle: data.lessonTitle || prev.lessonTitle,
-          lastCompletedId: data.lastCompleted?.activityId || null,
-          lastCompletedAt: data.lastCompleted?.completedAt || null,
-          // Una sesión no se «descompleta»: si el evento de la última actividad
-          // ya la marcó y este sondeo llegó antes de que el servidor guardara
-          // completedAt, se conserva (si no, la tarjeta de cierre parpadeaba).
-          completedAt: data.completedAt || prev.completedAt,
-          passed: data.passed ?? prev.passed,
-        }))
-      } catch {
-        // Silently fail — progress will just be stale
-      }
+      setProgress((prev) => ({
+        ...prev,
+        current: data.currentPosition ?? data.progress,
+        total: data.total,
+        percentage: data.percentage,
+        currentActivityId: data.currentActivityId || null,
+        currentActivity: data.currentActivity || '',
+        lessonTitle: data.lessonTitle || prev.lessonTitle,
+        lastCompletedId: data.lastCompleted?.activityId || null,
+        lastCompletedAt: data.lastCompleted?.completedAt || null,
+        // Una sesión no se «descompleta»: si el evento de la última actividad
+        // ya la marcó y este sondeo llegó antes de que el servidor guardara
+        // completedAt, se conserva (si no, la tarjeta de cierre parpadeaba).
+        completedAt: data.completedAt || prev.completedAt,
+        passed: data.passed ?? prev.passed,
+      }))
+    } catch {
+      // Silently fail — progress will just be stale
     }
-
-    fetchProgress()
-    const interval = setInterval(fetchProgress, 4000)
-    return () => clearInterval(interval)
   }, [sessionId])
+
+  // El avance llega al instante con cada respuesta del chat (onActivityCompleted);
+  // el sondeo es solo un respaldo. Era cada 4 s, también con la pestaña oculta, y
+  // no dejaba dormir la base (27 oct 2026). Ahora 30 s, solo a la vista, y nada
+  // cuando la lección terminó.
+  useSondeo(fetchProgress, progress.completedAt ? null : 30_000, { inmediato: true })
 
   // Track previous completed ID for change detection by consumers
   useEffect(() => {

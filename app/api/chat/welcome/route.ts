@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger'
 import { getLessonContent } from '@/lib/lesson-loader'
 import { getFirstActivity, getCurrentActivity, getLessonContext } from '@/lib/lesson-parser'
 import { buildSystemPrompt } from '@/lib/prompt-builder'
+import { guiaDelRol } from '@/lib/perfil-curso'
 import { choiceOrder, renderChoice } from '@/lib/choice'
 import type { LessonContent } from '@/types/lesson'
 
@@ -137,8 +138,11 @@ export async function POST(request: Request) {
     // pregunta se verificaba contra los criterios de la actividad 1: ese era
     // el embudo de la primera actividad en todas las lecciones.
     const primera = firstActivityContext.activity
-    const primeraInstruccion = primera.teaching?.agent_instruction ||
+    // En una sesión de curso la conducta viene del rol (lib/perfil-curso.ts); la
+    // instrucción trae solo el contenido.
+    const instruccionPropia = primera.teaching?.agent_instruction ||
       (primera as { agent_instruction?: string }).agent_instruction || ''
+    const primeraInstruccion = primera.rol ? `${guiaDelRol(primera.rol)}\n${instruccionPropia}` : instruccionPropia
     const primerChoice = primera.choice
     const primerChoiceText = primerChoice
       ? renderChoice(primerChoice, choiceOrder(`${lessonSession.id}:${primera.id}`, primerChoice.options.length))
@@ -161,7 +165,7 @@ export async function POST(request: Request) {
         ? `3. Entra DIRECTO a la primera actividad siguiendo esta instrucción: "${primeraInstruccion}". ${presentarMaterial} y termina con esta PREGUNTA CERRADA, copiada tal cual (opciones con letra, una por línea), pidiendo que elija una letra. NO hagas la pregunta abierta todavía.
 PREGUNTA CERRADA:
 ${primerChoiceText}`
-        : `3. Entra DIRECTO a la primera actividad siguiendo esta instrucción: "${primeraInstruccion}". ${presentarMaterial} y termina con esta pregunta, reformulada en tus palabras pero sin cambiar lo que pide: "${primera.teaching?.first_question ?? primera.verification.question}"${primera.teaching?.first_question ? '. NO hagas todavía la pregunta del porqué: llega después, cuando el estudiante haya movido o mirado la pizarra' : ''}`
+        : `3. Entra DIRECTO a la primera actividad siguiendo esta instrucción: "${primeraInstruccion}". ${presentarMaterial} y termina con esta pregunta, ${primera.rol ? 'tal cual' : 'reformulada en tus palabras pero sin cambiar lo que pide'}: "${primera.teaching?.first_question ?? primera.verification.question}"${primera.teaching?.first_question ? '. NO hagas todavía la pregunta del porqué: llega después, cuando el estudiante haya movido o mirado la pizarra' : ''}`
 
     // Instrucción para mensaje de bienvenida - Presenta el tema e invita a aprender
     const greetingLine = participantFirstName

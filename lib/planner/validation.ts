@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { normalizeLevel } from '@/lib/levels'
+import { ROLES_DE_CURSO } from '@/types/lesson'
 
 // ─── Input: formulario del instructor ───
 
@@ -299,6 +300,9 @@ const TeachingSchema = z.object({
 const ActivitySchema = z.object({
   id: z.string().min(1),
   type: z.enum(['explanation', 'practice', 'reflection', 'closing']),
+  // Rol en una sesión de curso (lib/perfil-curso.ts). Sin declararlo, un guardado
+  // del planner que pase por este esquema lo borraría y Sophia volvería al perfil de tutoría.
+  rol: z.enum(ROLES_DE_CURSO).optional(),
   complexity: z.enum(['simple', 'moderate', 'complex']).optional(),
   keyPointIndex: z.number().min(0).nullable(),
   // Peso relativo en el cálculo de la nota final. Default por tipo

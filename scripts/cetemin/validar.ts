@@ -6,14 +6,44 @@
 import { GeneratedStructureSchema } from '../../lib/planner/validation'
 import { avisosDePedidos } from '../../lib/planner/pedidos'
 import { avisosDeTitulos } from '../../lib/planner/titulos'
-import type { Activity } from '../../types/lesson'
+import { lineasDelTexto, textoPlano } from '../../lib/subrayado'
+import type { Activity, TextBlock } from '../../types/lesson'
 import type { SesionSpec } from './tipos'
 import { idDelCasoCorto, idsDePuntosClave } from './plantillas'
+
+/**
+ * Conducta que ya vive en el perfil de Sophia (lib/perfil-curso.ts) y no se
+ * repite en la instrucción. «Pregúntale» y «repite la pregunta», porque en esos
+ * roles las preguntas de Sophia se quitan y la pregunta la repite el código.
+ */
+const CONDUCTA_EN_INSTRUCCION = /no califiques|pregunta tal cual|en negrita|sin nota|frase neutra|no lo recites|no inventes|enseña primero|pregúntale|repite (?:la|esa) pregunta|nombra lo que (?:está|dijo)/gi
+
+const SIN_TILDES = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const VACIAS = new Set(['porque', 'cuando', 'donde', 'desde', 'hasta', 'sobre', 'entre', 'tiene', 'tienen', 'puede', 'pueden', 'debe', 'deben', 'esta', 'estan', 'otra', 'otro', 'otras', 'otros', 'mismo', 'misma', 'solo', 'antes', 'despues', 'todos', 'todas', 'cada', 'tambien'])
+/** Palabras que pesan: de cinco letras o más, o con cifras («IF/MP», «1,52»). */
+function palabrasClave(t: string): Set<string> {
+  return new Set(
+    SIN_TILDES(t)
+      .split(/[^a-z0-9/,.]+/)
+      .map((w) => w.replace(/^[,.]+|[,.]+$/g, ''))
+      .filter((w) => (w.length >= 5 || /\d/.test(w)) && !VACIAS.has(w)),
+  )
+}
+/** ¿La razón comparte al menos una palabra que pese con el texto de la línea? Compara la raíz (5 letras). */
+export function compartenPalabraClave(razon: string, linea: string): boolean {
+  const raiz = (w: string) => (/\d/.test(w) ? w : w.slice(0, 5))
+  const enLinea = new Set([...palabrasClave(linea)].map(raiz))
+  return [...palabrasClave(razon)].some((w) => enLinea.has(raiz(w)))
+}
 
 // 24 desde el 21 oct 2026: cada punto clave suma un turno para señalar en el texto
 // de la norma la línea que respalda la respuesta (subrayado).
 export const MAX_TURNOS = 24
-export const MAX_PALABRAS_INSTRUCCION = 90
+// 70 desde el 27 oct 2026: la instrucción ya es solo contenido (rótulo, regla y
+// ejemplo); antes eran 90 con unas 38 palabras de conducta que ahora están en el perfil.
+export const MAX_PALABRAS_INSTRUCCION = 70
+/** Un criterio es una idea: la regla que respalda la decisión (APRENDIZAJES.md §3). */
+export const MAX_PALABRAS_CRITERIO = 25
 
 /**
  * Turnos que admite la sesión: los intentos de cada actividad más uno por cada
@@ -63,13 +93,32 @@ export function validarSesion(spec: SesionSpec, actividades: Activity[]): string
   const consigna = rutina[0]?.teaching.blocks?.find((b) => b.type === 'text' && b.kind === 'consigna')
   if (!consigna) err(`${rutina[0]?.id}: la rutina necesita la consigna con las tres preguntas en la pizarra`)
 
+  // 3b. Cada actividad declara su rol (lib/perfil-curso.ts): sin él, Sophia usa el
+  // prompt de tutoría y la instrucción, que trae solo contenido, no le alcanza.
+  const rolEsperado = (a: Activity, i: number) =>
+    i < 3 ? (['veo', 'pienso', 'me_pregunto'] as const)[i]
+      : i === actividades.length - 1 ? 'cierre'
+        : a.id === idDelCasoCorto(spec) ? 'caso_corto' : 'punto_clave'
+  actividades.forEach((a, i) => {
+    if (a.rol !== rolEsperado(a, i)) err(`${a.id}: el rol es «${rolEsperado(a, i)}», no «${a.rol ?? 'sin rol'}»`)
+  })
+
+  // 3c. La conducta vive en el perfil de curso, no en la instrucción (27 oct 2026).
+  // Y las pistas van en afirmativo: en el punto clave, el caso corto y el cierre las
+  // preguntas de Sophia se quitan y el código repite la pregunta de la actividad.
+  for (const a of actividades) {
+    if (a.rol !== 'punto_clave' && a.rol !== 'caso_corto' && a.rol !== 'cierre') continue
+    for (const m of a.teaching.agent_instruction.match(CONDUCTA_EN_INSTRUCCION) ?? []) {
+      err(`${a.id}: «${m}» es conducta de Sophia, ya está en su perfil (lib/perfil-curso.ts); en la instrucción va solo el contenido`)
+    }
+  }
+
   // 4. Cada punto clave enseña primero, con ejemplo, y cabe en la transición
   for (const id of idsDePuntosClave(spec)) {
     const a = actividades.find((x) => x.id === id)
     if (!a) { err(`falta la actividad ${id}`); continue }
     const ins = a.teaching.agent_instruction
-    if (!ins.startsWith('Enseña primero')) err(`${id}: la instrucción empieza con «Enseña primero»`)
-    if (!ins.includes('Resuelve tú')) err(`${id}: la instrucción trae un ejemplo resuelto («Resuelve tú…»)`)
+    if (!ins.includes('Resuelve tú este ejemplo:')) err(`${id}: la instrucción trae un ejemplo resuelto («Resuelve tú este ejemplo: …»)`)
     const n = palabras(ins)
     if (n > MAX_PALABRAS_INSTRUCCION) err(`${id}: instrucción de ${n} palabras; máximo ${MAX_PALABRAS_INSTRUCCION} para que quepa en la transición`)
     if (a.verification.max_attempts !== 2) err(`${id}: un punto clave admite un reintento (max_attempts 2)`)
@@ -78,6 +127,33 @@ export function validarSesion(spec: SesionSpec, actividades: Activity[]): string
   }
   for (const p of spec.puntosClave) {
     if (!p.ejemplo.toLowerCase().includes(p.ejemploClave.toLowerCase())) err(`${p.id}: la palabra clave «${p.ejemploClave}» no está en el ejemplo`)
+  }
+
+  // 4b. Un criterio, una idea (27 oct 2026, APRENDIZAJES.md §3): con «la regla; la
+  // consecuencia; la alternativa» en un solo criterio, el alumno que dio la regla
+  // quedaba «sin razón» y avanzaba por límite (38 % de las actividades con nota).
+  const conNota = [...spec.puntosClave.map((p) => ({ id: p.id, criterios: p.criterios })), { id: spec.casoCorto.id, criterios: spec.casoCorto.criterios }]
+  for (const { id, criterios } of conNota) {
+    for (const c of criterios) {
+      if (c.includes(';')) err(`${id}: el criterio junta dos ideas (lleva «;»); deja la regla y pasa lo demás a commonMistakes o al contexto: «${c}»`)
+      else if (palabras(c) > MAX_PALABRAS_CRITERIO) err(`${id}: criterio de ${palabras(c)} palabras; máximo ${MAX_PALABRAS_CRITERIO}, una sola idea: «${c}»`)
+    }
+  }
+
+  // 4c. La razón está en la línea que se toca (27 oct 2026, APRENDIZAJES.md §10):
+  // en EOM S4 la razón era «la casilla IF/MP es calidad F» y eso solo estaba en la
+  // imagen de la cartilla; la línea que se tocaba traía las bandas. Sophia no ve
+  // imágenes y el alumno no hallaba la celda: 8 de 15 por límite.
+  for (const [i, id] of idsDePuntosClave(spec).entries()) {
+    const a = actividades.find((x) => x.id === id)
+    const norma = a?.teaching.blocks?.find((b): b is TextBlock => b.type === 'text' && !!b.subrayable)
+    const razon = spec.puntosClave[i]?.criterios.find((c) => /^da la razón/i.test(c))
+    if (!norma?.lineasClave?.length || !razon) continue
+    const lineas = lineasDelTexto(norma.body)
+    const textoClave = norma.lineasClave.map((k) => textoPlano(lineas[k] ?? '')).join(' ')
+    if (!compartenPalabraClave(razon.replace(/^da la razón:?/i, ''), textoClave)) {
+      err(`${id}: la razón «${razon}» no está en la línea que se toca («${textoClave}»): lo que la respuesta necesita va en el texto de la norma, no solo en una imagen`)
+    }
   }
 
   // 5. El caso corto cierra con las normas a la vista; el cierre no lleva nota
