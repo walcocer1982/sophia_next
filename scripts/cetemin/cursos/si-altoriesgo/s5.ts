@@ -114,7 +114,7 @@ export const S5: SesionSpec = {
       regla: 'aislar es impedir físicamente que entre energía o material: brida ciega, tramo desmontado, doble bloqueo y purga, o bloqueo y etiquetado; un cartel solo avisa.',
       ejemplo: 'un electricista apaga la bomba que llena una poza y le pega un cartel: alguien puede encenderla; recién la aísla con candado y etiqueta.',
       ejemploClave: 'poza',
-      subrayar: { respalda: ['no es aislar', 'brida ciega, tramo desmontado'] },
+      subrayar: { respalda: ['Aislar es sacar el espacio', 'no es aislar', 'brida ciega, tramo desmontado'] },
       pregunta: 'Antes de entrar a un tanque de soda cáustica, el operador cierra la válvula de llenado y le cuelga un cartel de «No abrir». ¿Quedó aislado el tanque, y por qué?',
       criterios: [
         'Decide que no quedó aislado',

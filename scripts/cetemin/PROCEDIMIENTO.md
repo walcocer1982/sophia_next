@@ -14,7 +14,7 @@ Se sigue cada vez que se crea o se revisa una sesión del canal `scripts/cetemin
 |---|---|
 | Decisión que se pide | Una sola, en una situación propia. No pide dos cosas. |
 | Regla | Una o dos frases. Con el ejemplo, unas 40 palabras. |
-| Línea que respalda | Es la razón del criterio, dicha en el texto de la norma. ✋ Lo que la respuesta necesita está en un texto que se toca, no solo en una imagen (§10). |
+| Línea que respalda | Es la razón del criterio, dicha en el texto de la norma. ✋ Lo que la respuesta necesita está en un texto que se toca, no solo en una imagen (§10). ✋ Se lee cada línea del texto contra la razón: si otra también la sostiene, va en `respalda` (§13). |
 | Ejemplo resuelto | Otra situación, no la misma cuenta con otros números. Si la respuesta es la excepción, el ejemplo muestra la excepción (§4). ✋ No tan parecido que se pueda copiar. |
 | Cifras | Una vez, con su unidad, iguales en la norma, el ejemplo y el criterio (§5). |
 | Criterios | Uno decide y otro da la razón; cada uno es una idea, sin «;» y en 25 palabras o menos (§3). |
@@ -80,4 +80,5 @@ node --import tsx scripts/cetemin/medir-clase.ts <curso> <n>
 ```
 
 - Una actividad con más de la mitad de los alumnos por límite se revisa antes de volver a usarse.
+- Una línea que no es clave y se rechazó 3 o más veces (`medir-clase.ts` la marca) se lee contra la razón del criterio. Si la sostiene, se suma a la clave en el archivo y en la base, y se corrige «Lectura sin comprobar» de quien la tocó (§13).
 - Se leen las conversaciones de las peores actividades y lo nuevo va a [APRENDIZAJES.md](APRENDIZAJES.md), con su fecha y las citas literales.

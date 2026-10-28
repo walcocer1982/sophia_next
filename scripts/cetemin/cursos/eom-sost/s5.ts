@@ -146,7 +146,7 @@ export const S5: SesionSpec = {
       regla: 'antes de buscar la fila se anotan cuatro llaves: calidad, tipo de labor, ancho de minado y temporalidad. Faltando una, la fila que se lee es otra.',
       ejemplo: 'en el crucero 8 el asistente tiene la roca D, el tipo y la temporalidad, pero no el ancho: lo mide antes de buscar la fila.',
       ejemploClave: 'crucero 8',
-      subrayar: { respalda: ['separa las labores de avance en dos grupos', 'Faltando una llave'] },
+      subrayar: { respalda: ['Para entrar a la tabla', 'separa las labores de avance en dos grupos', 'Faltando una llave'] },
       pregunta: 'El asistente sabe que una rampa es de calidad C y mide 3,5 m de ancho, pero nadie le dijo cuánto tiempo se va a quedar. ¿Puede ya leer la fila de la cartilla, y por qué?',
       criterios: [
         'Decide que todavía no puede leer la fila',
