@@ -37,7 +37,7 @@ export function laPreguntaLaPoneElCodigo(actividad?: Pick<Activity, 'rol'> | nul
 export const REGLAS_DE_CURSO = `---
 
 CÓMO ENSEÑAS EN ESTA SESIÓN (vale para todas las actividades):
-1. Una sola pregunta por mensaje: la de la actividad. En la rutina (Veo · Pienso · Me pregunto) la haces tú, tal cual. En los puntos clave, el caso corto y el cierre la agrega el sistema al final de tu mensaje, en negrita: tú no escribes ninguna pregunta.
+1. Una sola pregunta por mensaje: la de la actividad. Dentro de un paso de la rutina (Veo · Pienso · Me pregunto) la haces tú, tal cual. Al pasar a otra actividad, y en los puntos clave, el caso corto y el cierre, la agrega el sistema al final de tu mensaje, en negrita: tú no escribes ninguna pregunta.
 2. En un paso sin nota no calificas: nada de «correcto», «exacto», «bien», «buena observación». Recoges lo que dijo en una frase neutra («Dices que…»).
 3. En un paso con nota, «Correcto» solo cuando el estado diga que la actividad se completó.
 4. No completas por el estudiante: no dices tú la decisión ni la razón, ni metes en lo que dices el dato que tiene que buscar (cifras, umbrales, la línea del texto).
@@ -112,6 +112,18 @@ export function avisoPreguntaDelCodigo(pregunta: string): string {
 }
 
 /**
+ * Cierre por límite en una sesión de curso (28 oct 2026, prueba de PM S7): con
+ * la conversación de la actividad no lograda a la vista, Sophia seguía con ella
+ * («dime si esas horas son el modo…») y no enseñaba la siguiente, aunque el
+ * formato de transición se lo pedía. La primera oración la escribe el código y
+ * Sophia presenta la actividad nueva con un prompt hecho solo para ella, sin el
+ * historial, como en la bienvenida.
+ */
+export const CIERRE_POR_TOPE = 'Dejamos aquí esta actividad: tu instructor la revisará contigo en la clase.'
+
+export const PRESENTAR_TRAS_TOPE = `ESTADO: PRESENTAR ESTA ACTIVIDAD. La actividad anterior se cerró y el sistema ya se lo dijo al estudiante: no hables de ella ni de su respuesta, y no saludes. Sigue tu instrucción: enseña la regla con el material que nombra y resuelve el ejemplo como un caso aparte, con su situación y su decisión. Máximo 90 palabras.`
+
+/**
  * La pregunta que el código agrega al final de este turno, o null si este turno
  * no la lleva. Es la de la actividad que queda abierta: la siguiente si el turno
  * avanza, la actual si sigue abierta.
@@ -130,7 +142,12 @@ export function preguntaDelTurno(p: {
 }): string | null {
   if (p.respuestaFija || p.pasoCerrado || p.yaCompletada || p.sinVerificar || p.turnoDeConexion) return null
   const destino = p.avanza ? (p.esUltima ? undefined : p.siguiente) : p.actual
-  if (!destino || !laPreguntaLaPoneElCodigo(destino) || destino.choice || destino.checks?.length) return null
+  if (!destino || destino.choice || destino.checks?.length) return null
+  // Al pasar de un paso a otro, también en la rutina, la pregunta la pone el
+  // código (28 oct 2026, prueba de PM S7): al cerrar el Veo, Sophia seguía
+  // preguntando por la imagen y el mensaje llevaba tres preguntas.
+  const alPasar = p.avanza && !!p.actual.rol && !!destino.rol
+  if (!laPreguntaLaPoneElCodigo(destino) && !alPasar) return null
   return destino.teaching?.first_question ?? destino.verification.question
 }
 
@@ -162,12 +179,26 @@ function oraciones(texto: string): string[] {
   return partes.filter(Boolean)
 }
 
-export function crearQuitadorDePreguntas() {
+/**
+ * ¿La oración repite un trozo de la pregunta que va a pegar el código? (28 oct
+ * 2026, prueba de PM S7): Sophia copiaba la situación de la pregunta en negrita,
+ * el filtro quitaba solo la oración con «?» y la situación salía dos veces.
+ */
+const normalizar = (t: string) =>
+  t.replace(/\[\[[^\]]+\]\]/g, '').replace(/[*«»"“”']/g, '').replace(/\s+/g, ' ').trim().replace(/[.:;,…]+$/, '').toLowerCase()
+export function repiteLaPregunta(oracion: string, pregunta: string): boolean {
+  const o = normalizar(oracion)
+  return o.length >= 25 && normalizar(pregunta).includes(o)
+}
+
+/** `preguntas`: la que pega el código y, al cerrar una actividad, la de la que se cierra. */
+export function crearQuitadorDePreguntas(...preguntas: (string | null | undefined)[]) {
+  const conocidas = preguntas.filter((p): p is string => !!p)
   let pendiente = ''
   const procesar = (seg: string) =>
     oraciones(seg)
       .map((o) => {
-        if (!/[?¿]/.test(o)) return o
+        if (!/[?¿]/.test(o) && !conocidas.some((p) => repiteLaPregunta(o, p))) return o
         const marcadores = o.match(/\[\[[^\]]+\]\]/g)
         return marcadores ? ` ${marcadores.join(' ')}` : ''
       })
@@ -184,6 +215,46 @@ export function crearQuitadorDePreguntas() {
     },
     flush(): string {
       const resto = pendiente ? procesar(pendiente) : ''
+      pendiente = ''
+      return resto
+    },
+  }
+}
+
+const RUTINA: ReadonlySet<RolDeCurso> = new Set(['veo', 'pienso', 'me_pregunto'])
+
+/** ¿El turno pasa de un paso de la rutina a otro (Veo → Pienso, Pienso → Me pregunto)? */
+export function pasaDentroDeLaRutina(actual?: RolDeCurso, siguiente?: RolDeCurso): boolean {
+  return !!actual && !!siguiente && RUTINA.has(actual) && RUTINA.has(siguiente)
+}
+
+/**
+ * Deja solo la primera oración de Sophia (28 oct 2026, prueba de PM S7). Al pasar
+ * de un paso de la rutina a otro, lo único que corresponde es recoger lo que dijo
+ * («Dices que hay una faja.»); Sophia agregaba «Mira bien… Describe qué está
+ * debajo de la banda», un pedido sin «?» que el quitador de preguntas no ve.
+ */
+export function crearRecortadorAPrimeraOracion() {
+  let pendiente = ''
+  let listo = false
+  return {
+    push(trozo: string): string {
+      if (listo) return ''
+      pendiente += trozo
+      for (const m of pendiente.matchAll(FIN_DE_ORACION)) {
+        const fin = (m.index ?? 0) + m[0].length
+        if (!pendiente.slice(0, fin).trim()) continue
+        listo = true
+        const primera = pendiente.slice(0, fin)
+        pendiente = ''
+        return primera
+      }
+      return ''
+    },
+    flush(): string {
+      if (listo) return ''
+      listo = true
+      const resto = pendiente
       pendiente = ''
       return resto
     },

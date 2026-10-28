@@ -49,12 +49,18 @@ const subrayadas = (b: TextBlock, s: SubrayadoState) => {
 }
 
 /** Lo que Sophia ve del texto en este turno. */
-export function describeSubrayadoForPrompt(b: TextBlock, s: SubrayadoState): string {
+export function describeSubrayadoForPrompt(b: TextBlock, s: SubrayadoState, juzgar = true): string {
   const marcadas = subrayadas(b, s)
   if (!marcadas.length) {
     // 23 oct 2026: Sophia pedía la línea por su cuenta aunque la respuesta estuviera
     // mal. El pedido lo hace el código, y solo cuando la respuesta escrita aprobó.
     return `«${b.title}»: todavía no subrayó nada. No le pidas que toque una línea: eso lo pide el sistema cuando su respuesta escrita esté bien.`
+  }
+  // 28 oct 2026 (prueba de PM S7): con la respuesta sin aprobar, el juicio de la
+  // línea («NO respalda… pregúntale por qué la eligió») le ganaba a la transición:
+  // Sophia seguía con la línea de una actividad ya cerrada y no enseñaba la nueva.
+  if (!juzgar) {
+    return `«${b.title}»: marcó ${marcadas.map((t) => `«${t}»`).join(' · ')}. Todavía no se revisa: no digas si esa línea respalda o no, no hables de ella ni le pidas otra. Trabaja su respuesta escrita.`
   }
   const resultado = evaluarSubrayado(b, s)
   const juicio =
@@ -272,6 +278,17 @@ export function esRepeticionEquivocada(lineasAhora: string, ultimo: UltimoSubray
 export function hayQueRevisarSubrayado(lineasAhora: string, ultimo: UltimoSubrayado | undefined, esToque: boolean): boolean {
   if (!lineasAhora) return false
   return lineasAhora !== ultimo?.lineas || esRepeticionEquivocada(lineasAhora, ultimo, esToque)
+}
+
+/**
+ * Línea marcada que todavía no se juzgó (28 oct 2026): viajó con una respuesta
+ * que no aprobó y se guardó sin resultado, porque juzgarla entonces le decía al
+ * alumno cuál era la razón («Esa es la línea») o lo mandaba a tocar otra en vez
+ * de corregir su respuesta. Se juzga en el turno en que la respuesta apruebe,
+ * aunque no haya cambiado.
+ */
+export function subrayadoSinJuzgar(lineasAhora: string, ultimo: UltimoSubrayado | undefined): boolean {
+  return !!lineasAhora && !!ultimo && lineasAhora === ultimo.lineas && !ultimo.resultado
 }
 
 /**

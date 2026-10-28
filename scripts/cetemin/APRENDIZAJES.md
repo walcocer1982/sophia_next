@@ -134,9 +134,9 @@ Pares de sesiones seguidas, mismos alumnos (sin → con): por límite SI S3 → 
 **No cambió: lo que depende de la conducta de Sophia o del código.** Las preguntas dobles en la transición (§1) y las repreguntas siguen igual o peor. El perfil de curso (`lib/perfil-curso.ts`) está en producción desde el 27 oct, pero solo actúa en actividades con `rol`, y ninguna sesión dictada lo tenía. El toque de la línea (§6) tampoco mejoró: la mitad de los rechazos sale cuando el alumno todavía no respondió y busca la respuesta en la pizarra. Eso es el flujo del toque, no el contenido.
 
 **Acciones:**
-1. Probar con alumno simulado una sesión con `rol` (S7) y, si la auditoría pasa, recargar las siguientes con la plantilla nueva. Se mide de nuevo la transición con dos preguntas.
-2. Cambiar el flujo del toque: revisar la línea solo cuando Sophia la pidió. Es código; lo decide Walther.
-3. Revisar la línea que respalda contra la razón del criterio antes de cargar (§13).
+1. Probar con alumno simulado una sesión con `rol` (S7) y, si la auditoría pasa, recargar las siguientes con la plantilla nueva. Se mide de nuevo la transición con dos preguntas. **Hecho el 28 oct (§14):** la prueba encontró tres fallas del perfil, se corrigieron y flojo y bueno pasaron la auditoría.
+2. Cambiar el flujo del toque: revisar la línea solo cuando Sophia la pidió. **Hecho el 28 oct (§14).**
+3. Revisar la línea que respalda contra la razón del criterio antes de cargar (§13). **En PROCEDIMIENTO, pasos 2 y 9.**
 
 **Cuidado al leer la tabla:** las sesiones con procedimiento se dictaron después, con alumnos que ya conocían a Sophia, y son temas distintos. Por eso pesan más los pares de sesiones seguidas que la comparación por grupo. El deploy del 27 oct en la noche cambió costos y sondeo, no la conversación.
 
@@ -147,6 +147,21 @@ EOM S5, «Las cuatro llaves»: el criterio pide «le falta la temporalidad, una 
 Se corrigió el mismo día: la línea se sumó a `respalda` en los archivos y en la base, y las 4 marcas pasaron a comprobada. La nota no cambió: nunca dependió del toque.
 
 **Al planificar:** ✋ leer cada línea del texto contra la razón del criterio. Si otra línea también la sostiene, va en `respalda`. **Después de la clase:** `medir-clase.ts` muestra la línea más rechazada de cada actividad. Si varios alumnos que respondieron bien tocaron la misma línea, se lee: puede ser un error de la clave, no del alumno.
+
+## 14. Tocar la línea sin que se pida, y la prueba del perfil (28 oct 2026)
+
+**El toque que nadie pidió.** De 165 «Esa línea no respalda» del 27-28 oct, 73 salieron sin que se hubiera pedido la línea: el alumno respondió mal, Sophia le dijo qué faltaba y él tocó una línea, buscando ahí la respuesta. La pantalla mandaba «listo» con cada toque si ya había escrito algo. De 249 toques así, 233 no ganaron nada: 109 dieron «no respalda», 67 respaldaban pero no avanzaron y 56 gastaron el último intento y cerraron la actividad por límite. Solo 14 terminaron en una actividad lograda.
+
+Ahora el toque se revisa solo cuando la línea está pedida. Si no, queda marcada («Marcada: va con tu próxima respuesta») y viaja con lo que escriba. La línea se juzga (roja, verde, «Esa es la línea») solo si la respuesta escrita aprobó: confirmar una línea con la respuesta mal le daba la razón («Ahora que identificaste la línea sobre el agua, cuéntame…»).
+
+**La prueba del perfil (PM S7, alumno flojo y bueno por API).** Tres fallas que habrían visto los alumnos:
+- Al cerrar el Veo, Sophia seguía con la imagen («¿qué corre? … Describe qué está debajo de la banda») y después venía la pregunta del Pienso. Ahora, al pasar de un paso de la rutina a otro, queda solo su primera oración («Dices que hay una faja.») y la pregunta la pone el código.
+- La situación de la pregunta salía dos veces: Sophia la copiaba, el filtro quitaba solo la oración con «?». Ahora quita también lo que repite la pregunta.
+- **En el cierre por límite no enseñaba la actividad siguiente:** con la conversación de la actividad no lograda a la vista, seguía con ella («dime si esas horas son el modo…») y el alumno recibía la pregunta nueva sin la regla ni el ejemplo. Es lo que mostraba el 53 % de §12. Ahora el código escribe «Dejamos aquí esta actividad: tu instructor la revisará contigo en la clase.» y Sophia presenta la actividad nueva sin el historial, como en la bienvenida.
+
+Con los arreglos, el flojo terminó en 18 turnos y el bueno en 10, los dos sin fallas en `auditar-sesion.ts`.
+
+**Al planificar:** nada cambia en los archivos de sesión. **Al probar:** una prueba por API cuesta poco y encuentra lo que el validador no ve; se hace con cada cambio de código del perfil, no solo con sesiones nuevas.
 
 ---
 
