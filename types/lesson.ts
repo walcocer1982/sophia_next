@@ -17,6 +17,10 @@
  */
 export type ActivityType = 'explanation' | 'practice' | 'reflection' | 'closing'
 
+/** Rol de una actividad en una sesión de curso (rutina, puntos clave, caso corto, cierre). */
+export const ROLES_DE_CURSO = ['veo', 'pienso', 'me_pregunto', 'punto_clave', 'caso_corto', 'cierre'] as const
+export type RolDeCurso = (typeof ROLES_DE_CURSO)[number]
+
 /**
  * Nivel de complejidad - Controla maxTokens y extensión esperada
  */
@@ -297,6 +301,13 @@ export interface ChoiceStep {
 export interface Activity {
   id: string
   type: ActivityType                   // Tipo de actividad (define template del prompt)
+  /**
+   * Rol en una sesión de curso (scripts/cetemin). Si está, Sophia usa el perfil
+   * de curso (lib/perfil-curso.ts): la conducta vive ahí, una sola vez, y la
+   * instrucción de la actividad trae solo el contenido. Sin rol, la lección
+   * sigue con el prompt de tutoría de siempre.
+   */
+  rol?: RolDeCurso
   /**
    * Nombre de la actividad para el alumno (riel de avance y encabezado de la
    * sección). Regla de nombres (14 oct 2026, lib/planner/titulos.ts): nombra

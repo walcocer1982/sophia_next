@@ -4,6 +4,8 @@ Guía para quien arma una sesión de curso en Sophia (un archivo `cursos/<curso>
 
 Nace de la prueba de Edwin Baltodano (21 oct 2026, SI-ALTORIESGO S1) y de la revisión que le siguió (`investigacion/prueba-edwin-s1-2026-10-21.md`): las imágenes y lo que decía Sophia no conversaban, porque el material se había elegido por norma y no por lo que el alumno tenía que decidir.
 
+**Lo que enseñaron las clases con alumnos va en [APRENDIZAJES.md](APRENDIZAJES.md)** (27 oct 2026: criterios de una idea, la pregunta sola al final, el ejemplo que muestra la excepción, cifras). Se lee antes que esta guía.
+
 ---
 
 ## 1. Se parte del aprendizaje esperado, partido en decisiones

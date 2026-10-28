@@ -2,7 +2,9 @@
 
 Decisión de Walther (15 oct 2026): **todas las cargas de sesiones de curso pasan por aquí.** Nada se escribe a mano en la base ni en el planner.
 
-**Antes de escribir una sesión, lee [DISENO-DE-CLASE.md](DISENO-DE-CLASE.md):** cómo se piensa cada punto clave (regla, ejemplo, imagen y pregunta que conversan) y qué revisar antes de publicar.
+**Para crear o revisar una sesión se sigue [PROCEDIMIENTO.md](PROCEDIMIENTO.md)**, paso por paso: ficha por punto clave, solo contenido (la conducta de Sophia está en su perfil por rol), validar, probar, aprobar, cargar y medir después de la clase.
+
+**Antes de escribir o revisar una sesión, lee [APRENDIZAJES.md](APRENDIZAJES.md)** (lo que enseñaron las clases con alumnos) **y [DISENO-DE-CLASE.md](DISENO-DE-CLASE.md):** cómo se piensa cada punto clave (regla, ejemplo, imagen y pregunta que conversan) y qué revisar antes de publicar.
 
 ```
 cursos/<curso>/curso.ts      datos del curso (slug, título, capacidad, voz de Sophia, carrera)
@@ -31,11 +33,11 @@ La lección se publica solo cuando la auditoría de las dos pruebas pasa sin fal
 
 | Curso | Dicta | Sesiones cargadas | Fuente del diseño |
 |---|---|---|---|
-| `si-altoriesgo` · Trabajos de alto riesgo | Maritza Mercado | S1, S2, S3 | `03_Entregables-diseño/SI - Ciclo II/4 - SI-ALTORIESGO` · CV1 caps. 1–6 |
-| `eom-sost` · Sostenimiento de labores mineras | Walther Alcocer | S1, S2, S3 | `03_Entregables-diseño/EOM - Ciclo II/3 - EOM-SOST` · CV1 caps. 1–4 |
-| `pm-fmplanta` · Fundamentos mecánicos de planta | Christian Huamán | S1, S2, S3 | `03_Entregables-diseño/PM - Ciclo II/4 - PM-FMPLANTA` · CV1 lecturas 1–2 |
+| `si-altoriesgo` · Trabajos de alto riesgo | Maritza Mercado | S1, S2, S3, S4, S5, S7 | `03_Entregables-diseño/SI - Ciclo II/4 - SI-ALTORIESGO` · CV1 caps. 1–6 |
+| `eom-sost` · Sostenimiento de labores mineras | Walther Alcocer | S1, S2, S3, S4, S5, S7 | `03_Entregables-diseño/EOM - Ciclo II/3 - EOM-SOST` · CV1 caps. 1–4 |
+| `pm-fmplanta` · Fundamentos mecánicos de planta | Christian Huamán | S1, S2, S3, S4, S5, S7 | `03_Entregables-diseño/PM - Ciclo II/4 - PM-FMPLANTA` · CV1 lecturas 1–2 |
 
-Las sesiones de EOM y PM salen de `laminas.csv` (el PPT en tabla) y de `contenidos.csv`; en `imagenes.csv` las descripciones de SI son solo el nombre («S2 · jerarquia»), así que cada imagen se miró antes de describirla, como manda `DISENO-DE-CLASE.md`. Ninguna de las nueve está publicada.
+Las sesiones de EOM y PM salen de `laminas.csv` (el PPT en tabla) y de `contenidos.csv`; en `imagenes.csv` las descripciones de SI son solo el nombre («S2 · jerarquia»), así que cada imagen se miró antes de describirla, como manda `DISENO-DE-CLASE.md`. Ninguna está publicada. S4, S5 y S7 se cargaron el 27 oct 2026 (la S6 es evaluación y no tiene contenido); sus casos cortos y ejemplos son propios, pendientes de aprobación del instructor.
 
 ## Alumnos simulados (Monitor y ficha)
 

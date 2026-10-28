@@ -81,6 +81,8 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
   const r = spec.rutina
   const mural = bloqueImagen(spec, subidas, r.imagenId, r.tituloImagen, 'on_start', true)
   const usa = [mural.id, RUTINA_BLOCK_ID]
+  // 27 oct 2026: la conducta de cada paso vive en el perfil de curso
+  // (lib/perfil-curso.ts, por `rol`); la instrucción trae solo el contenido.
   const pista = r.pistaVeo ? ` Si no describe nada, pregúntale ${r.pistaVeo}.` : ''
   const tipo = r.tipoImagen ?? 'fotografía'
   // 22 oct 2026: los criterios y el enlace salen de la sesión; antes estaban
@@ -92,12 +94,13 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
     {
       id: `${prefijo}-1`,
       type: 'reflection',
+      rol: 'veo',
       title: r.titulos.veo,
       subtitle: 'Veo',
       complexity: 'simple',
       keyPointIndex: null,
       teaching: {
-        agent_instruction: `Primer paso de la rutina Veo · Pienso · Me pregunto. Dile que mire la ${tipo} «${r.tituloImagen}» de la pizarra antes de leer los textos y hazle la pregunta tal cual. Sin nota. No califiques (nada de «correcto», «exacto» ni «bien») y no interpretes la imagen por él: recoge lo que describa en una frase neutra y pasa al paso siguiente.${pista} Nada de normas todavía.`,
+        agent_instruction: `La imagen es la ${tipo} «${r.tituloImagen}» de la pizarra.${pista}`,
         target_length: '40-70 palabras',
         blocks: [mural, bloqueRutina(r)],
       },
@@ -106,12 +109,13 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
     {
       id: `${prefijo}-2`,
       type: 'reflection',
+      rol: 'pienso',
       title: r.titulos.pienso,
       subtitle: 'Pienso',
       complexity: 'simple',
       keyPointIndex: null,
       teaching: {
-        agent_instruction: `Segundo paso de la rutina: Pienso. Haz la pregunta tal cual: lo que piensa y qué le hace decir eso. Si afirma algo sin la evidencia, pregúntale solo «¿qué te hace decir eso?». No califiques (nada de «correcto», «exacto» ni «bien») ni completes su respuesta: recógela en una frase neutra y pasa al paso siguiente. Nada de normas todavía.`,
+        agent_instruction: `Sobre la misma ${tipo} «${r.tituloImagen}».`,
         target_length: '40-70 palabras',
         uses: usa,
       },
@@ -120,12 +124,13 @@ function rutina(spec: SesionSpec, subidas: Subida, prefijo: string): Activity[] 
     {
       id: `${prefijo}-3`,
       type: 'reflection',
+      rol: 'me_pregunto',
       title: r.titulos.mePregunto,
       subtitle: 'Me pregunto',
       complexity: 'simple',
       keyPointIndex: null,
       teaching: {
-        agent_instruction: `Tercer paso de la rutina: Me pregunto. Haz la pregunta tal cual; se refiere a lo que el estudiante dijo en el paso anterior. No la respondas tú: si dice «no sé», eso es lo que buscamos; recógelo como su pregunta («eso lo vemos ahora») sin calificar. No anuncies temas ni hagas otra pregunta: la bienvenida ya presentó los temas de hoy.`,
+        agent_instruction: `Sobre lo que dijo de la ${tipo} «${r.tituloImagen}».`,
         target_length: '40-70 palabras',
         uses: usa,
       },
@@ -157,13 +162,16 @@ function puntoClave(spec: SesionSpec, subidas: Subida, prefijo: string, n: numbe
   return {
     id: `${prefijo}-${n}`,
     type: 'practice',
+    rol: 'punto_clave',
     title: p.title,
     subtitle: p.subtitle,
     complexity: 'moderate',
     keyPointIndex: p.keyPointIndex,
     teaching: {
-      agent_instruction: `Enseña primero, con ${laminaAPedido ? `el texto «${p.norma.title}»` : `la lámina «${p.lamina.title}»`} de la pizarra: ${p.regla} Resuelve tú este ejemplo: ${p.ejemplo} Primero regla y ejemplo, sin mandar a leer otro texto; después, la pregunta tal cual.`,
-      target_length: '90-130 palabras',
+      // 27 oct 2026: solo contenido. Enseñar primero, la pregunta al final (la pone
+      // el código) y repetirla entera si responde a medias son del rol punto_clave.
+      agent_instruction: `Enseña con ${laminaAPedido ? `el texto «${p.norma.title}»` : `la lámina «${p.lamina.title}»`} de la pizarra: ${p.regla} Resuelve tú este ejemplo: ${p.ejemplo}`,
+      target_length: '50-80 palabras',
       blocks,
     },
     verification: {
@@ -182,12 +190,13 @@ function casoCorto(spec: SesionSpec, prefijo: string, n: number): Activity {
   return {
     id: `${prefijo}-${n}`,
     type: 'practice',
+    rol: 'caso_corto',
     title: c.title,
     subtitle: c.subtitle,
     complexity: 'complex',
     keyPointIndex: c.keyPointIndex,
     teaching: {
-      agent_instruction: `${spec.sinTrabajoEnEquipo ? 'Caso corto individual' : 'Caso corto individual, calentamiento del caso que después se resuelve en equipo'}; no inventes otro caso ni cites casos de la clase. Dile que lea el caso «${c.caso.title}» en la pizarra; no lo recites. Pide una decisión con su porqué. ${c.pistas}`,
+      agent_instruction: `El caso es «${c.caso.title}». ${c.pistas}`,
       target_length: '60-100 palabras',
       uses: c.usa ?? spec.puntosClave.map((p) => p.norma.id),
       blocks: [caso],
@@ -206,12 +215,13 @@ function cierre(spec: SesionSpec, prefijo: string, n: number): Activity {
   return {
     id: `${prefijo}-${n}`,
     type: 'closing',
+    rol: 'cierre',
     title: spec.cierre?.title ?? 'Dudas para el instructor',
     subtitle: spec.cierre?.subtitle ?? 'Antes de la sala',
     complexity: 'simple',
     keyPointIndex: null,
     teaching: {
-      agent_instruction: `Cierre corto, sin nota. Pregúntale qué punto de hoy le quedó menos claro; esa respuesta la ve el instructor antes de aclarar en clase. No califiques. Reconoce una cosa concreta que haya hecho bien hoy, sin felicitaciones vacías. Anuncia en una oración ${spec.sinTrabajoEnEquipo ? 'que ahora el instructor conversa con el grupo sobre lo que respondieron' : 'que ahora el instructor aclara dudas y que luego, en equipo, trabajarán el caso de la clase'}. No resumas ni agradezcas: el resumen con los puntos clave y el «Gracias por participar» los agrega el sistema.`,
+      agent_instruction: `Cuando responda, anuncia ${spec.sinTrabajoEnEquipo ? 'que ahora el instructor conversa con el grupo sobre lo que respondieron' : 'que ahora el instructor aclara dudas y que luego, en equipo, trabajarán el caso de la clase'}.`,
       target_length: '40-70 palabras',
     },
     verification: sinNota('¿Qué punto de hoy te quedó menos claro?', ['Nombra un punto que le quedó menos claro, o dice que ninguno'], 1),

@@ -2,11 +2,9 @@ import { NextResponse } from 'next/server'
 import { tituloActividad } from '@/lib/actividad-titulo'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth-utils'
-import { checkAndGeneratePartialReports } from '@/lib/lesson-report'
 import { calculateRubricLevel, calculateOverallRubric, type RubricLevel } from '@/lib/rubric'
 import { calculateGrade, enriquecerConPlan, type ActividadDelPlan, type ProgresoGuardado } from '@/lib/grading'
 import { normalizeLevel, LEGACY_LABEL } from '@/lib/levels'
-import { logger } from '@/lib/logger'
 import { seccionesVisibles } from '@/lib/alcance'
 import { alcanceEfectivo } from '@/lib/ver-como'
 import { formatDate, formatTime } from '@/lib/formatters'
@@ -96,11 +94,6 @@ function aDTO(m: Marca | null | undefined): MarcaDTO | null {
 
 const ORDEN_ESTADO = { activa: 0, 'en-pausa': 1, 'sin-terminar': 2, terminada: 3 } as const
 
-// Los reportes parciales se generan con el modelo. Este GET los dispara, pero
-// una vez cada cinco minutos por curso e instancia: antes salían en cada
-// sondeo de cada pestaña y dos Monitores abiertos pedían el mismo reporte.
-const ultimoDisparoDeReportes = new Map<string, number>()
-const CADA_MS = 5 * 60_000
 
 export async function GET(
   request: Request,
@@ -390,18 +383,6 @@ export async function GET(
       ORDEN_ESTADO[a.estado] - ORDEN_ESTADO[b.estado] ||
       b.lastActivityAt.localeCompare(a.lastActivityAt)
   )
-
-  const ultimo = ultimoDisparoDeReportes.get(courseId) ?? 0
-  if (Date.now() - ultimo > CADA_MS) {
-    ultimoDisparoDeReportes.set(courseId, Date.now())
-    checkAndGeneratePartialReports(courseId)
-      .then((count) => {
-        if (count > 0) logger.info('dashboard.partial_reports_generated', { courseId, count })
-      })
-      .catch((err: unknown) => {
-        logger.error('dashboard.partial_reports_failed', { courseId, error: String(err) })
-      })
-  }
 
   const respuesta: RespuestaMonitor = {
     course: {

@@ -11,6 +11,7 @@ import { formatDate, formatTime, hace } from '@/lib/formatters'
 import type { FilaMonitor, RespuestaMonitor } from '@/types/monitor'
 import { TerminarBloque } from '@/components/monitor/terminar-bloque'
 import { filasDelBloqueAbierto } from '@/lib/monitor'
+import { useSondeo } from '@/hooks/use-sondeo'
 
 /**
  * Monitor por curso.
@@ -97,13 +98,10 @@ export default function CourseDashboardPage() {
   }, [estadoSesion, role, router, fetchData])
 
   // Sondeo: cada 15 s si hay una ventana abierta o alguien escribiendo; si no,
-  // cada minuto. Antes eran 15 s siempre, con o sin clase.
+  // cada minuto. Antes eran 15 s siempre, con o sin clase. Con la pestaña oculta
+  // no sondea (hooks/use-sondeo.ts): así la base puede dormir.
   const vivo = !!data && (data.enVivo || data.filas.some((f) => f.estado === 'activa'))
-  useEffect(() => {
-    if (estadoSesion === 'loading' || role === 'STUDENT') return
-    const id = setInterval(fetchData, vivo ? 15_000 : 60_000)
-    return () => clearInterval(id)
-  }, [estadoSesion, role, fetchData, vivo])
+  useSondeo(fetchData, estadoSesion === 'loading' || role === 'STUDENT' ? null : vivo ? 15_000 : 60_000)
 
   if (loading) {
     return (

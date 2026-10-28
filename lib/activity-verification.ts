@@ -602,17 +602,11 @@ EVIDENCIA OBLIGATORIA: agrega al JSON el campo "evidence", un objeto que asigna 
   }
 
   try {
-    // Segunda opinión anticipada: cuando hay eliminatorios, la relectura se
-    // pide A LA VEZ que la primera, no después (en serie sumaba ~3 s al turno,
-    // el caso de 13 s medido el 12 oct 2026). Solo se usa si la primera deja
-    // un eliminatorio sin cubrir. Con menos de 4 palabras no se pide: no hay
-    // nada citable; si igual hiciera falta, se consulta en serie como antes.
-    const segundaAnticipada = criticos.length > 0 && userMessage.trim().split(/\s+/).length >= 4
-      ? consultar().catch((e: unknown) => {
-          console.warn('⚠️  verifier.second_opinion_failed', e instanceof Error ? e.message : e)
-          return null
-        })
-      : null
+    // La segunda opinión se pide solo cuando hace falta, en serie (27 oct 2026).
+    // Se pedía a la vez que la primera para ahorrar ~3 s, pero en las sesiones
+    // de curso la razón es eliminatoria en cada punto clave: la relectura corría
+    // en casi toda respuesta y era el 18 % del gasto del día, aunque solo se usa
+    // cuando la primera deja un eliminatorio sin cubrir.
     const result = await consultar()
 
     // ⚡ El verificador ahora devuelve NÚMEROS (1-based) en criteriaMatched/
@@ -668,7 +662,7 @@ EVIDENCIA OBLIGATORIA: agrega al JSON el campo "evidence", un objeto que asigna 
     // eliminatorio solo si la segunda lectura lo marca CON cita válida.
     if (criticos.some((c) => !result.criteriaMatched.includes(c)) && result.criteriaMatched.length > 0) {
       try {
-        const segunda = segundaAnticipada ? await segundaAnticipada : await consultar()
+        const segunda = await consultar()
         if (segunda) {
           descartarSinEvidencia(
             segunda as unknown as { criteriaMatched?: unknown; criteriaMissing?: unknown; evidence?: unknown },

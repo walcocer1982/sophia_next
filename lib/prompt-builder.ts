@@ -7,6 +7,7 @@ import { buildMaterialPrompt, getActivityBlocks, isVisibleToStudent } from '@/li
 import type { SupportBlock } from '@/types/lesson'
 import type { Cited } from '@/lib/material-markers'
 import { guiaAclaracion } from '@/lib/aclaracion'
+import { REGLAS_DE_CURSO, avisoPreguntaDelCodigo, esSesionDeCurso, guiaDeSeguimiento, guiaDelRol, laPreguntaLaPoneElCodigo } from '@/lib/perfil-curso'
 
 /** Qué pasó en el paso cerrado en ESTE turno (lo decide app/api/chat/stream). */
 export type ChoiceTurn = 'no_pick' | 'pick_correct' | 'pick_wrong_retry' | 'pick_wrong_revealed'
@@ -50,6 +51,11 @@ interface PromptBuilderContext {
    * respuesta y las pistas: no hubo respuesta que evaluar.
    */
   aclaracion?: string
+  /**
+   * La pregunta que el código agrega al final de este turno (lib/perfil-curso.ts,
+   * `preguntaDelTurno`). Si viene, Sophia no escribe ninguna pregunta.
+   */
+  preguntaDelCodigo?: string | null
 }
 
 // La intención del alumno («no sé», «dame una pista») la decide el verificador
@@ -204,8 +210,15 @@ export function buildSystemPrompt(context: PromptBuilderContext): SystemPromptWi
     cited,
     cierraPorTope = false,
     aclaracion,
+    preguntaDelCodigo = null,
   } = context
   const isCodeMethodology = methodology === 'CODE'
+  // Sesión de curso (la actividad declara su rol): la conducta sale del perfil de
+  // curso (lib/perfil-curso.ts) en vez de las reglas de tutoría, que chocaban con ella.
+  const enCurso = esSesionDeCurso(context.activityContext.activity) && !isCodeMethodology
+  // Punto clave, caso corto y cierre: mientras la actividad siga abierta, Sophia
+  // no repregunta; nombra lo que falta y el código repite la pregunta.
+  const seguimientoDeCurso = enCurso && laPreguntaLaPoneElCodigo(context.activityContext.activity)
 
   // Qué hizo el alumno en este turno, según el verificador.
   const studentIntent = verificationResult?.student_intent
@@ -277,7 +290,7 @@ ${technicalContextBlock}
 ${lessonKeyPoints.length > 0 ? `PUNTOS CLAVE:
 ${lessonKeyPoints.map((p, i) => `${i + 1}. ${p}`).join('\n')}` : ''}
 
----
+${enCurso ? REGLAS_DE_CURSO : `---
 
 REGLAS IMPORTANTES:
 
@@ -335,7 +348,7 @@ Cualquier pregunta cuya respuesta NO se mide contra los criterios de éxito de l
 1. Confirmaciones disfrazadas: cualquier pregunta que solo pide validación ("¿se entiende?", "¿clara la idea?", "¿no es cierto?", "¿queda claro?").
 2. Profundizaciones fuera de criterios: preguntar sobre subtemas que NO aparecen en los criterios de éxito (eso es inventar trabajo extra).
 3. Pedidos de auto-evaluación al estudiante ("¿con tus palabras cómo lo dirías?", "¿qué te parece esto?").
-Si quieres cerrar un punto, hazlo con afirmación corta ("Exacto.", "Correcto.") y avanza. NO inventes preguntas de seguimiento — desvías al estudiante y generas turnos vacíos.`
+Si quieres cerrar un punto, hazlo con afirmación corta ("Exacto.", "Correcto.") y avanza. NO inventes preguntas de seguimiento — desvías al estudiante y generas turnos vacíos.`}`
 
   // Variante INSTRUCCIONAL (metodología CODE): sesión guiada paso a paso. Sophia
   // instruye en lugar de hacer mayéutica y solo confirma que el estudiante
@@ -437,9 +450,15 @@ Refiérete a las entidades concretas del brief cuando instruyas cada paso. Para 
 - "¿Qué fue lo más importante?" "¿Cómo lo aplicarías?"
 - Acepta cualquier reflexión genuina`,
   }
-  const questionGuidance = questionTypeGuidance[activityType] || questionTypeGuidance.explanation
+  // En una sesión de curso la guía del rol ya dice cómo preguntar; la de tutoría
+  // pedía «empieza con preguntas específicas» y, ante un error, «pregunta por UN
+  // elemento concreto»: de ahí las repreguntas de una palabra (APRENDIZAJES §2).
+  const questionGuidance = enCurso ? '' : questionTypeGuidance[activityType] || questionTypeGuidance.explanation
 
-  const verificationBlock = !isEvaluative
+  const verificationBlock = !isEvaluative && enCurso
+    ? `PASO SIN NOTA - Pregunta: "${verification.question}"
+- No cuenta para la nota: acepta cualquier respuesta que conteste lo que se pregunta y pasa al paso siguiente, sin calificarla.`
+    : !isEvaluative
     ? `INTERACCIÓN NO EVALUATIVA - Pregunta de participación: "${verification.question}"
 
 ${questionGuidance}
@@ -488,7 +507,9 @@ VERIFICACIÓN FLEXIBLE:
   // secuencia es predecir, mover, observar, explicar y cerrar (§15.3).
   const hayEcualizador = [...activityBlocks, ...pinnedBlocks].some((b) => b.type === 'simulator')
   // El ecualizador puede venir fijado desde una actividad anterior (EVA-NOTA 6).
-  const esConversacionDePanel = !activity.choice && !activity.checks && (activityBlocks.length > 0 || hayEcualizador)
+  // En una sesión de curso no: ahí se enseña primero y la pregunta es una decisión,
+  // no una acción sobre la pizarra.
+  const esConversacionDePanel = !enCurso && !activity.choice && !activity.checks && (activityBlocks.length > 0 || hayEcualizador)
   const conversacionPanel = esConversacionDePanel
     ? `
 CONVERSACIÓN SOBRE LA PIZARRA (esta actividad no tiene alternativas):
@@ -500,7 +521,7 @@ CONVERSACIÓN SOBRE LA PIZARRA (esta actividad no tiene alternativas):
     : ''
 
   const staticBlock2 = `
-${typeTemplate}
+${enCurso && activity.rol ? guiaDelRol(activity.rol) : typeTemplate}
 
 ACTIVIDAD ${position} de ${totalActivities}${isFirstActivity ? ' (primera)' : ''}${isLastActivity ? ' (última)' : ''}
 
@@ -525,7 +546,7 @@ ${verificationBlock}
 
 ${activity.commonMistakes?.length ? `ERRORES COMUNES A DETECTAR:
 ${activity.commonMistakes.map(m => `- ${m}`).join('\n')}
-Si detectas uno de estos errores, dilo con claridad ("No exactamente") y pregunta qué lo llevó a esa conclusión.` : ''}
+${enCurso ? 'Si detectas uno de estos errores, nómbralo sin juicio en una frase («Estás tomando X como si fuera Y»), sin preguntar qué lo llevó a esa conclusión.' : 'Si detectas uno de estos errores, dilo con claridad ("No exactamente") y pregunta qué lo llevó a esa conclusión.'}` : ''}
 
 Tu objetivo: que el estudiante comprenda y responda "${verification.question}".`
 
@@ -633,10 +654,10 @@ TEMA NUEVO: «${nextActivity.title ?? `Actividad ${position + 1}`}». Enséñalo
 FORMATO DE TRANSICIÓN (máximo 80 palabras total; hasta 130 si la instrucción de la siguiente actividad pide enseñar o resolver un ejemplo antes de preguntar: en ese caso hazlo antes de la pregunta, nunca la saltes):
 1. ${sinVerificar ? '"Gracias, sigamos." (sin validar la respuesta: no pudo verificarse)' : cierraPorTope && isEvaluative ? 'Reconoce en 1 oración lo que sí dijo y explica en 1-2 oraciones lo que faltó' + salvoEliminatorios + '. Se acabaron los intentos: NO lo presentes como logrado y NO hagas más preguntas sobre esta actividad.' : isEvaluative ? '"Correcto/Bien." (1 palabra de cierre, NO resumas lo que ya dijiste)' : 'Recoge lo que dijo en una frase neutra ("Dices que…"), sin calificar: esta actividad no lleva nota, así que PROHIBIDO "correcto", "exacto", "bien", "bien pensado"'}
 2. ${ejemploDeLaSiguiente ? `Enseña la regla del tema nuevo en 1-2 oraciones y DESPUÉS resuelve el ejemplo de la instrucción como un caso aparte, con su situación y su decisión («Por ejemplo: ${ejemploDeLaSiguiente.slice(0, 60)}…»). El ejemplo es obligatorio: sin él, el estudiante no ve la regla aplicada antes de responder` : 'Introduce el nuevo tema en 2-3 oraciones máximo'}
-3. ${nextChoiceText ? 'Termina presentando la PREGUNTA CERRADA, con sus opciones y letras EXACTAMENTE como están abajo (una por línea). Pide que elija una letra. NO hagas todavía la pregunta abierta y NO adelantes la respuesta correcta en la introducción (ni el número, ni el nivel, ni la causa): explica la regla general, el caso lo resuelve el estudiante.' : 'Termina con la pregunta de verificación TAL CUAL, como única pregunta: sin reformularla, sin agregarle una aclaración («es decir, …») ni una segunda pregunta'}
+3. ${preguntaDelCodigo ? 'NO escribas la pregunta de la siguiente actividad ni ninguna otra: el sistema la agrega al final de tu mensaje, en negrita. Termina con el ejemplo resuelto o con lo último que enseñes' : nextChoiceText ? 'Termina presentando la PREGUNTA CERRADA, con sus opciones y letras EXACTAMENTE como están abajo (una por línea). Pide que elija una letra. NO hagas todavía la pregunta abierta y NO adelantes la respuesta correcta en la introducción (ni el número, ni el nivel, ni la causa): explica la regla general, el caso lo resuelve el estudiante.' : 'Termina con la pregunta de verificación TAL CUAL, como única pregunta: sin reformularla, sin agregarle una aclaración («es decir, …») ni una segunda pregunta'}
 
 SIGUIENTE ACTIVIDAD:
-Instrucción: ${nextTeaching}${(() => {
+${enCurso && nextActivity.rol ? `${guiaDelRol(nextActivity.rol)}\n` : ''}Instrucción: ${nextTeaching}${(() => {
           const material = getActivityBlocks(nextActivity).filter((b) => isVisibleToStudent(b, isTest))
           if (!material.length) return ''
           const visibles = material.filter((b) => (b.showWhen ?? 'on_start') === 'on_start' || cited?.blocks.has(b.id))
@@ -668,6 +689,15 @@ ${nextChoiceText}
       } else {
         dynamicPrompt += `\n\nESTADO: COMPLETADA - "Bien." + avanza al siguiente tema directamente. Sin resumen.`
       }
+    } else if (seguimientoDeCurso) {
+      // Sesión de curso: una sola guía, sin sub-preguntas ni pistas por intento.
+      const tipo = verificationResult.response_type
+      dynamicPrompt += `\n\n${guiaDeSeguimiento({
+        tipo: studentIsUnsure ? 'no_sabe' : tipo === 'incorrect' || tipo === 'off_topic' || tipo === 'correct' ? tipo : 'partial',
+        loQueDijo: verificationResult.criteriaMatched.length > 0 ? `Lo que el estudiante YA dijo bien: ${verificationResult.criteriaMatched.join('; ')}` : '',
+        loQueFalta: verificationResult.criteriaMissing.length > 0 ? `Lo que falta por cubrir: ${verificationResult.criteriaMissing.join('; ')}` : '',
+        esReintento: attempts >= 1,
+      })}${criticos.length > 0 ? `\nLos criterios eliminatorios no se revelan nunca: ${criticos.map((c) => `«${c}»`).join(', ')}.` : ''}`
     } else {
       // Usar response_type para feedback más específico
       const responseType = verificationResult.response_type || 'partial'
@@ -846,7 +876,8 @@ ESTADO DEL PASO 1: ya resuelto (${choiceState.correct ? 'acertó' : `no acertó;
   // - No tiene base + primer intento + sin explicación previa → MINI-EXPLICACIÓN
   //   didáctica (hay que enseñar antes de seguir preguntando)
   // - Pide ayuda, o segunda vez → reformulación con escenario (sin opciones reveladas)
-  if (studentIsUnsure && !cierraPorTope) {
+  // En una sesión de curso el «no sé» lo cubre guiaDeSeguimiento (sin sub-preguntas).
+  if (studentIsUnsure && !cierraPorTope && !seguimientoDeCurso) {
     const firstTime = (attempts || 0) <= 1
     // Conversación sobre el panel (spec §16.4): el primer «no sé» no se
     // responde explicando, se responde pidiendo la acción. Si después de mover
@@ -927,7 +958,9 @@ CÓMO RESPONDER (máx 60 palabras):
   // Scaffolding docente: progresión por intentos. Ninguna etapa entrega la
   // respuesta a un criterio eliminatorio; y agotar los intentos no es lograr:
   // el código avanza al alumno (avance forzado), pero no lo aprueba.
-  if (attempts >= 1 && !cierraPorTope && !aclaracion) {
+  // No en sesiones de curso: «reformula la pregunta» y «pista sutil» chocan con
+  // repetir la pregunta completa, y ahí los topes son de 1 o 2 intentos.
+  if (attempts >= 1 && !cierraPorTope && !aclaracion && !enCurso) {
     const hintStrategies: Record<number, string> = {
       1: `INTENTO 2/${maxAttempts} — PISTA SUTIL:
 - Reformula la pregunta de otra manera, sin meter en ella el dato que tiene que buscar
@@ -957,6 +990,11 @@ CÓMO RESPONDER (máx 60 palabras):
 Estrategia: ${intentClassification.suggested_response_strategy}
 - Si es brief_redirect: respuesta muy breve (1-2 oraciones) y vuelve al tema
 - Si es firm_redirect: indica amablemente que el tema está fuera de alcance`
+  }
+
+  // Va al final para que mande sobre las guías de arriba que piden terminar preguntando.
+  if (preguntaDelCodigo) {
+    dynamicPrompt += `\n\n${avisoPreguntaDelCodigo(preguntaDelCodigo)}`
   }
 
   return {

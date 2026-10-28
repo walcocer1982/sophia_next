@@ -17,12 +17,12 @@ import { citedFromTexts, createMarkerFilter, stripMarkers, type MarkerCheck } fr
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
 import { crearCorrectorDeTitulos } from '@/lib/titulos-material'
 import { crearQuitadorDeCalificaciones, debeQuitarCalificacion } from '@/lib/calificacion'
+import { crearQuitadorDePreguntas, preguntaDelTurno, preguntaEnNegrita } from '@/lib/perfil-curso'
 import { planteaLaPregunta } from '@/lib/planteo'
 import type { ChoiceTurn } from '@/lib/prompt-builder'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
 import { classifyIntent } from '@/lib/services/intent-classification'
 import { compressMessagesForAPI } from '@/lib/message-summarizer'
-import { generateLessonReport } from '@/lib/lesson-report'
 import { processPlannerAttachments } from '@/lib/planner/attachments'
 import type { LessonContent, ModerationResult, IntentClassification, ActivityCompletionResult, ClassifyBlock, TextBlock } from '@/types/lesson'
 import type { Message, Prisma } from '@prisma/client'
@@ -563,11 +563,35 @@ data: ${JSON.stringify({ type: 'done' })}
     !activityAlreadyCompleted &&
     lessonSession.lesson.course?.methodology !== 'CODE'
 
-  const [moderation, intent, verification] = await Promise.all([
+  // La respuesta escrita ya aprobó y solo faltaba tocar la línea (27 oct 2026): al
+  // tocarla llega un «listo» y el verificador volvía a evaluar lo mismo (461
+  // llamadas en un día). Se usa lo que aprobó cuando se pidió la línea.
+  const aprobadaSinLinea = (existingEvidence as { aprobadaSinLinea?: ActivityCompletionResult }).aprobadaSinLinea
+  const reusarAprobacion =
+    !!aprobadaSinLinea &&
+    isContinuationMessage &&
+    !revisionRapida &&
+    !repiteLineaEquivocada &&
+    subrayablesPropios.some(esSubrayadoNuevo) &&
+    !choiceTurn &&
+    !checkTurn &&
+    !activityAlreadyCompleted
+
+  // ¿Este turno pasa por el verificador? (las mismas condiciones del Promise.all de abajo)
+  const verificadorCorre = !(
+    pidioAclaracion || pidioSeguir || revisionRapida || repiteLineaEquivocada || reusarAprobacion ||
+    hallucinationCheck.isHallucination || checkTurn || choiceTurn || esTurnoDeConexion ||
+    activityAlreadyCompleted || sinNotaDeUnTurno
+  )
+
+  const [moderation, intentClasificada, verification] = await Promise.all([
     isContinuationMessage || choiceTurn || checkTurn || pidioSeguir
       ? Promise.resolve(SAFE_MODERATION)
       : moderateContent(message, { lessonTitle }),
-    isContinuationMessage || choiceTurn || checkTurn || pidioSeguir
+    // Si corre el verificador, la intención sale de él (más abajo): ya dice si el
+    // mensaje está fuera de tema, que es lo único que se usa de la clasificación.
+    // Clasificarla aparte era otra llamada por mensaje (12 % del gasto, 27 oct 2026).
+    isContinuationMessage || choiceTurn || checkTurn || pidioSeguir || verificadorCorre
       ? Promise.resolve(CONTINUATION_INTENT)
       : classifyIntent(message, currentActivity, {
           currentLesson: lessonTitle,
@@ -579,6 +603,8 @@ data: ${JSON.stringify({ type: 'done' })}
     // Revisión al tocar, o la misma línea equivocada otra vez: el código ya sabe que no respalda.
     : revisionRapida || repiteLineaEquivocada
       ? Promise.resolve<ActivityCompletionResult>({ ...SIN_VERIFICAR, response_type: 'partial' })
+    : reusarAprobacion
+      ? Promise.resolve<ActivityCompletionResult>({ ...aprobadaSinLinea!, completed: true, ready_to_advance: true })
     // Hallucination de voz: skip AI verifier (caro), tratar como off_topic
     // suave para que Sophia pida repetir sin contar como intento real.
     : hallucinationCheck.isHallucination
@@ -635,6 +661,10 @@ data: ${JSON.stringify({ type: 'done' })}
           : verifyActivityCompletion(mensajeParaVerificar, currentActivity, verifierHistory, wasExplained, allLessonBlocks(contentJson, verSinValidar)))
   ])
   marcar('gate')
+  const intent: IntentClassification =
+    verificadorCorre && !isContinuationMessage && verification.response_type === 'off_topic'
+      ? { ...CONTINUATION_INTENT, intent: 'off_topic', is_on_topic: false, relevance_score: 0, needs_redirect: true, suggested_response_strategy: 'brief_redirect' }
+      : intentClasificada
 
   // Un paso sin nota de un turno (rutina, cierre) se acepta sin verificador, pero
   // un mensaje fuera de tema no lo responde (23 oct 2026, clase de EOM): «¿Eres
@@ -769,6 +799,8 @@ data: ${JSON.stringify({ type: 'done' })}
   // tocar la línea, y la actividad se evaluó y avanzó sin lectura comprobada. Ahora
   // se le recuerda una vez, sin evaluar lo que escribió; a la segunda, se sigue.
   const recordarSubrayado = sinSubrayarAun && evidenciaSubrayado.subrayadoPedido === true && evidenciaSubrayado.subrayadoRecordado !== true
+  // Lo que aprobó el verificador al pedir la línea, antes de retener el avance (ver reusarAprobacion).
+  const aprobacionAlPedirLinea: ActivityCompletionResult | null = turnoDeSubrayar ? { ...verification } : null
   if (recordarSubrayado) {
     verification.ready_to_advance = false
     verification.completed = false
@@ -1014,6 +1046,23 @@ data: ${JSON.stringify({ type: 'done' })}
     : ''
   let evidenciaEscrita = false
 
+  // Punto clave, caso corto y cierre de una sesión de curso: la pregunta de la
+  // actividad que queda abierta la pone el código al final del mensaje, y las que
+  // escriba Sophia se quitan (lib/perfil-curso.ts, 27 oct 2026).
+  const preguntaFinal = lessonSession.lesson.course?.methodology === 'CODE'
+    ? null
+    : preguntaDelTurno({
+      actual: currentActivity,
+      siguiente: nextActivityData ?? undefined,
+      avanza: verification.ready_to_advance === true || cierraPorTope,
+      esUltima: currentActivityContext.isLastActivity,
+      respuestaFija: respuestaFija !== null,
+      pasoCerrado: !!choiceTurn || !!checkTurn,
+      yaCompletada: activityAlreadyCompleted,
+      sinVerificar: verification.unverified === true,
+      turnoDeConexion: esTurnoDeConexion,
+    })
+
   const { staticBlocks, dynamicPrompt: dynamicPromptBase } = buildSystemPrompt({
     activityContext: currentActivityContext,
     recentMessages: sessionWithMessages.messages,
@@ -1037,6 +1086,7 @@ data: ${JSON.stringify({ type: 'done' })}
     aclaracion: pidioAclaracion
       ? (attempts === 0 && currentActivity.teaching?.first_question) || currentActivity.verification.question
       : undefined,
+    preguntaDelCodigo: preguntaFinal,
   })
 
   // Turno de conexión: el alumno respondió una bienvenida genérica. Sophia
@@ -1158,7 +1208,16 @@ CÓMO RESPONDER (máximo 90 palabras):
         })
           ? crearQuitadorDeCalificaciones()
           : null
-        const limpiar = (trozo: string) => (quitador ? quitador.push(trozo) : trozo)
+        // Si la pregunta la pone el código, las que escriba Sophia no salen.
+        const quitadorDePreguntas = preguntaFinal ? crearQuitadorDePreguntas() : null
+        const limpiar = (trozo: string) => {
+          const sinCalificar = quitador ? quitador.push(trozo) : trozo
+          return quitadorDePreguntas ? quitadorDePreguntas.push(sinCalificar) : sinCalificar
+        }
+        const vaciarLimpieza = () => {
+          const resto = quitador?.flush() ?? ''
+          return quitadorDePreguntas ? quitadorDePreguntas.push(resto) + quitadorDePreguntas.flush() : resto
+        }
 
         for await (const event of claudeStream) {
           if (event.type === 'content_block_delta') {
@@ -1195,7 +1254,7 @@ CÓMO RESPONDER (máximo 90 palabras):
         marcar('stream')
 
         // Lo que retuvo el filtro de marcadores al final del texto.
-        const restoMarcadores = limpiar(correctorTitulos.push(correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()) + correctorTitulos.flush()) + (quitador?.flush() ?? '')
+        const restoMarcadores = limpiar(correctorTitulos.push(correctorVoseo.push(filtroMarcadores.flush()) + correctorVoseo.flush()) + correctorTitulos.flush()) + vaciarLimpieza()
         if (restoMarcadores) {
           fullResponse += restoMarcadores
           if (!suppressFurther) unsent += restoMarcadores
@@ -1218,6 +1277,14 @@ CÓMO RESPONDER (máximo 90 palabras):
         // extrae el JSON y limpia el marcador del mensaje persistido.
         const { brief: projectBrief, cleaned } = extractProjectBrief(fullResponse)
         let cleanedAssistantContent = cleaned
+
+        // La pregunta de la actividad, escrita por el código (lib/perfil-curso.ts).
+        const preguntaAgregada = preguntaFinal !== null
+        if (preguntaFinal !== null) {
+          const pregunta = `${cleanedAssistantContent.trim() ? '\n\n' : ''}${preguntaEnNegrita(preguntaFinal)}`
+          flushToClient(pregunta)
+          cleanedAssistantContent = cleanedAssistantContent.trimEnd() + pregunta
+        }
 
         // Fallback anti-burbuja-vacía: si el modelo devolvió una respuesta
         // vacía (o solo whitespace / solo un brief suprimido), el estudiante
@@ -1252,13 +1319,14 @@ CÓMO RESPONDER (máximo 90 palabras):
           cleanedAssistantContent += intro
         }
         if (avanzaEsteTurno && !activityAlreadyCompleted && verification.unverified !== true) {
-          const siguioElGuion = currentActivityContext.isLastActivity
+          // Si la pregunta siguiente ya la puso el código, no hay nada que retener ni pegar.
+          const siguioElGuion = preguntaAgregada || (currentActivityContext.isLastActivity
             ? !cleanedAssistantContent.includes('?')
             : nextActivityData
               ? nextActivityData.checks?.length
                 ? true
                 : planteaLaPregunta(cleanedAssistantContent, nextActivityData.choice?.prompt ?? nextActivityData.teaching?.first_question ?? nextActivityData.verification.question)
-              : true
+              : true)
           if (!siguioElGuion) {
             const retenciones = (existingEvidence as { heldBack?: number }).heldBack ?? 0
             // Si Sophia no dejó ninguna pregunta abierta (cerró, agradeció), no hay
@@ -1312,6 +1380,7 @@ CÓMO RESPONDER (máximo 90 palabras):
           !verification.ready_to_advance &&
           !activityAlreadyCompleted &&
           !retenido &&
+          !preguntaAgregada &&
           respuestaFija === null &&
           !choiceTurn &&
           !avanzaPorIntentos &&
@@ -1459,22 +1528,6 @@ const allActivities = await prisma.activityProgress.findMany({
               duration: new Date().getTime() - new Date(lessonSession.startedAt).getTime(),
             })
 
-            // Generate AI report asynchronously (don't block the response).
-            // Pasamos objective + keyPoints para que el reporte tenga el ALCANCE
-            // de la lección y no invente temas fuera de ese alcance. Language
-            // de la sesión decide en qué idioma se genera el reporte.
-            generateLessonReport(
-              lessonSession.id,
-              lessonTitle,
-              lessonObjective,
-              lessonKeyPoints,
-              allActivities,
-              grade ?? 0,
-              contentJson,
-              lessonSession.language,
-            ).catch((err: unknown) => {
-              logger.error('chat.stream.report_generation_failed', { sessionId, error: String(err) })
-            })
         }
 
         // 5. Guardar resultado de verificación en ActivityProgress
@@ -1712,6 +1765,8 @@ const allActivities = await prisma.activityProgress.findMany({
             heldBack: ((existingEvidence as { heldBack?: number }).heldBack ?? 0) + (retenido ? 1 : 0),
             // Ya se pidió subrayar en esta actividad: no se vuelve a pedir.
             ...((existingEvidence as { subrayadoPedido?: boolean }).subrayadoPedido || turnoDeSubrayar ? { subrayadoPedido: true } : {}),
+            // La aprobación de la respuesta escrita, mientras falta tocar la línea.
+            ...(aprobacionAlPedirLinea ? { aprobadaSinLinea: aprobacionAlPedirLinea } : aprobadaSinLinea ? { aprobadaSinLinea } : {}),
             ...(fallosDeSubrayado || revisarSubrayado ? { subrayadoFallos: fallosDeSubrayado + (revisarSubrayado ? 1 : 0) } : {}),
             ...(choiceState ? { choice: choiceState } : {}),
             ...(checksState ? { checks: checksState } : {}),
