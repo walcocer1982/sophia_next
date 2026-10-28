@@ -141,6 +141,9 @@ export default function CourseDashboardPage() {
   // una ventana anterior (lección reabierta) queda en la matriz y en el reporte.
   const delBloque = filasDelBloqueAbierto(filas.filter((f) => !f.deVentanaAnterior), data.bloquesAbiertos)
   const filasVisibles = delBloque.filter((f) => coincide(f.name, f.email))
+  // Con una sola lección en la tabla, su nombre va en el título y no en cada fila.
+  const lecciones = [...new Set(filasVisibles.map((f) => f.lessonTitle))]
+  const variasLecciones = lecciones.length > 1
   const activos = delBloque.filter((f) => f.estado === 'activa').length
 
   return (
@@ -238,6 +241,9 @@ export default function CourseDashboardPage() {
               ) : (
                 'Sesiones'
               )}
+              {lecciones.length === 1 && (
+                <span className="text-sm text-gray-600 font-normal">· {lecciones[0]}</span>
+              )}
               <span className="text-xs text-gray-400 font-normal ml-2">
                 {vivo ? '(se actualiza cada 15 s)' : '(se actualiza cada minuto)'}
               </span>
@@ -293,9 +299,8 @@ export default function CourseDashboardPage() {
                   <tr className="border-b text-left text-xs text-gray-500">
                     <th className="pb-2 font-medium pl-3">Estado</th>
                     <th className="pb-2 font-medium">Estudiante</th>
-                    <th className="pb-2 font-medium">Sesión</th>
-                    <th className="pb-2 font-medium">Actividad</th>
-                    <th className="pb-2 font-medium">Progreso</th>
+                    {variasLecciones && <th className="pb-2 font-medium">Sesión</th>}
+                    <th className="pb-2 font-medium">Avance</th>
                     <th className="pb-2 font-medium">Ingresó</th>
                     <th className="pb-2 font-medium">Último msg</th>
                     <th className="pb-2 font-medium">Duración</th>
@@ -306,7 +311,7 @@ export default function CourseDashboardPage() {
                 </thead>
                 <tbody>
                   {filasVisibles.map((f) => (
-                    <FilaSesion key={f.sessionId} f={f} courseId={courseId} />
+                    <FilaSesion key={f.sessionId} f={f} courseId={courseId} mostrarSesion={variasLecciones} />
                   ))}
                 </tbody>
               </table>
@@ -407,7 +412,12 @@ export default function CourseDashboardPage() {
   )
 }
 
-function FilaSesion({ f, courseId }: { f: FilaMonitor; courseId: string }) {
+/** La hora sola si es de hoy; con la fecha, si no. */
+function horaCorta(date: string | Date): string {
+  return formatDate(date) === formatDate(new Date()) ? formatTime(date) : `${formatDate(date)}, ${formatTime(date)}`
+}
+
+function FilaSesion({ f, courseId, mostrarSesion }: { f: FilaMonitor; courseId: string; mostrarSesion: boolean }) {
   const e = ESTADO_FILA[f.estado]
   const apagado = f.estado === 'sin-terminar' || f.estado === 'en-pausa'
   const texto = apagado ? 'text-gray-500' : 'text-gray-600'
@@ -416,7 +426,7 @@ function FilaSesion({ f, courseId }: { f: FilaMonitor; courseId: string }) {
   const pct = f.estado === 'terminada' ? 100 : Math.round(f.percentage)
   return (
     <tr className={`border-b ${e.fila}`}>
-      <td className="py-1.5 pl-3">
+      <td className="py-1.5 pl-3 pr-3 min-w-[96px]">
         <div className="flex items-center gap-2">
           {f.estado === 'activa' ? (
             <span className="relative flex h-2 w-2 shrink-0">
@@ -439,38 +449,37 @@ function FilaSesion({ f, courseId }: { f: FilaMonitor; courseId: string }) {
           <p className={`font-medium text-sm ${apagado ? 'text-gray-600' : 'text-gray-900'}`}>{f.name || f.email}</p>
         </Link>
       </td>
-      <td className="py-1.5">
-        <p className="text-[11px] text-gray-500 truncate max-w-[150px]" title={f.lessonTitle}>{f.lessonTitle}</p>
-      </td>
-      <td className="py-1.5">
-        {f.estado === 'terminada' ? (
-          <span className="text-xs text-blue-600 font-medium">Completó</span>
-        ) : f.activityIndex && f.activityTotal ? (
-          <div>
-            <span className={`text-xs font-medium ${texto}`}>Act {f.activityIndex}/{f.activityTotal}</span>
-            {f.activityTitle && (
-              <p className="text-[10px] text-gray-500 truncate max-w-[150px]" title={f.activityTitle}>{f.activityTitle}</p>
-            )}
-          </div>
-        ) : (
-          <span className="text-gray-400 text-xs">—</span>
-        )}
-      </td>
-      <td className="py-1.5">
+      {mostrarSesion && (
+        <td className="py-1.5">
+          <p className="text-[11px] text-gray-500 truncate max-w-[150px]" title={f.lessonTitle}>{f.lessonTitle}</p>
+        </td>
+      )}
+      {/* Actividad y progreso en una celda (28 oct 2026): eran dos columnas para un mismo dato. */}
+      <td className="py-1.5 pr-3">
         <div className="flex items-center gap-2">
-          <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <span className={`text-xs font-medium whitespace-nowrap ${f.estado === 'terminada' ? 'text-blue-600' : texto}`}>
+            {f.estado === 'terminada'
+              ? 'Completó'
+              : f.activityIndex && f.activityTotal
+                ? `Act ${f.activityIndex}/${f.activityTotal}`
+                : '—'}
+          </span>
+          <div className="w-14 h-1.5 shrink-0 bg-gray-200 rounded-full overflow-hidden">
             <div className={`h-full rounded-full ${barra}`} style={{ width: `${pct}%` }} />
           </div>
           <span className={`text-xs ${texto}`}>{pct}%</span>
         </div>
+        {f.estado !== 'terminada' && f.activityTitle && (
+          <p className="text-[10px] text-gray-500 truncate max-w-[220px]" title={f.activityTitle}>{f.activityTitle}</p>
+        )}
       </td>
-      <td className={`py-1.5 text-xs ${texto}`}>
-        {formatDate(f.startedAt)}, {formatTime(f.startedAt)}
+      <td className={`py-1.5 pr-3 text-xs whitespace-nowrap ${texto}`} title={`${formatDate(f.startedAt)}, ${formatTime(f.startedAt)}`}>
+        {horaCorta(f.startedAt)}
       </td>
-      <td className={`py-1.5 text-xs ${texto}`}>
-        {formatDate(f.lastActivityAt)}, {formatTime(f.lastActivityAt)}
+      <td className={`py-1.5 pr-3 text-xs whitespace-nowrap ${texto}`} title={`${formatDate(f.lastActivityAt)}, ${formatTime(f.lastActivityAt)}`}>
+        {f.estado === 'terminada' ? horaCorta(f.lastActivityAt) : hace(f.lastActivityAt)}
       </td>
-      <td className={`py-1.5 text-xs ${texto}`}>{f.minutos} min</td>
+      <td className={`py-1.5 text-xs whitespace-nowrap ${texto}`}>{f.minutos} min</td>
       <td className={`py-1.5 text-xs ${texto}`}>{f.messageCount}</td>
       <td className="py-1.5">
         {f.estado !== 'activa' && f.grade !== null && f.estado === 'terminada' ? (
@@ -511,15 +520,15 @@ function Senales({ f }: { f: FilaMonitor }) {
   }
   if (f.porLimite) {
     items.push(
-      <p key="limite" className="text-[10px] text-red-700 mt-0.5" title={f.porLimite.title}>
-        Avanzó por límite en Act {f.porLimite.index}
+      <p key="limite" className="text-[10px] text-red-700 mt-0.5 whitespace-nowrap" title={`Avanzó por límite: ${f.porLimite.title}`}>
+        Por límite · Act {f.porLimite.index}
       </p>
     )
   }
   if (f.lecturaSinComprobar?.length) {
     items.push(
-      <p key="lectura" className="text-[10px] text-amber-700 mt-0.5" title={f.lecturaSinComprobar.map((a) => a.title).join(' · ')}>
-        Lectura sin comprobar en Act {f.lecturaSinComprobar.map((a) => a.index).join(', ')}
+      <p key="lectura" className="text-[10px] text-amber-700 mt-0.5 whitespace-nowrap" title={`Lectura sin comprobar: ${f.lecturaSinComprobar.map((a) => a.title).join(' · ')}`}>
+        Sin lectura · Act {f.lecturaSinComprobar.map((a) => a.index).join(', ')}
       </p>
     )
   }
@@ -530,13 +539,8 @@ function Senales({ f }: { f: FilaMonitor }) {
       </p>
     )
   }
-  if (items.length === 0) {
-    return f.estado === 'terminada' ? (
-      <span className="text-xs text-blue-600">Completado</span>
-    ) : (
-      <span className="text-xs text-gray-400">—</span>
-    )
-  }
+  // Sin «Completado» para los que terminaron: ya lo dice la columna Avance.
+  if (items.length === 0) return <span className="text-xs text-gray-400">—</span>
   return <div>{items}</div>
 }
 
