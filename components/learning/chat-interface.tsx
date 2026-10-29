@@ -314,11 +314,13 @@ export function ChatInterface({
         // onChunk: Acumular texto en el mensaje optimistic
         (text) => {
           streamingContentRef.current += text
-
+          // El texto se copia AHORA: React corre el updater después, y si el
+          // «done» llega en el mismo paquete ya vació el ref y el mensaje
+          // entero quedaba en blanco hasta recargar (29 oct 2026, mensajes
+          // fijos y paso de actividad, que llegan de golpe).
+          const visto = streamingContentRef.current
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId ? { ...m, content: streamingContentRef.current } : m
-            )
+            prev.map((m) => (m.id === assistantId ? { ...m, content: visto } : m))
           )
         },
         // onDone: Marcar como completado
