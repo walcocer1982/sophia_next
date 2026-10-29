@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { crearQuitadorDePreguntas, preguntaDelTurno, preguntaEnNegrita } from '@/lib/perfil-curso'
+import { crearQuitadorDePreguntas, preguntaDelTurno, preguntaEnNegrita, repiteLaPregunta } from '@/lib/perfil-curso'
 import { buildSystemPrompt } from '@/lib/prompt-builder'
 import { REGISTRO } from '../scripts/cetemin/cursos/registro'
 import { construirActividades, subidasFalsas } from '../scripts/cetemin/plantillas'
@@ -79,8 +79,42 @@ test('con el punto clave abierto, el código repite su pregunta; al cerrarlo, po
   assert.equal(preguntaDelTurno({ ...base, actual: caso, siguiente: cierre, avanza: true }), cierre.verification.question)
 })
 
-test('no pone pregunta en la rutina, en un mensaje fijo, al terminar la lección ni en lecciones sin rol', () => {
-  assert.equal(preguntaDelTurno({ ...base, actual: veo, siguiente: acts[1], avanza: true }), null)
+test('al cerrar un paso de la rutina, el código pone la pregunta del paso siguiente (PM S7, 28 oct)', () => {
+  // Real: al cerrar el Veo, Sophia preguntó «¿qué corre? … ¿de dónde viene…?» y después venía la del Pienso.
+  assert.equal(preguntaDelTurno({ ...base, actual: veo, siguiente: acts[1], avanza: true }), acts[1].verification.question)
+  // Dentro del mismo paso de la rutina, la repregunta («¿qué te hace decir eso?») sigue siendo de Sophia.
+  assert.equal(preguntaDelTurno({ ...base, actual: acts[1], siguiente: mePregunto, avanza: false }), null)
+})
+
+test('la situación de la pregunta que Sophia copia no sale dos veces (PM S7, 28 oct)', () => {
+  const pregunta = 'En la hoja de fallas de una faja, un técnico anota como modo de falla de un polín de carga: «la faja paró 6 horas». ¿Está bien anotado, y por qué?'
+  const texto = 'En la hoja de la bomba BO42, el analista anotó como modo «pista externa erosionada» y como efecto «la bomba paró». Eso es correcto: el modo describe qué falló.\n\n**En la hoja de fallas de una faja, un técnico anota como modo de falla de un polín de carga: «la faja paró 6 horas». ¿Está bien anotado, y por qué?**'
+  for (const paso of [1, 6, texto.length]) {
+    const q = crearQuitadorDePreguntas(pregunta)
+    let salida = ''
+    for (let i = 0; i < texto.length; i += paso) salida += q.push(texto.slice(i, i + paso))
+    salida += q.flush()
+    assert.ok(!salida.includes('6 horas'), `paso ${paso}: ${salida}`)
+    assert.ok(salida.includes('pista externa erosionada'), `paso ${paso}: ${salida}`)
+    assert.ok(!salida.includes('**'), `paso ${paso}: ${salida}`)
+  }
+  // Una oración corta que coincide por azar con la pregunta no se quita
+  assert.equal(repiteLaPregunta('¿Está bien', pregunta), false)
+  assert.equal(repiteLaPregunta('El modo es cómo deja de cumplir su función.', pregunta), false)
+})
+
+test('al cerrar por límite, tampoco queda la situación de la pregunta que se cierra (PM S7, 28 oct)', () => {
+  // Real: el código pegó la pregunta del punto clave 2 y quedó suelta la del 1.
+  const cerrada = 'En la hoja de fallas de una faja, un técnico anota como modo de falla de un polín de carga: «la faja paró 6 horas». ¿Está bien anotado, y por qué?'
+  const nueva = 'La correa de una zaranda chilla, y el mecánico propone cambiar las correas de inmediato, sin revisar nada más. ¿Es lo correcto, y por qué?'
+  const texto = 'Dices que falta la función. Lo que faltó es que las horas de parada son el efecto.\n\n**En la hoja de fallas de una faja, un técnico anota como modo de falla de un polín de carga: «la faja paró 6 horas».'
+  const q = crearQuitadorDePreguntas(nueva, cerrada)
+  const salida = q.push(texto) + q.flush()
+  assert.ok(!salida.includes('6 horas'), salida)
+  assert.ok(salida.includes('las horas de parada son el efecto'), salida)
+})
+
+test('no pone pregunta en un mensaje fijo, al terminar la lección ni en lecciones sin rol', () => {
   assert.equal(preguntaDelTurno({ ...base, actual: pc1, avanza: false, respuestaFija: true }), null)
   assert.equal(preguntaDelTurno({ ...base, actual: cierre, avanza: true, esUltima: true }), null)
   assert.equal(preguntaDelTurno({ ...base, actual: sinRol(pc1), avanza: false }), null)
@@ -152,4 +186,25 @@ test('la razón de EOM S4 no estaba en la línea de las bandas; con la fila IF e
   const razon = 'en la cartilla, la casilla IF/MP es calidad F'
   assert.equal(compartenPalabraClave(razon, 'D: 41 a 50 · E: 21 a 40 · F: menos de 20.'), false)
   assert.equal(compartenPalabraClave(razon, 'Fila IF (más de 20 fracturas): IF/R da D–E · IF/P da E–F · IF/MP da F.'), true)
+})
+
+test('de un paso de la rutina a otro, solo la primera oración de Sophia (PM S7, 28 oct)', async () => {
+  const { crearRecortadorAPrimeraOracion, pasaDentroDeLaRutina } = await import('@/lib/perfil-curso')
+  // Real: al cerrar el Veo, Sophia agregó un pedido sin «?» que el quitador de preguntas no ve.
+  const texto = 'Dices que hay una faja. Mira bien: en la fotografía hay más que eso —la banda está sobre algo. Describe qué está debajo de la banda y qué ves que descarga sobre ella.'
+  for (const paso of [1, 4, texto.length]) {
+    const r = crearRecortadorAPrimeraOracion()
+    let salida = ''
+    for (let i = 0; i < texto.length; i += paso) salida += r.push(texto.slice(i, i + paso))
+    salida += r.flush()
+    assert.equal(salida.trim(), 'Dices que hay una faja.', `paso ${paso}`)
+  }
+  // Un mensaje de una sola oración sale entero
+  const r = crearRecortadorAPrimeraOracion()
+  assert.equal(r.push('Dices que se malogra porque está sucio.') + r.flush(), 'Dices que se malogra porque está sucio.')
+  // Solo dentro de la rutina: de Me pregunto al punto clave, Sophia enseña
+  assert.equal(pasaDentroDeLaRutina('veo', 'pienso'), true)
+  assert.equal(pasaDentroDeLaRutina('pienso', 'me_pregunto'), true)
+  assert.equal(pasaDentroDeLaRutina('me_pregunto', 'punto_clave'), false)
+  assert.equal(pasaDentroDeLaRutina(undefined, 'pienso'), false)
 })

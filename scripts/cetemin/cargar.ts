@@ -26,8 +26,9 @@ function rutaDeImagen(archivo: string): string {
   return isAbsolute(archivo) ? archivo : archivo.startsWith('scripts/') ? resolve(archivo) : join(FUENTE, archivo)
 }
 
-// tsx no carga .env (Prisma lo hace solo; Cloudinary no).
-for (const linea of readFileSync('.env', 'utf8').split(/\r?\n/)) {
+// tsx no carga .env (Prisma lo hace solo; Cloudinary no). Desde un worktree sin
+// .env, las variables llegan con `node --env-file=<ruta>`.
+for (const linea of existsSync('.env') ? readFileSync('.env', 'utf8').split(/\r?\n/) : []) {
   const m = linea.match(/^(CLOUDINARY_[A-Z_]+)=(.+)$/)
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim().replace(/^"|"$/g, '')
 }

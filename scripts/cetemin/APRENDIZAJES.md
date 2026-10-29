@@ -110,6 +110,59 @@ En «Aprender con una tutora de IA», la actividad 4 perdió a 8 de 25 alumnos t
 - **«Listo» viene del toque:** de 657 «listo», 607 los mandó el navegador al tocar una línea. La mitad de los «Esa línea no respalda tu respuesta» (70 de 140) salió cuando el alumno todavía no tenía una respuesta guardada: buscaba la respuesta en la pizarra.
 - **Cierre por límite:** en 136 de 310 transiciones tras un cierre por límite (44 %), el mensaje traía dos preguntas: Sophia volvía a pedir lo de la actividad anterior y el código pegaba la pregunta nueva. El prompt ya le prohíbe preguntar, y no basta.
 
+## 12. Primera medición del procedimiento (28 oct 2026)
+
+SI S4, SI S5, EOM S5 y PM S4 son las primeras sesiones dictadas que pasaron por [PROCEDIMIENTO.md](PROCEDIMIENTO.md) (revisadas y recargadas el 27 oct). Se comparan con las que no pasaron: S1–S3 de los tres cursos y EOM S4. Alumnos reales, sin pruebas ni simulados. Medición: `medir-clase.ts` y el conteo por hallazgo de este documento.
+
+| | Sin procedimiento (165 sesiones) | Con procedimiento (64 sesiones) |
+|---|---|---|
+| Aciertan al primer intento | 34 % | **50 %** |
+| Actividades cerradas por límite | 42 % | **30 %** |
+| Intentos por actividad con nota | 1,77 | **1,59** |
+| Terminan la sesión | 79 % | **89 %** |
+| Duración mediana | 27 min | **22 min** |
+| Se fueron en el cierre | 9 | **0** |
+| Transición tras cierre por límite con dos preguntas | 44 % | 53 % |
+| Mensajes de Sophia con dos preguntas | 10 % | 8 % |
+| «Esa línea no respalda» por sesión (con la clave corregida, §13) | 0,78 | 0,95 |
+| …de ellos, sin respuesta guardada todavía | 53 % | 53 % |
+
+Pares de sesiones seguidas, mismos alumnos (sin → con): por límite SI S3 → S4, 43 % → 20 %; EOM S4 → S5, 41 % → 25 %; PM S3 → S4, 48 % → 35 %. Acierto al primer intento: 34 % → 46 %, 31 % → 60 %, 31 % → 44 %.
+
+**Funciona: lo que el procedimiento controla, el contenido.** Criterios de una idea (§3), razón dicha en el texto que se toca (§10), ejemplo con la excepción (§4) y cifras iguales (§5) bajan el cierre por límite en los tres cursos, también con los mismos alumnos de un día a otro. Las sesiones duran menos y nadie se fue en el cierre.
+
+**No cambió: lo que depende de la conducta de Sophia o del código.** Las preguntas dobles en la transición (§1) y las repreguntas siguen igual o peor. El perfil de curso (`lib/perfil-curso.ts`) está en producción desde el 27 oct, pero solo actúa en actividades con `rol`, y ninguna sesión dictada lo tenía. El toque de la línea (§6) tampoco mejoró: la mitad de los rechazos sale cuando el alumno todavía no respondió y busca la respuesta en la pizarra. Eso es el flujo del toque, no el contenido.
+
+**Acciones:**
+1. Probar con alumno simulado una sesión con `rol` (S7) y, si la auditoría pasa, recargar las siguientes con la plantilla nueva. Se mide de nuevo la transición con dos preguntas. **Hecho el 28 oct (§14):** la prueba encontró tres fallas del perfil, se corrigieron y flojo y bueno pasaron la auditoría.
+2. Cambiar el flujo del toque: revisar la línea solo cuando Sophia la pidió. **Hecho el 28 oct (§14).**
+3. Revisar la línea que respalda contra la razón del criterio antes de cargar (§13). **En PROCEDIMIENTO, pasos 2 y 9.**
+
+**Cuidado al leer la tabla:** las sesiones con procedimiento se dictaron después, con alumnos que ya conocían a Sophia, y son temas distintos. Por eso pesan más los pares de sesiones seguidas que la comparación por grupo. El deploy del 27 oct en la noche cambió costos y sondeo, no la conversación.
+
+## 13. La clave dejaba fuera una línea que también respalda (EOM S5 y SI S5, 28 oct 2026)
+
+EOM S5, «Las cuatro llaves»: el criterio pide «le falta la temporalidad, una de las cuatro llaves». El alumno respondía «No, porque le falta una de las cuatro llaves, la temporalidad» y tocaba «Para entrar a la tabla hacen falta cuatro llaves…». Esa línea sostiene su razón, pero la clave solo aceptaba la de la temporalidad: 10 rechazos injustos en 16 alumnos, y 4 que acertaron al primer intento quedaron con «Lectura sin comprobar». En SI S5, «Aislamiento», pasó lo mismo con «Aislar es… que no pueda entrar energía ni material» (2 rechazos).
+
+Se corrigió el mismo día: la línea se sumó a `respalda` en los archivos y en la base, y las 4 marcas pasaron a comprobada. La nota no cambió: nunca dependió del toque.
+
+**Al planificar:** ✋ leer cada línea del texto contra la razón del criterio. Si otra línea también la sostiene, va en `respalda`. **Después de la clase:** `medir-clase.ts` muestra la línea más rechazada de cada actividad. Si varios alumnos que respondieron bien tocaron la misma línea, se lee: puede ser un error de la clave, no del alumno.
+
+## 14. Tocar la línea sin que se pida, y la prueba del perfil (28 oct 2026)
+
+**El toque que nadie pidió.** De 165 «Esa línea no respalda» del 27-28 oct, 73 salieron sin que se hubiera pedido la línea: el alumno respondió mal, Sophia le dijo qué faltaba y él tocó una línea, buscando ahí la respuesta. La pantalla mandaba «listo» con cada toque si ya había escrito algo. De 249 toques así, 233 no ganaron nada: 109 dieron «no respalda», 67 respaldaban pero no avanzaron y 56 gastaron el último intento y cerraron la actividad por límite. Solo 14 terminaron en una actividad lograda.
+
+Ahora el toque se revisa solo cuando la línea está pedida. Si no, queda marcada («Marcada: va con tu próxima respuesta») y viaja con lo que escriba. La línea se juzga (roja, verde, «Esa es la línea») solo si la respuesta escrita aprobó: confirmar una línea con la respuesta mal le daba la razón («Ahora que identificaste la línea sobre el agua, cuéntame…»).
+
+**La prueba del perfil (PM S7, alumno flojo y bueno por API).** Tres fallas que habrían visto los alumnos:
+- Al cerrar el Veo, Sophia seguía con la imagen («¿qué corre? … Describe qué está debajo de la banda») y después venía la pregunta del Pienso. Ahora, al pasar de un paso de la rutina a otro, queda solo su primera oración («Dices que hay una faja.») y la pregunta la pone el código.
+- La situación de la pregunta salía dos veces: Sophia la copiaba, el filtro quitaba solo la oración con «?». Ahora quita también lo que repite la pregunta.
+- **En el cierre por límite no enseñaba la actividad siguiente:** con la conversación de la actividad no lograda a la vista, seguía con ella («dime si esas horas son el modo…») y el alumno recibía la pregunta nueva sin la regla ni el ejemplo. Es lo que mostraba el 53 % de §12. Ahora el código escribe «Dejamos aquí esta actividad: tu instructor la revisará contigo en la clase.» y Sophia presenta la actividad nueva sin el historial, como en la bienvenida.
+
+Con los arreglos, el flojo terminó en 18 turnos y el bueno en 10, los dos sin fallas en `auditar-sesion.ts`.
+
+**Al planificar:** nada cambia en los archivos de sesión. **Al probar:** una prueba por API cuesta poco y encuentra lo que el validador no ve; se hace con cada cambio de código del perfil, no solo con sesiones nuevas.
+
 ---
 
 ## Cómo se aplica
@@ -117,10 +170,12 @@ En «Aprender con una tutora de IA», la actividad 4 perdió a 8 de 25 alumnos t
 1. Antes de escribir o revisar una sesión: leer este documento y DISENO-DE-CLASE.md.
 2. `cargar.ts --solo-validar` hace cumplir lo que se puede comprobar (criterios de una idea, largo de la instrucción).
 3. Lo demás (excepción en el ejemplo, cifras, preguntas que no suponen) se revisa a mano, punto por punto.
-4. Después de cada clase real: medir por límite y abandono por actividad y agregar aquí lo nuevo.
+4. Después de cada clase real: medir por límite, abandono y líneas rechazadas por actividad y agregar aquí lo nuevo. Cada cierto número de clases, comparar las sesiones que pasaron por el procedimiento con las que no (§12).
 
 ## Tensión abierta: excepción frente a ejemplo parecido
 
 Mostrar la excepción con otros datos (§4) puede dejar el ejemplo casi igual a la pregunta (§5), y entonces el alumno copia en vez de aplicar la regla. Pasó al revisar SI S4 («asoma la cabeza» / «mete la cabeza y el brazo»), SI S5 («se marea» / «habla enredado») y EOM S4 («galería ocho meses parada» / «subnivel cinco meses parado»). Se decide con la prueba de alumno simulado: si el flojo acierta copiando el ejemplo, se cambia la pregunta (otra situación de la misma excepción), no el ejemplo.
 
 **Estado (27 oct 2026):** S4, S5 y S7 de los tres cursos se revisaron con este documento y se recargaron, salvo EOM S4, que esperó a que se revisara el reporte de su clase de ese día (recargarla cambia los criterios contra los que se lee). S1–S3 no cumplen las reglas nuevas del validador; se corrigen antes de volver a cargarlas.
+
+**Estado (28 oct 2026):** SI S4, SI S5, EOM S5 y PM S4 se dictaron con el procedimiento (§12). EOM S5 y SI S5 llevan la clave corregida (§13). Ninguna sesión cargada tiene `rol` todavía.

@@ -8,9 +8,11 @@
  * Solo lee. Cuenta alumnos reales: sin sesiones de prueba ni alumnos simulados.
  * Por actividad: cuántos llegaron, cuántos avanzaron POR LÍMITE (completaron sin
  * cumplir los criterios), cuántos se fueron ahí, las respuestas de 3 palabras o
- * menos (sin contar los «listo» del toque) y el criterio que más faltó, con citas.
+ * menos (sin contar los «listo» del toque), el criterio que más faltó, con citas, y
+ * la línea más rechazada al tocar (si se rechazó a varios, puede faltar en la clave).
  */
 import { prisma } from '../../lib/prisma'
+import { leerSubrayadoGuardado } from '../../lib/subrayado'
 import type { Activity, LessonContent } from '../../types/lesson'
 import { REGISTRO } from './cursos/registro'
 
@@ -30,7 +32,7 @@ async function main() {
       completedAt: true,
       startedAt: true,
       activities: { select: { activityId: true, status: true, passedCriteria: true, evidenceData: true } },
-      messages: { select: { role: true, content: true, activityId: true } },
+      messages: { orderBy: { timestamp: 'asc' }, select: { role: true, content: true, activityId: true, material: true } },
     },
   })
   const terminaron = sesiones.filter((s) => s.completedAt)
@@ -41,6 +43,7 @@ async function main() {
     const conNota = a.verification.is_evaluative !== false
     let llegaron = 0, porLimite = 0, seFueron = 0, cortas = 0, respuestas = 0
     const faltan = new Map<string, string[]>()
+    const rechazadas = new Map<string, number>()
     for (const s of sesiones) {
       const ap = s.activities.find((x) => x.activityId === a.id)
       const delAlumno = s.messages.filter((m) => m.activityId === a.id && m.role === 'user' && m.content.trim().toLowerCase() !== 'listo')
@@ -53,6 +56,13 @@ async function main() {
       // Lo que seguía faltando en su último intento.
       const intentos = ((ap?.evidenceData as { attempts?: { studentResponse?: string; analysis?: { criteriaMissing?: string[] } }[] })?.attempts) ?? []
       const ultimo = intentos.at(-1)
+      // Cada «Esa línea no respalda» con la línea que lo provocó (el material del
+      // mensaje anterior; el de los siguientes repite lo ya subrayado).
+      s.messages.forEach((m, j) => {
+        if (m.activityId !== a.id || m.role !== 'assistant' || !/Esa línea no respalda/.test(m.content)) return
+        const toque = leerSubrayadoGuardado(s.messages[j - 1]?.material).find((t) => t.resultado === 'no_respalda')
+        if (toque) rechazadas.set(toque.lineas.join(' / '), (rechazadas.get(toque.lineas.join(' / ')) ?? 0) + 1)
+      })
       for (const c of ultimo?.analysis?.criteriaMissing ?? []) {
         const citas = faltan.get(c) ?? []
         citas.push(String(ultimo?.studentResponse ?? '').replace(/\s+/g, ' ').slice(0, 140))
@@ -62,6 +72,8 @@ async function main() {
     if (!llegaron) { console.log(`${i + 1}. ${a.title ?? a.id}: nadie llegó`); continue }
     const alarma = conNota && porLimite * 2 > llegaron ? '  ⚠️ más de la mitad por límite: revisar antes de volver a usarla' : ''
     console.log(`${i + 1}. [${a.rol ?? a.type}] ${a.title ?? a.id}: llegaron ${llegaron}${conNota ? ` · por límite ${porLimite}` : ''}${seFueron ? ` · se fueron aquí ${seFueron}` : ''} · respuestas cortas ${cortas}/${respuestas}${alarma}`)
+    const [masRechazada] = [...rechazadas].sort((x, y) => y[1] - x[1])
+    if (masRechazada) console.log(`   ✋ línea más rechazada (${masRechazada[1]}×): «${masRechazada[0].slice(0, 110)}»${masRechazada[1] >= 3 ? '  ← leerla contra la razón del criterio (APRENDIZAJES §13)' : ''}`)
     const [peor] = [...faltan].sort((x, y) => y[1].length - x[1].length)
     if (peor) {
       console.log(`   ✗ ${peor[1].length} sin: ${peor[0]}`)

@@ -464,8 +464,8 @@ function TextoSubrayable({ block, large = false }: { block: TextBlock; large?: b
               : pendiente
                 ? 'Toca aquí la línea que respalda tu respuesta.'
                 : estado.lineas.length
-                  ? `${estado.lineas.length} subrayada${estado.lineas.length > 1 ? 's' : ''}.`
-                  : 'Toca la línea que respalda tu respuesta: se revisa al tocarla.'}
+                  ? `${estado.lineas.length === 1 ? 'Marcada: va' : `${estado.lineas.length} marcadas: van`} con tu próxima respuesta.`
+                  : 'Cuando respondas, aquí se toca la línea que respalda tu respuesta.'}
       </p>
       <ul className="space-y-1">
         {lineas.map((linea, n) => {
@@ -486,10 +486,13 @@ function TextoSubrayable({ block, large = false }: { block: TextBlock; large?: b
                     setSubrayado(block.id, alternar(estado, n))
                     return
                   }
-                  // Si ya respondió, cada toque es una respuesta: se revisa sola esa línea.
-                  // Si no, se suma a lo marcado y viaja con la respuesta que escriba.
+                  // Con la línea pedida, cada toque es una respuesta: se revisa sola esa línea.
+                  // Si no, se suma a lo marcado y viaja con la respuesta que escriba. Antes
+                  // se revisaba con solo haber escrito algo: de 249 toques no pedidos (27-28
+                  // oct), 233 gastaron un turno o un intento y 56 cerraron la actividad por
+                  // límite (APRENDIZAJES §14).
                   setSubrayado(block.id, { lineas: [n] })
-                  if (pedirRevision()) setTocada({ n, nonce: revisado?.nonce ?? 0 })
+                  if (pendiente && pedirRevision()) setTocada({ n, nonce: revisado?.nonce ?? 0 })
                   else setSubrayado(block.id, alternar(estado, n))
                 }}
                 className={cn(

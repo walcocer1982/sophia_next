@@ -17,7 +17,7 @@ import { citedFromTexts, createMarkerFilter, stripMarkers, type MarkerCheck } fr
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
 import { crearCorrectorDeTitulos } from '@/lib/titulos-material'
 import { crearQuitadorDeCalificaciones, debeQuitarCalificacion } from '@/lib/calificacion'
-import { crearQuitadorDePreguntas, preguntaDelTurno, preguntaEnNegrita } from '@/lib/perfil-curso'
+import { CIERRE_POR_TOPE, crearQuitadorDePreguntas, crearRecortadorAPrimeraOracion, pasaDentroDeLaRutina, PRESENTAR_TRAS_TOPE, preguntaDelTurno, preguntaEnNegrita } from '@/lib/perfil-curso'
 import { planteaLaPregunta } from '@/lib/planteo'
 import type { ChoiceTurn } from '@/lib/prompt-builder'
 import { moderateContent, getInterventionMessage } from '@/lib/services/moderation'
@@ -30,7 +30,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { checkReply, checksIntro, newChecksState, readCheck, type ChecksState, type CheckTurn } from '@/lib/checks'
 import { describeStateForPrompt, directivaSiYaMovio, initialState, sanitizeState, type SimState } from '@/lib/simulator'
 import { describeClasifForPrompt, describeClasifForVerifier, sanitizeClasif, vacio as clasificacionVacia, type ClasifState } from '@/lib/clasificar'
-import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, faltaTocarLaLinea, guiaRevelarSubrayado, guiaLineaCorrecta, leerSubrayadoGuardado, lineasClaveTexto, mensajeRecordatorioSubrayado, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, hayQueRevisarSubrayado, esRepeticionEquivocada, type UltimoSubrayado, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
+import { describeSubrayadoForPrompt, describeSubrayadoForVerifier, evaluarSubrayado, faltaTocarLaLinea, guiaRevelarSubrayado, guiaLineaCorrecta, leerSubrayadoGuardado, lineasClaveTexto, mensajeRecordatorioSubrayado, mensajeRevisarSubrayado, mensajeTurnoDeSubrayar, hayQueRevisarSubrayado, esRepeticionEquivocada, subrayadoSinJuzgar, type UltimoSubrayado, paraGuardar, sanitizeSubrayado, sinSubrayar, subrayadasQueRespaldan, type SubrayadoState } from '@/lib/subrayado'
 import { resumenDeCierre } from '@/lib/cierre'
 import { pideAclaracion } from '@/lib/aclaracion'
 import { mensajePideSeguir, pideSeguir } from '@/lib/pide-seguir'
@@ -509,8 +509,12 @@ data: ${JSON.stringify({ type: 'done' })}
   const lineasDe = (b: TextBlock, state: SubrayadoState) => paraGuardar(b, state)?.lineas.join('|') ?? ''
   // …y también si vuelve a tocar la misma línea equivocada (lib/subrayado.ts):
   // antes no se respondía nada y quedaba en gris «en revisión» (Maritza, 21 oct).
-  const esSubrayadoNuevo = ({ b, state }: { b: TextBlock; state: SubrayadoState }) =>
-    hayQueRevisarSubrayado(lineasDe(b, state), ultimoSubrayadoGuardado.get(b.id), isContinuationMessage)
+  // Una línea que se guardó sin juzgar (viajó con una respuesta que no aprobó) también
+  // cuenta: se juzga cuando la respuesta apruebe (lib/subrayado.ts, 28 oct 2026).
+  const lineaSinJuzgar = ({ b, state }: { b: TextBlock; state: SubrayadoState }) =>
+    subrayadoSinJuzgar(lineasDe(b, state), ultimoSubrayadoGuardado.get(b.id))
+  const esSubrayadoNuevo = (e: { b: TextBlock; state: SubrayadoState }) =>
+    hayQueRevisarSubrayado(lineasDe(e.b, e.state), ultimoSubrayadoGuardado.get(e.b.id), isContinuationMessage) || lineaSinJuzgar(e)
   const subrayadoQueNoRespalda = subrayablesPropios.find((e) => esSubrayadoNuevo(e) && evaluarSubrayado(e.b, e.state) === 'no_respalda')
   // Tocó otra vez la misma línea equivocada: se repite «inténtalo de nuevo» (rojo
   // y mensaje fijo), sin verificador, sin contar intento ni falla.
@@ -714,6 +718,11 @@ data: ${JSON.stringify({ type: 'done' })}
   // Lo que decidió el verificador ANTES de que el código fuerce el avance (tope de
   // desglose, cierre por intentos): decide si Sophia puede calificar (26 oct 2026).
   const aproboElVerificador = verification.ready_to_advance === true && verification.unverified !== true
+  // La línea tocada se juzga (roja, verde, «Esa es la línea») solo si la respuesta
+  // escrita aprobó o si el alumno tocó porque se la pidieron (28 oct 2026). Con una
+  // respuesta que no aprobó, juzgarla le daba la razón o lo mandaba a tocar otra
+  // en vez de corregir lo escrito (APRENDIZAJES §14).
+  const juzgaLinea = aproboElVerificador || revisionRapida || repiteLineaEquivocada
 
   // ═══════════════════════════════════════════════════════════════
   // Escalada por desglose (scaffolding)
@@ -1032,14 +1041,16 @@ data: ${JSON.stringify({ type: 'done' })}
   // La línea correcta recién tocada: la primera oración la fija el código
   // (lib/subrayado.ts), porque con «inténtalo de nuevo» en la historia Sophia
   // la trataba como otra equivocada (21 oct 2026).
-  const subrayadoCorrectoNuevo = subrayablesPropios.some((e) => esSubrayadoNuevo(e) && evaluarSubrayado(e.b, e.state) === 'respalda')
+  const subrayadoCorrectoNuevo = juzgaLinea && subrayablesPropios.some((e) => esSubrayadoNuevo(e) && evaluarSubrayado(e.b, e.state) === 'respalda')
   const guiaDeSubrayado = revelarSubrayado && subrayadoQueNoRespalda
     ? `\n\n${guiaRevelarSubrayado(subrayadoQueNoRespalda.b)}`
     : subrayadoCorrectoNuevo && respuestaFija === null
       ? `\n\n${guiaLineaCorrecta(verification.ready_to_advance === true || cierraPorTope)}`
       : ''
-  const estadoSubrayadoClause = estadosDeSubrayado.length
-    ? `\n\nESTADO DEL SUBRAYADO (lo que el estudiante marcó AHORA en los textos de la pizarra):\n${estadosDeSubrayado.map(({ b, state }) => `- ${describeSubrayadoForPrompt(b, state)}`).join('\n')}`
+  // Si la actividad se cierra en este turno, la línea ya no es tema: lo que diga
+  // Sophia de ella le gana a la transición (28 oct 2026, prueba de PM S7).
+  const estadoSubrayadoClause = estadosDeSubrayado.length && !(verification.ready_to_advance === true || cierraPorTope)
+    ? `\n\nESTADO DEL SUBRAYADO (lo que el estudiante marcó AHORA en los textos de la pizarra):\n${estadosDeSubrayado.map(({ b, state }) => `- ${describeSubrayadoForPrompt(b, state, juzgaLinea)}`).join('\n')}`
     : ''
   const estadoClasifClause = estadosDeClasificacion.length
     ? `\n\nESTADO DE LA CLASIFICACIÓN (lo que el estudiante ubicó AHORA en la pizarra):\n${estadosDeClasificacion.map(({ b, state }) => `- ${describeClasifForPrompt(b, state)}`).join('\n')}`
@@ -1101,6 +1112,27 @@ CÓMO RESPONDER (máximo 90 palabras):
 3. ${choice ? 'Termina con el PASO CERRADO tal como figura abajo (opciones con letra, una por línea) y pide una letra. NO hagas aún la pregunta abierta.' : `Termina con la pregunta: "${currentActivity.teaching?.first_question ?? currentActivity.verification.question}"`}`
     : dynamicPromptBase
 
+  // Cierre por límite en una sesión de curso: la primera oración la escribe el
+  // código y Sophia presenta la actividad siguiente con un prompt hecho solo para
+  // ella, sin el historial (lib/perfil-curso.ts, 28 oct 2026).
+  const ctxSiguiente = cierraPorTope && currentActivity.rol && nextActivityData?.rol && preguntaFinal !== null && respuestaFija === null
+    ? getCurrentActivity(contentJson, nextActivityData.id, lessonTitle, lessonObjective, lessonKeyPoints, courseInstructor)
+    : null
+  const presentacionTrasTope = ctxSiguiente
+    ? buildSystemPrompt({
+      activityContext: ctxSiguiente,
+      recentMessages: [],
+      tangentCount: 0,
+      lessonContext,
+      methodology: lessonSession.lesson.course?.methodology ?? 'REFLECTIVE',
+      sessionSeed,
+      pinnedBlocks: blocksForActivity(contentJson, ctxSiguiente.activity.id, verSinValidar).pinned,
+      isTest: verSinValidar,
+      cited: materialCitado,
+      preguntaDelCodigo: preguntaFinal,
+    })
+    : null
+
   // ═══════════════════════════════════════════════════════════════
   // 6. CREATE STREAMING RESPONSE CON PROMPT CACHING
   // ═══════════════════════════════════════════════════════════════
@@ -1135,11 +1167,13 @@ CÓMO RESPONDER (máximo 90 palabras):
   // ve en la conversación, en la ficha y en la transcripción) y se manda al
   // navegador ANTES del texto de Sophia, para que la línea vibre y se ponga
   // roja mientras ella responde.
+  // Sin juzgar, la línea se guarda sin resultado (y no se vuelve a guardar igual en
+  // cada mensaje): queda marcada y se juzga cuando la respuesta apruebe.
   const subrayadoDelTurno = estadosDeSubrayado
-    .filter(esSubrayadoNuevo)
+    .filter((e) => esSubrayadoNuevo(e) && (juzgaLinea || !lineaSinJuzgar(e)))
     .map(({ b, state }) => {
       const r = evaluarSubrayado(b, state)
-      const resultado = r === 'respalda' || r === 'no_respalda' ? r : undefined
+      const resultado = juzgaLinea && (r === 'respalda' || r === 'no_respalda') ? r : undefined
       const revelada = resultado === 'no_respalda' && revelarSubrayado && subrayadoQueNoRespalda?.b.id === b.id ? lineasClaveTexto(b) : undefined
       const respaldan = resultado === 'respalda' ? subrayadasQueRespaldan(b, state) : undefined
       return paraGuardar(b, state, { ...(resultado ? { resultado } : {}), ...(revelada ? { revelada } : {}), ...(respaldan ? { respaldan } : {}) })
@@ -1160,17 +1194,21 @@ CÓMO RESPONDER (máximo 90 palabras):
         const claudeStream = respuestaFija !== null ? streamFijo(respuestaFija) : await anthropic.messages.stream({
           model: TUTOR_MODEL,
           max_tokens: maxTokens,
-          system: [
-            ...staticBlocks,
-            { type: 'text', text: dynamicPrompt + estadoPanelClause + estadoClasifClause + estadoSubrayadoClause + guiaDeSubrayado }
-          ],
-          messages: [
-            ...compressedHistory,  // Historial comprimido (preguntas visibles)
-            {
-              role: 'user',
-              content: userMessageContent,
-            },
-          ],
+          system: presentacionTrasTope
+            ? [...presentacionTrasTope.staticBlocks, { type: 'text', text: `${presentacionTrasTope.dynamicPrompt}\n\n${PRESENTAR_TRAS_TOPE}` }]
+            : [
+              ...staticBlocks,
+              { type: 'text', text: dynamicPrompt + estadoPanelClause + estadoClasifClause + estadoSubrayadoClause + guiaDeSubrayado }
+            ],
+          messages: presentacionTrasTope
+            ? [{ role: 'user', content: 'Sigamos con el tema siguiente.' }]
+            : [
+              ...compressedHistory,  // Historial comprimido (preguntas visibles)
+              {
+                role: 'user',
+                content: userMessageContent,
+              },
+            ],
         })
 
         // Process stream events.
@@ -1209,16 +1247,29 @@ CÓMO RESPONDER (máximo 90 palabras):
           ? crearQuitadorDeCalificaciones()
           : null
         // Si la pregunta la pone el código, las que escriba Sophia no salen.
-        const quitadorDePreguntas = preguntaFinal ? crearQuitadorDePreguntas() : null
+        const quitadorDePreguntas = preguntaFinal
+          ? crearQuitadorDePreguntas(preguntaFinal, currentActivity.teaching?.first_question ?? currentActivity.verification.question)
+          : null
+        // De un paso de la rutina a otro, solo la primera oración (lib/perfil-curso.ts).
+        const recortador = preguntaFinal && (verification.ready_to_advance === true || cierraPorTope) &&
+          pasaDentroDeLaRutina(currentActivity.rol, nextActivityData?.rol)
+          ? crearRecortadorAPrimeraOracion()
+          : null
         const limpiar = (trozo: string) => {
           const sinCalificar = quitador ? quitador.push(trozo) : trozo
-          return quitadorDePreguntas ? quitadorDePreguntas.push(sinCalificar) : sinCalificar
+          const sinPreguntas = quitadorDePreguntas ? quitadorDePreguntas.push(sinCalificar) : sinCalificar
+          return recortador ? recortador.push(sinPreguntas) : sinPreguntas
         }
         const vaciarLimpieza = () => {
           const resto = quitador?.flush() ?? ''
-          return quitadorDePreguntas ? quitadorDePreguntas.push(resto) + quitadorDePreguntas.flush() : resto
+          const sinPreguntas = quitadorDePreguntas ? quitadorDePreguntas.push(resto) + quitadorDePreguntas.flush() : resto
+          return recortador ? recortador.push(sinPreguntas) + recortador.flush() : sinPreguntas
         }
 
+        if (presentacionTrasTope) {
+          flushToClient(`${CIERRE_POR_TOPE}\n\n`)
+          fullResponse += `${CIERRE_POR_TOPE}\n\n`
+        }
         for await (const event of claudeStream) {
           if (event.type === 'content_block_delta') {
             if (event.delta.type === 'text_delta') {

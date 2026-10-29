@@ -215,8 +215,9 @@ export function ChatInterface({
   }
 
   // Al tocar una línea en la pizarra se revisa enseguida (21 oct 2026), si es su
-  // turno y ya respondió la pregunta de esta actividad. Si no respondió, la línea
-  // queda marcada y viaja con la respuesta que escriba.
+  // turno, ya respondió la pregunta de esta actividad y la línea está pedida (eso
+  // lo decide la pizarra, 28 oct 2026). Si no, la línea queda marcada y viaja con
+  // la respuesta que escriba.
   const revisarAlTocar = useRef<() => boolean>(() => false)
   useEffect(() => {
     revisarAlTocar.current = () => {

@@ -113,6 +113,29 @@ test('prueba de Maritza (21 oct): tocar otra vez la misma línea equivocada se v
   assert.equal(hayQueRevisarSubrayado('', mal, true), false)
 })
 
+test('28 oct: sin juzgar, el prompt no le dice a Sophia si la línea respalda (PM S7)', async () => {
+  const { describeSubrayadoForPrompt } = await import('../lib/subrayado')
+  const conClave = { ...texto, lineasClave: [2] }
+  const sinJuicio = describeSubrayadoForPrompt(conClave, { lineas: [0] }, false)
+  assert.ok(!/NO respalda|SÍ respalda|por qué eligió/.test(sinJuicio), sinJuicio)
+  assert.ok(/no digas si esa línea respalda/.test(sinJuicio), sinJuicio)
+  // Juzgando (respuesta aprobada o toque pedido), el juicio sigue
+  assert.ok(/NO respalda/.test(describeSubrayadoForPrompt(conClave, { lineas: [0] })))
+})
+
+test('28 oct: una línea que viajó con una respuesta que no aprobó queda sin juzgar hasta que apruebe', async () => {
+  const { subrayadoSinJuzgar } = await import('../lib/subrayado')
+  // Se guardó sin resultado: la misma línea sigue pendiente de juicio
+  assert.equal(subrayadoSinJuzgar('3', { lineas: '3', revelada: false }), true)
+  // Ya juzgada (verde o roja): no se vuelve a juzgar por estar marcada
+  assert.equal(subrayadoSinJuzgar('3', { lineas: '3', resultado: 'respalda', revelada: false }), false)
+  assert.equal(subrayadoSinJuzgar('3', { lineas: '3', resultado: 'no_respalda', revelada: false }), false)
+  // Otra línea, nada guardado o nada marcado: no es este caso
+  assert.equal(subrayadoSinJuzgar('2', { lineas: '3', revelada: false }), false)
+  assert.equal(subrayadoSinJuzgar('3', undefined), false)
+  assert.equal(subrayadoSinJuzgar('', { lineas: '', revelada: false }), false)
+})
+
 test('línea correcta: la primera oración la fija el código, con y sin respuesta aprobada', async () => {
   const { guiaLineaCorrecta } = await import('../lib/subrayado')
   const a = guiaLineaCorrecta(true)
