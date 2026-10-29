@@ -13,7 +13,7 @@ import { getLessonContent } from '@/lib/lesson-loader'
 import { verifyActivityCompletion, verifyStepCompletion } from '@/lib/activity-verification'
 import { applyPick, esEleccionConRazon, newChoiceState, parseChoicePick, renderChoice, type ChoiceState } from '@/lib/choice'
 import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/support-blocks'
-import { citedFromTexts, createMarkerFilter, stripMarkers, type MarkerCheck } from '@/lib/material-markers'
+import { citedFromTexts, createMarkerFilter, stripMarkers, unBloqueNuevoPorMensaje, type MarkerCheck } from '@/lib/material-markers'
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
 import { crearCorrectorDeTitulos } from '@/lib/titulos-material'
 import { crearQuitadorDeCalificaciones, debeQuitarCalificacion } from '@/lib/calificacion'
@@ -984,6 +984,9 @@ data: ${JSON.stringify({ type: 'done' })}
     sessionWithMessages.messages.filter((m) => m.role === 'assistant').map((m) => m.content),
   )
   const idsDeLaLeccion = new Set(allLessonBlocks(contentJson, verSinValidar).map((b) => b.id))
+  // Los que no aparecen solos al empezar: mostrar uno suma un recurso a la pizarra.
+  const ocultosAlInicio = new Set(allLessonBlocks(contentJson, verSinValidar).filter((b) => (b.showWhen ?? 'on_start') !== 'on_start').map((b) => b.id))
+  const yaVisible = (id: string) => !ocultosAlInicio.has(id) || materialCitado.blocks.has(id)
   const bloquesActuales = getActivityBlocks(currentActivity)
   // Un bloque se puede mostrar si existe en la lección. Un señalamiento, solo si
   // es de una imagen de ESTA actividad: así una escena de la actividad siguiente
@@ -1230,7 +1233,7 @@ CÓMO RESPONDER (máximo 90 palabras):
 
         // Marcadores del panel: los inválidos se quitan antes de enviar y guardar;
         // uno partido entre trozos se retiene hasta saber si vale.
-        const filtroMarcadores = createMarkerFilter(marcadorValido)
+        const filtroMarcadores = createMarkerFilter(unBloqueNuevoPorMensaje(marcadorValido, yaVisible))
         // Voseo corregido en el código (lib/voseo.ts): «Mirá» → «Mira».
         const correctorVoseo = crearCorrectorDeVoseo()
         // Títulos del material entre «» (lib/titulos-material.ts): «toca en el texto Cuándo…».

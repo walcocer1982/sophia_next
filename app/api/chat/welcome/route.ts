@@ -1,6 +1,6 @@
 import { getAuthOrGuest } from '@/lib/auth-or-guest'
 import { allLessonBlocks, blocksForActivity, getActivityBlocks } from '@/lib/support-blocks'
-import { createMarkerFilter } from '@/lib/material-markers'
+import { createMarkerFilter, unBloqueNuevoPorMensaje } from '@/lib/material-markers'
 import { crearCorrectorDeVoseo } from '@/lib/voseo'
 import { crearCorrectorDeTitulos } from '@/lib/titulos-material'
 import { prisma } from '@/lib/prisma'
@@ -236,7 +236,11 @@ Genera el mensaje ahora, sin formato, conversacional.`
     // mostrar; un señalamiento nunca (el alumno todavía no respondió nada).
     const bloquesDeLaLeccion = allLessonBlocks(contentJson, verSinValidar)
     const idsDeLaLeccion = new Set(bloquesDeLaLeccion.map((b) => b.id))
-    const filtroMarcadores = createMarkerFilter((kind, id) => kind === 'block' && idsDeLaLeccion.has(id))
+    // Un solo bloque oculto por mensaje, como en el chat (unBloqueNuevoPorMensaje).
+    const ocultosAlInicio = new Set(bloquesDeLaLeccion.filter((b) => (b.showWhen ?? 'on_start') !== 'on_start').map((b) => b.id))
+    const filtroMarcadores = createMarkerFilter(
+      unBloqueNuevoPorMensaje((kind, id) => kind === 'block' && idsDeLaLeccion.has(id), (id) => !ocultosAlInicio.has(id)),
+    )
     const correctorVoseo = crearCorrectorDeVoseo()
     // Títulos del material entre «» (lib/titulos-material.ts): «la fotografía Obra en losa».
     const correctorTitulos = crearCorrectorDeTitulos(bloquesDeLaLeccion.map((b) => b.title))

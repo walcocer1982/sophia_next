@@ -73,6 +73,24 @@ export function filterMarkersInText(text: string, isAllowed: MarkerCheck): strin
 }
 
 /**
+ * Un solo recurso nuevo por mensaje (29 oct 2026): con la lámina y la de apoyo
+ * ocultas, Sophia las mostraba juntas («mira las láminas X e Y») y la pizarra
+ * volvía a tener dos recursos. El primer bloque nuevo que cita pasa; otro bloque
+ * nuevo en el mismo mensaje se quita. Lo que el alumno ya ve (`yaVisible`) no cuenta.
+ * Un MarkerCheck por mensaje: guarda cuál fue el primero.
+ */
+export function unBloqueNuevoPorMensaje(isAllowed: MarkerCheck, yaVisible: (id: string) => boolean): MarkerCheck {
+  let nuevo: string | null = null
+  return (kind, id, n) => {
+    if (!isAllowed(kind, id, n)) return false
+    if (kind !== 'block' || yaVisible(id)) return true
+    if (nuevo !== null && nuevo !== id) return false
+    nuevo = id
+    return true
+  }
+}
+
+/**
  * Filtro para streaming: recibe trozos, devuelve lo que ya se puede enviar.
  * Retiene un posible marcador partido entre trozos hasta saber si es válido.
  */

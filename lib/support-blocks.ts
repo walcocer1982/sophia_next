@@ -244,7 +244,7 @@ REGLAS DEL MATERIAL:
 - NUNCA copies en el chat una tabla, una fórmula, un fragmento o los datos de un caso que ya están en el material. El estudiante los está viendo.
 - Si el estudiante pregunta algo que está en el material, señálaselo antes de responder.
 - Usa solo lo que dice cada bloque. No inventes filas, valores, pasos ni detalles de una imagen.${hayOcultos ? `
-- Para mostrar un bloque oculto escribe su marcador [[block:ID]] UNA sola vez, al final de la oración donde lo presentas. El estudiante no ve el marcador: ve el bloque aparecer en la pizarra.` : ''}${haySenales ? `
+- Para mostrar un bloque oculto escribe su marcador [[block:ID]] UNA sola vez, al final de la oración donde lo presentas. El estudiante no ve el marcador: ve el bloque aparecer en la pizarra. Muestra UN bloque oculto por mensaje, nunca dos: si nombras dos, solo aparece el primero.` : ''}${haySenales ? `
 - Para mostrar un señalamiento de una imagen escribe [[marker:ID:n]] al final de la oración donde lo nombras. En una escena de caso, SOLO después de que el estudiante haya respondido qué ve; nunca al presentar la escena.` : ''}`
 }
 

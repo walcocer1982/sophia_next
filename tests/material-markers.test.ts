@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { citedBlocksInOrder, citedFromTexts, createMarkerFilter, filterMarkersInText, splitChoiceOptions, stripMarkers } from '../lib/material-markers'
+import { citedBlocksInOrder, citedFromTexts, createMarkerFilter, filterMarkersInText, splitChoiceOptions, stripMarkers, unBloqueNuevoPorMensaje } from '../lib/material-markers'
 
 test('quita los marcadores del texto visible, también el parcial del final', () => {
   assert.equal(stripMarkers('Mira el manual [[block:manual-extintores]].'), 'Mira el manual.')
@@ -54,4 +54,19 @@ test('separa las alternativas del final del mensaje', () => {
 
   assert.equal(splitChoiceOptions('Solo texto, sin opciones.').options.length, 0)
   assert.equal(splitChoiceOptions('B) suelta\nC) sin la A').options.length, 0)
+})
+
+test('un solo bloque nuevo por mensaje: el segundo se quita, lo ya visible pasa', () => {
+  const visibles = new Set(['norma'])
+  const f = createMarkerFilter(unBloqueNuevoPorMensaje((k) => k === 'block', (id) => visibles.has(id)))
+  // Texto literal de la prueba del 29 oct 2026 (EOM S5), con los marcadores.
+  const salida = f.push('Mira en la pizarra las láminas «Las familias de labores» [[block:lam-familias]] y «Temporal y permanente» [[bl') +
+    f.push('ock:lam-temporal]]. Toca en «Las cuatro llaves» [[block:norma]] y otra vez [[block:lam-familias]].') + f.flush()
+  assert.equal(
+    salida,
+    'Mira en la pizarra las láminas «Las familias de labores» [[block:lam-familias]] y «Temporal y permanente» . Toca en «Las cuatro llaves» [[block:norma]] y otra vez [[block:lam-familias]].',
+  )
+  // Cada mensaje empieza de cero.
+  const g = createMarkerFilter(unBloqueNuevoPorMensaje((k) => k === 'block', () => false))
+  assert.equal(g.push('Ahora [[block:lam-temporal]].') + g.flush(), 'Ahora [[block:lam-temporal]].')
 })
