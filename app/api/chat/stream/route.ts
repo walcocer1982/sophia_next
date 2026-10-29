@@ -1489,6 +1489,7 @@ CÓMO RESPONDER (máximo 90 palabras):
               outputTokens,
               activityId: currentActivity.id,
               timestamp: assistantTimestamp,
+              tiempos: { ...marcas, total: Math.round(performance.now() - t0), fija: respuestaFija !== null },
             },
           }),
           prisma.lessonSession.update({

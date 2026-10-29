@@ -10,6 +10,7 @@
  * cumplir los criterios), cuántos se fueron ahí, las respuestas de 3 palabras o
  * menos (sin contar los «listo» del toque), el criterio que más faltó, con citas, y
  * la línea más rechazada al tocar (si se rechazó a varios, puede faltar en la clave).
+ * Arriba, cuánto esperaron a Sophia por turno (`Message.tiempos`).
  */
 import { prisma } from '../../lib/prisma'
 import { leerSubrayadoGuardado } from '../../lib/subrayado'
@@ -32,12 +33,22 @@ async function main() {
       completedAt: true,
       startedAt: true,
       activities: { select: { activityId: true, status: true, passedCriteria: true, evidenceData: true } },
-      messages: { orderBy: { timestamp: 'asc' }, select: { role: true, content: true, activityId: true, material: true } },
+      messages: { orderBy: { timestamp: 'asc' }, select: { role: true, content: true, activityId: true, material: true, tiempos: true } },
     },
   })
   const terminaron = sesiones.filter((s) => s.completedAt)
   const minutos = terminaron.map((s) => (s.completedAt!.getTime() - s.startedAt.getTime()) / 60000).sort((a, b) => a - b)
-  console.log(`\n${curso} S${n} «${spec.title}» · ${sesiones.length} alumnos · terminaron ${terminaron.length} · mediana ${minutos.length ? Math.round(minutos[Math.floor(minutos.length / 2)]) : '-'} min\n`)
+  console.log(`\n${curso} S${n} «${spec.title}» · ${sesiones.length} alumnos · terminaron ${terminaron.length} · mediana ${minutos.length ? Math.round(minutos[Math.floor(minutos.length / 2)]) : '-'} min`)
+  // Cuánto esperó el alumno a Sophia (Message.tiempos, desde el 29 oct 2026). Solo turnos con modelo.
+  const turnos = sesiones.flatMap((s) => s.messages.map((m) => m.tiempos as { primer_token?: number; total?: number; fija?: boolean } | null))
+    .filter((t): t is { primer_token?: number; total: number } => !!t?.total && !t.fija)
+  if (turnos.length) {
+    const pct = (xs: number[], p: number) => { const o = [...xs].sort((a, b) => a - b); return (o[Math.min(o.length - 1, Math.floor(p * o.length))] / 1000).toFixed(1) }
+    const primero = turnos.flatMap((t) => (t.primer_token === undefined ? [] : [t.primer_token]))
+    const total = turnos.map((t) => t.total)
+    console.log(`Espera por turno (${turnos.length} con modelo): primera palabra ${pct(primero, 0.5)} s, 9 de 10 bajo ${pct(primero, 0.9)} s · respuesta completa ${pct(total, 0.5)} s, 9 de 10 bajo ${pct(total, 0.9)} s · ${total.filter((x) => x > 15000).length} turnos de más de 15 s`)
+  }
+  console.log('')
 
   for (const [i, a] of actividades.entries()) {
     const conNota = a.verification.is_evaluative !== false

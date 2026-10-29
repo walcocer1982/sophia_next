@@ -419,6 +419,10 @@ model Message {
   // Lo que el alumno hizo en la pizarra al enviar este mensaje (20 oct 2026):
   // { subrayado: [{ blockId, titulo, lineas: string[] }] }. Solo mensajes del alumno.
   material     Json?
+  // Cuánto esperó el alumno este turno (29 oct 2026), en ms desde que llegó su
+  // mensaje: { db, gate, primer_token, stream, total, fija }. Solo mensajes de
+  // Sophia en /api/chat/stream; `fija` = respuesta del código, sin modelo.
+  tiempos      Json?
 
   // Relaciones
   session LessonSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
