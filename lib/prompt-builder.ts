@@ -670,7 +670,7 @@ ${enCurso && nextActivity.rol ? `${guiaDelRol(nextActivity.rol)}\n` : ''}Instruc
             visibles.length ? `
 Material que aparece en la pizarra al pasar (cítalo por su título, no lo copies): ${visibles.map((b) => `«${b.title}»`).join(', ')}` : '',
             ocultos.length ? `
-Material oculto de la siguiente actividad: muéstralo al presentarlo escribiendo su marcador al final de la oración: ${ocultos.map((b) => `«${b.title}» [[block:${b.id}]]`).join(', ')}` : '',
+Material oculto de la siguiente actividad: si te sirve para enseñar, muestra SOLO «${ocultos[0].title}» escribiendo [[block:${ocultos[0].id}]] al final de la oración donde lo nombras.${ocultos.length > 1 ? ` No nombres ni muestres ${ocultos.slice(1).map((b) => `«${b.title}»`).join(', ')} en este mensaje: un recurso a la vez (29 oct 2026: «mira las láminas X e Y» llenaba la pizarra).` : ''}` : '',
             paraUbicar.length ? `
 Al hacer la pregunta, pídele en la misma oración que antes ubique las tarjetas de ${paraUbicar.map((b) => `«${b.title}»`).join(', ')} en la pizarra: dónde las pone es su decisión y la razón la escribe él. No digas dónde va ninguna.` : '',
           ].join('')
