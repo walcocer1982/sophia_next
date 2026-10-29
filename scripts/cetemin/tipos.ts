@@ -68,10 +68,10 @@ export interface PuntoClaveSpec {
   keyPointIndex: number
   lamina: { imagenId: string; title: string }
   /**
-   * Cuándo aparece la lámina. Por defecto, al empezar, DEBAJO del texto que se toca.
-   * «on_reference»: solo cuando Sophia la cita, y en la pizarra queda solo el texto
-   * (23 oct 2026, clase de EOM: con dos recursos el texto quedaba fuera de vista y
-   * los alumnos no lo encontraban para tocar la línea).
+   * Cuándo aparece la lámina. Por defecto («on_reference», desde el 29 oct 2026),
+   * solo cuando Sophia la cita, y en la pizarra queda solo el texto (23 oct 2026,
+   * clase de EOM: con dos recursos el texto quedaba fuera de vista y los alumnos no
+   * lo encontraban para tocar la línea). «on_start»: al empezar, DEBAJO del texto.
    */
   laminaCuando?: 'on_start' | 'on_reference'
   norma: NormaSpec

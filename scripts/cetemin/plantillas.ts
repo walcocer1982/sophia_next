@@ -152,7 +152,9 @@ function puntoClave(spec: SesionSpec, subidas: Subida, prefijo: string, n: numbe
   }
   // El texto que se toca va PRIMERO (23 oct 2026, clase de EOM): con la lámina
   // arriba, en laptop el texto quedaba fuera de vista y los alumnos no lo hallaban.
-  const laminaAPedido = p.laminaCuando === 'on_reference'
+  // Un solo recurso a la vista por defecto (29 oct 2026): la lámina aparece cuando
+  // Sophia la cita; antes había que pedirlo sesión por sesión y casi ninguna lo hacía.
+  const laminaAPedido = p.laminaCuando !== 'on_start'
   const blocks: SupportBlock[] = [
     norma,
     bloqueImagen(spec, subidas, p.lamina.imagenId, p.lamina.title, laminaAPedido ? 'on_reference' : 'on_start'),
