@@ -72,7 +72,8 @@ export async function POST(request: Request) {
     }
     // Material sin validar: solo en la prueba vista como instructor. En «Probar
     // como estudiante» (lib/vista-estudiante.ts) se oculta, como para el alumno.
-    const verSinValidar = lessonSession.isTest && comoEstudiante !== true
+    // Un alumno nunca, aunque su sesión sea de prueba (cuenta de demostración).
+    const verSinValidar = lessonSession.isTest && comoEstudiante !== true && session.role !== 'STUDENT'
 
     // El saludo con nombre era del kiosko (registro del visitante). En /learn
     // Sophia no personaliza el saludo.

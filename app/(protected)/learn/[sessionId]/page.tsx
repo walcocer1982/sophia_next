@@ -98,7 +98,11 @@ export default async function ChatPage({
   // prueba. Con esto, la pantalla sigue las reglas del curso y no las del
   // instructor: material sin validar oculto, pegar texto según el curso, sin
   // herramientas de desarrollo y con la franja de prueba reducida.
-  const comoEstudiante = lessonSession.isTest && esVistaEstudiante((await searchParams)[PARAM_VISTA])
+  // Un alumno con sesión de prueba es la cuenta de demostración (lib/cuenta-demo.ts):
+  // siempre ve como alumno y no puede pasar a la vista de instructor.
+  const esAlumno = (session.user.role || 'STUDENT') === 'STUDENT'
+  const comoEstudiante =
+    lessonSession.isTest && (esAlumno || esVistaEstudiante((await searchParams)[PARAM_VISTA]))
   const verSinValidar = lessonSession.isTest && !comoEstudiante
 
   // Parse lesson content
@@ -131,6 +135,7 @@ export default async function ChatPage({
     ? {
         courseId: lessonSession.lesson.course.id,
         comoEstudiante,
+        esDemo: esAlumno,
         activities: (contentJson?.activities || []).map((a, i) => ({
           id: a.id,
           type: a.type,
@@ -169,8 +174,8 @@ export default async function ChatPage({
           titulo: nombreDeActividad(a, i),
           subtitulo: a.subtitle,
         }))}
-        exitHref={testMode ? `/planner/${testMode.courseId}` : '/lessons'}
-        exitLabel={testMode ? 'Volver al curso' : 'Volver a mis lecciones'}
+        exitHref={testMode && !esAlumno ? `/planner/${testMode.courseId}` : '/lessons'}
+        exitLabel={testMode && !esAlumno ? 'Volver al curso' : 'Volver a mis lecciones'}
         // Prueba cerrada por «Probar», «Reiniciar» o «Ir a actividad» (21 oct 2026):
         // se puede releer, pero el chat ya no acepta mensajes.
         pruebaCerrada={lessonSession.isTest && !!lessonSession.endedAt}
