@@ -1,6 +1,7 @@
 import { auth } from '@/auth'
 import { cierreDeVentana } from '@/lib/monitor'
 import { programadaParaElAlumno } from '@/lib/lecciones-alumno'
+import { esCuentaDemo } from '@/lib/cuenta-demo'
 import { prisma } from '@/lib/prisma'
 import { CareerFilter } from '@/components/lessons/career-filter'
 import { InteractiveGridPattern } from '@/components/ui/interactive-grid-pattern'
@@ -31,12 +32,15 @@ export default async function LessonsPage() {
 
   const role = user?.role || 'STUDENT'
   const isSuperadmin = role === 'SUPERADMIN'
+  // La cuenta de demostración (lib/cuenta-demo.ts) ve los cursos de cualquier
+  // carrera: su sección «Demo» de cada curso decide qué clases tiene.
+  const esDemo = role === 'STUDENT' && !!session?.user?.id && (await esCuentaDemo(session.user.id))
 
   // Filter by career for non-SUPERADMIN (include transversal courses with careerId=null).
   // Un curso borrado no se muestra a nadie (27 oct 2026: AI 101 y EPPs seguían en el inicio).
   const courseFilter = {
     deletedAt: null,
-    ...(!isSuperadmin && user?.careerId ? { OR: [{ careerId: user.careerId }, { careerId: null }] } : {}),
+    ...(!isSuperadmin && !esDemo && user?.careerId ? { OR: [{ careerId: user.careerId }, { careerId: null }] } : {}),
   }
 
   // Get student's enrollments to look up section schedules
