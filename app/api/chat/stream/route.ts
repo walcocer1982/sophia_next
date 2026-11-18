@@ -175,7 +175,8 @@ data: ${JSON.stringify({ type: 'done' })}
     }
   }
   // Material sin validar: solo en la prueba vista como instructor (lib/vista-estudiante.ts).
-  const verSinValidar = lessonSession.isTest && comoEstudiante !== true
+  // Un alumno nunca, aunque su sesión sea de prueba (cuenta de demostración).
+  const verSinValidar = lessonSession.isTest && comoEstudiante !== true && session.role !== 'STUDENT'
 
   const contentJsonRaw = await getLessonContent(lessonSession.lesson.id)
   marcar('db')

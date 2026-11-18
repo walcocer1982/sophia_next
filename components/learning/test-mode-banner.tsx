@@ -17,12 +17,15 @@ export function TestModeBanner({
   courseId,
   activities,
   comoEstudiante = false,
+  esDemo = false,
 }: {
   sessionId: string
   courseId: string
   activities: Activity[]
   /** «Probar como estudiante» (lib/vista-estudiante.ts): franja fina, solo íconos. */
   comoEstudiante?: boolean
+  /** Cuenta de demostración (lib/cuenta-demo.ts): sin vista de instructor y sale a sus clases. */
+  esDemo?: boolean
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState<string | null>(null)
@@ -90,7 +93,7 @@ export function TestModeBanner({
   }
 
   const handleReset = async () => {
-    if (!confirm('¿Reiniciar la prueba? Esta queda guardada y empiezas otra desde el inicio.')) return
+    if (!confirm(esDemo ? '¿Empezar la clase de nuevo desde el inicio?' : '¿Reiniciar la prueba? Esta queda guardada y empiezas otra desde el inicio.')) return
 
     setLoading('reset')
     try {
@@ -106,7 +109,7 @@ export function TestModeBanner({
 
       if (res.ok) {
         const { sessionId: nueva } = (await res.json()) as { sessionId: string }
-        toast.success('Prueba reiniciada')
+        toast.success(esDemo ? 'Clase reiniciada' : 'Prueba reiniciada')
         window.location.assign(`/learn/${nueva}${window.location.search}`)
       } else {
         toast.error('Error al reiniciar')
@@ -119,7 +122,7 @@ export function TestModeBanner({
   }
 
   const handleExit = () => {
-    router.push(`/planner/${courseId}`)
+    router.push(esDemo ? '/lessons' : `/planner/${courseId}`)
   }
 
   const typeLabel: Record<string, string> = {
@@ -143,9 +146,9 @@ export function TestModeBanner({
       <div className="flex h-9 items-center gap-0.5 rounded-full border border-[#fbc50b]/30 bg-[#fbc50b]/10 pl-2.5 pr-1">
         <FlaskConical className="h-3.5 w-3.5 shrink-0 text-[#f6d77a]" aria-hidden />
         <span className="mr-1 hidden whitespace-nowrap text-xs font-semibold text-[#f6d77a] xl:inline">
-          {comoEstudiante ? 'Prueba · estudiante' : 'Prueba'}
+          {esDemo ? 'Demostración' : comoEstudiante ? 'Prueba · estudiante' : 'Prueba'}
         </span>
-        <button
+        {!esDemo && <button
           type="button"
           className={boton}
           onClick={cambiarVista}
@@ -153,7 +156,7 @@ export function TestModeBanner({
           title={comoEstudiante ? 'Volver a la vista de instructor' : 'Ver la lección como la ve un alumno'}
         >
           {comoEstudiante ? <PenTool className="h-3.5 w-3.5" /> : <GraduationCap className="h-3.5 w-3.5" />}
-        </button>
+        </button>}
         <button type="button" className={boton} onClick={handleSkipActivity} aria-label="Saltar actividad" title="Saltar actividad" disabled={loading !== null}>
           {loading === 'skip' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SkipForward className="h-3.5 w-3.5" />}
         </button>

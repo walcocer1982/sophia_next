@@ -45,6 +45,8 @@ interface LearningLayoutProps {
     courseId: string
     /** «Probar como estudiante»: controles de prueba reducidos. */
     comoEstudiante?: boolean
+    /** Cuenta de demostración (lib/cuenta-demo.ts): reiniciar sí, vista de instructor no. */
+    esDemo?: boolean
     activities: { id: string; type: string; title: string }[]
   }
 }
@@ -123,6 +125,7 @@ function LayoutBody({
             courseId={testMode.courseId}
             activities={testMode.activities}
             comoEstudiante={testMode.comoEstudiante}
+            esDemo={testMode.esDemo}
           />
         )}
       </LessonBar>

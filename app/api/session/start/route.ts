@@ -9,6 +9,7 @@ import type { LessonContent } from '@/types/lesson'
 export const runtime = 'nodejs'
 
 import { nextSessionAttempt } from '@/lib/lesson-session'
+import { esCuentaDemo } from '@/lib/cuenta-demo'
 
 export async function POST(request: Request) {
   // 1. Auth check
@@ -50,7 +51,10 @@ export async function POST(request: Request) {
   // El personal nunca abre una sesión real: si llega por la vía del alumno (un
   // enlace a una lección publicada), se crea como prueba. Hasta el 14 oct 2026
   // había 19 sesiones reales de personal que el Monitor contaba como de alumnos.
-  const isTest = pidePrueba === true || role !== 'STUDENT'
+  // La cuenta de demostración (lib/cuenta-demo.ts) también: es un alumno, pero
+  // sus sesiones son de prueba para que pueda reiniciarlas en un stand.
+  const isTest =
+    pidePrueba === true || role !== 'STUDENT' || (await esCuentaDemo(session.user.id))
 
   // 4. Check if lesson exists (Probar: allow unpublished)
   const lesson = await prisma.lesson.findUnique({
